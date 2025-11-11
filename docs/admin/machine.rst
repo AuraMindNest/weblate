@@ -130,7 +130,6 @@ Amazon Translate
 
 :Service ID: ``aws``
 :Maximal score: 88
-:Advanced features: * :ref:`glossary-mt`
 :Configuration: +---------------------+---------------------------+---------------------------------------------------------------------+
                 | ``source_language`` | Source language selection | Available choices:                                                  |
                 |                     |                           |                                                                     |
@@ -167,7 +166,6 @@ Azure OpenAI
 
 :Service ID: ``azure-openai``
 :Maximal score: 90
-:Advanced features: * :ref:`glossary-mt`
 :Configuration: +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
                 | ``source_language`` | Source language selection | Available choices:                                                                                                        |
                 |                     |                           |                                                                                                                           |
@@ -221,7 +219,7 @@ This service uses an API and you need to obtain an ID and API key from Baidu to 
 
 .. seealso::
 
-    `Baidu Translate API <https://fanyi-api.baidu.com/product/11>`_
+    `Baidu Translate API <https://api.fanyi.baidu.com/api/trans/product/index>`_
 
 .. _mt-cyrtranslit:
 
@@ -257,8 +255,6 @@ DeepL
 
 :Service ID: ``deepl``
 :Maximal score: 91
-:Advanced features: * :ref:`placeables-mt`
-                    * :ref:`glossary-mt`
 :Configuration: +---------------------+---------------------------+-------------------------------------------------------------------------------------+
                 | ``source_language`` | Source language selection | Available choices:                                                                  |
                 |                     |                           |                                                                                     |
@@ -293,12 +289,18 @@ as well as a free and a paid version of the v2 API.
 ``https://api.deepl.com/v1/``
     Is meant for CAT tools and is usable with a per-user subscription.
 
-.. note::
+Previously Weblate was classified as a CAT tool by DeepL, so it was supposed to
+use the v1 API, but now is supposed to use the v2 API.
+Therefore it defaults to v2, and you can change it to v1 in case you have
+an existing CAT subscription and want Weblate to use that.
 
-   Previously Weblate was classified as a CAT tool by DeepL, so it was supposed
-   to use the v1 API, but now is supposed to use the v2 API. Therefore it
-   defaults to v2, and you can change it to v1 in case you have an existing CAT
-   subscription and want Weblate to use that.
+The easiest way to find out which one to use is to open an URL like the
+following in your browser:
+
+https://api.deepl.com/v2/translate?text=Hello&target_lang=FR&auth_key=XXX
+
+Replace the XXX with your auth_key. If you receive a JSON object which contains
+"Bonjour", you have the correct URL; if not, try the other three.
 
 Weblate supports DeepL formality, it will choose matching one based on the
 language (for example, there is ``de@formal`` and ``de@informal``).
@@ -376,8 +378,6 @@ Google Cloud Translation Advanced
 
 :Service ID: ``google-translate-api-v3``
 :Maximal score: 90
-:Advanced features: * :ref:`placeables-mt`
-                    * :ref:`glossary-mt`
 :Configuration: +---------------------+---------------------------------------+----------------------------------------------------------------------------------------------------------+
                 | ``source_language`` | Source language selection             | Available choices:                                                                                       |
                 |                     |                                       |                                                                                                          |
@@ -474,7 +474,6 @@ and there are several mirrors available to use the API for free.
 
    * `LibreTranslate website <https://libretranslate.com/>`_
    * `LibreTranslate repository <https://github.com/LibreTranslate/LibreTranslate>`_
-   * :ref:`docker-libretranslate`
 
 .. _mt-microsoft-translator:
 
@@ -487,8 +486,6 @@ Azure AI Translator
 
 :Service ID: ``microsoft-translator``
 :Maximal score: 90
-:Advanced features: * :ref:`placeables-mt`
-                    * :ref:`glossary-mt`
 :Configuration: +---------------------+-------------------------------+---------------------------------------------------------------------------+
                 | ``source_language`` | Source language selection     | Available choices:                                                        |
                 |                     |                               |                                                                           |
@@ -572,7 +569,6 @@ ModernMT
 
 :Service ID: ``modernmt``
 :Maximal score: 90
-:Advanced features: * :ref:`glossary-mt`
 :Configuration: +---------------------+---------------------------+-----------------------------------------------------------------------+
                 | ``source_language`` | Source language selection | Available choices:                                                    |
                 |                     |                           |                                                                       |
@@ -668,7 +664,6 @@ OpenAI
 
 :Service ID: ``openai``
 :Maximal score: 90
-:Advanced features: * :ref:`glossary-mt`
 :Configuration: +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
                 | ``source_language`` | Source language selection | Available choices:                                                                                                        |
                 |                     |                           |                                                                                                                           |
@@ -690,31 +685,25 @@ OpenAI
                 |                     |                           |                                                                                                                           |
                 |                     |                           | ``auto`` -- Automatic selection                                                                                           |
                 |                     |                           |                                                                                                                           |
-                |                     |                           | ``gpt-5-nano`` -- GPT-5-nano                                                                                              |
-                |                     |                           |                                                                                                                           |
-                |                     |                           | ``gpt-5-mini`` -- GPT-5-mini                                                                                              |
-                |                     |                           |                                                                                                                           |
-                |                     |                           | ``gpt-5`` -- GPT-5                                                                                                        |
-                |                     |                           |                                                                                                                           |
-                |                     |                           | ``gpt-4.1-nano`` -- GPT-4.1-nano                                                                                          |
-                |                     |                           |                                                                                                                           |
-                |                     |                           | ``gpt-4.1-mini`` -- GPT-4.1-mini                                                                                          |
-                |                     |                           |                                                                                                                           |
-                |                     |                           | ``gpt-4.1`` -- GPT-4.1                                                                                                    |
-                |                     |                           |                                                                                                                           |
                 |                     |                           | ``gpt-4o-mini`` -- GPT-4o mini                                                                                            |
                 |                     |                           |                                                                                                                           |
                 |                     |                           | ``gpt-4o`` -- GPT-4o                                                                                                      |
                 |                     |                           |                                                                                                                           |
-                |                     |                           | ``o3-mini`` -- o3-mini                                                                                                    |
+                |                     |                           | ``o3-mini`` -- OpenAI o3-mini                                                                                             |
                 |                     |                           |                                                                                                                           |
-                |                     |                           | ``o3`` -- o3                                                                                                              |
+                |                     |                           | ``o3`` -- OpenAI o3                                                                                                       |
                 |                     |                           |                                                                                                                           |
-                |                     |                           | ``o1-mini`` -- o1-mini                                                                                                    |
+                |                     |                           | ``o1-mini`` -- OpenAI o1-mini                                                                                             |
                 |                     |                           |                                                                                                                           |
-                |                     |                           | ``o1`` -- o1                                                                                                              |
+                |                     |                           | ``o1`` -- OpenAI o1                                                                                                       |
                 |                     |                           |                                                                                                                           |
-                |                     |                           | ``o1-pro`` -- o1-pro                                                                                                      |
+                |                     |                           | ``gpt-4.5-preview`` -- GPT-4.5                                                                                            |
+                |                     |                           |                                                                                                                           |
+                |                     |                           | ``gpt-4-turbo`` -- GPT-4 Turbo                                                                                            |
+                |                     |                           |                                                                                                                           |
+                |                     |                           | ``gpt-4`` -- GPT-4                                                                                                        |
+                |                     |                           |                                                                                                                           |
+                |                     |                           | ``gpt-3.5-turbo`` -- GPT-3.5 Turbo                                                                                        |
                 |                     |                           |                                                                                                                           |
                 |                     |                           | ``custom`` -- Custom model                                                                                                |
                 +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
@@ -984,21 +973,15 @@ This service uses an API, and you need to obtain an ID and an API key from Youda
 
     `Youdao Zhiyun Natural Language Translation Service <https://ai.youdao.com/product-fanyi-text.s>`_
 
-.. _custom-machinery:
-
 Custom machine translation
 --------------------------
 
-You can also implement your own machine translation services using a few lines
-of Python code. Place the code in a module Weblate can import (see
-:ref:`custom-module` or :ref:`docker-python-override`) and add fully qualified
-class name to :setting:`WEBLATE_MACHINERY`.
+You can also implement your own machine translation services using a few lines of
+Python code. This example implements machine translation in a fixed list of
+languages using ``dictionary`` Python module:
 
 .. literalinclude:: ../../weblate/examples/mt_service.py
     :language: python
 
-.. seealso::
-
-   * :ref:`custom-modules`
-   * :ref:`custom-module`
-   * :ref:`docker-python-override`
+You can list your own class in :setting:`WEBLATE_MACHINERY` and Weblate
+will start using that.

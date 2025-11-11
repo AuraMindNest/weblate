@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from django import forms
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
@@ -16,11 +14,8 @@ from django.utils.translation import gettext, gettext_lazy
 from weblate.accounts.forms import FullNameField, UniqueEmailMixin, UniqueUsernameField
 from weblate.accounts.utils import remove_user
 from weblate.auth.data import ROLES
-from weblate.auth.models import AutoGroup, Group, Role, User
+from weblate.auth.models import AuthenticatedHttpRequest, AutoGroup, Group, Role, User
 from weblate.wladmin.models import WeblateModelAdmin
-
-if TYPE_CHECKING:
-    from weblate.auth.models import AuthenticatedHttpRequest
 
 BUILT_IN_ROLES = {role[0] for role in ROLES}
 
@@ -89,10 +84,7 @@ class WeblateUserChangeForm(UserChangeForm):
     class Meta:
         model = User
         fields = "__all__"
-        field_classes = {  # noqa: RUF012
-            "username": UniqueUsernameField,
-            "full_name": FullNameField,
-        }
+        field_classes = {"username": UniqueUsernameField, "full_name": FullNameField}
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -106,10 +98,7 @@ class WeblateUserCreationForm(UserCreationForm, UniqueEmailMixin):
     class Meta:
         model = User
         fields = ("username", "email", "full_name")
-        field_classes = {  # noqa: RUF012
-            "username": UniqueUsernameField,
-            "full_name": FullNameField,
-        }
+        field_classes = {"username": UniqueUsernameField, "full_name": FullNameField}
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -171,10 +160,7 @@ class WeblateUserAdmin(WeblateAuthAdmin, UserAdmin):
             gettext_lazy("Permissions"),
             {"fields": ("is_active", "is_bot", "is_superuser", "groups")},
         ),
-        (
-            gettext_lazy("Important dates"),
-            {"fields": ("last_login", "date_joined", "date_expires")},
-        ),
+        (gettext_lazy("Important dates"), {"fields": ("last_login", "date_joined")}),
     )
     list_filter = ("is_superuser", "is_active", "is_bot", "groups")
     filter_horizontal = ("groups",)
@@ -245,7 +231,7 @@ class WeblateGroupAdmin(WeblateAuthAdmin):
     save_as = True
     model = Group
     form = GroupChangeForm
-    inlines = (InlineAutoGroupAdmin,)
+    inlines = [InlineAutoGroupAdmin]
     search_fields = ("name", "defining_project__name")
     ordering = ("defining_project__name", "name")
     list_filter = ("internal", "project_selection", "language_selection")

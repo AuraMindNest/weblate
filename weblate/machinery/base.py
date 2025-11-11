@@ -14,7 +14,7 @@ from collections import defaultdict
 from hashlib import md5
 from html import escape, unescape
 from itertools import chain
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from django.core.cache import cache
@@ -33,7 +33,12 @@ from weblate.utils.similarity import Comparer
 from weblate.utils.site import get_site_url
 
 from .types import (
+    DownloadMultipleTranslations,
+    DownloadTranslations,
+    SettingsDict,
     SourceLanguageChoices,
+    TranslationResultDict,
+    UnitMemoryResultDict,
 )
 
 if TYPE_CHECKING:
@@ -44,14 +49,6 @@ if TYPE_CHECKING:
     from weblate.auth.models import User
     from weblate.trans.models import Translation, Unit
     from weblate.trans.models.unit import UnitQuerySet
-
-    from .types import (
-        DownloadMultipleTranslations,
-        DownloadTranslations,
-        SettingsDict,
-        TranslationResultDict,
-        UnitMemoryResultDict,
-    )
 
 
 def get_machinery_language(language: Language) -> Language:
@@ -87,7 +84,7 @@ class BatchMachineTranslation:
     max_score = 100
     rank_boost = 0
     cache_translations = True
-    language_map: ClassVar[dict[str, str]] = {}
+    language_map: dict[str, str] = {}
     same_languages = False
     do_cleanup = True
     # Batch size is currently used in autotranslate
@@ -95,7 +92,6 @@ class BatchMachineTranslation:
     accounting_key = "external"
     force_uncleanup = False
     highlight_syntax = False
-    glossary_support = False
     settings_form: type[BaseMachineryForm] | None = BaseMachineryForm
     request_timeout = 5
     is_available = True
@@ -766,7 +762,6 @@ class GlossaryMachineTranslationMixin(MachineTranslation):
     glossary_name_format_pattern = (
         r"weblate:(\d+):([A-z0-9@_-]+):([A-z0-9@_-]+):([a-f0-9]+)"
     )
-    glossary_support = True
 
     glossary_count_limit = 0
 

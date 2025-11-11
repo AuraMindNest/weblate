@@ -1,20 +1,8 @@
-"""
-Machine translation example.
+"""Machine translation example."""
 
-This example uses fictional http://example.com/ service to translate the
-strings.
-"""
+import dictionary  # type: ignore[import-not-found]
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
-from weblate.machinery.base import MachineTranslation
-
-if TYPE_CHECKING:
-    from weblate.auth.models import User
-    from weblate.machinery.base import DownloadTranslations
-    from weblate.trans.models import Unit
+from weblate.machinery.base import DownloadTranslations, MachineTranslation
 
 
 class SampleTranslation(MachineTranslation):
@@ -24,33 +12,17 @@ class SampleTranslation(MachineTranslation):
 
     def download_languages(self):
         """Return list of languages your machine translation supports."""
-        response = self.request("get", "http://example.com/languages")
-        return response.json()["languages"]
+        return {"cs"}
 
     def download_translations(
         self,
         source_language,
         target_language,
         text: str,
-        unit: Unit | None,
-        user: User | None,
+        unit,
+        user,
         threshold: int = 75,
     ) -> DownloadTranslations:
         """Return tuple with translations."""
-        response = self.request(
-            "get",
-            "http://example.com/translate",
-            params={
-                "source_language": source_language,
-                "target_language": target_language,
-                "text": text,
-            },
-        )
-
-        for translation in response.json()["translations"]:
-            yield {
-                "text": translation,
-                "quality": 100,
-                "service": self.name,
-                "source": text,
-            }
+        for t in dictionary.translate(text):
+            yield {"text": t, "quality": 100, "service": self.name, "source": text}

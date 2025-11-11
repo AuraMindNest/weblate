@@ -20,7 +20,6 @@ from django.urls import reverse
 from django.utils.functional import cached_property
 from selenium import webdriver
 from selenium.common.exceptions import (
-    ElementClickInterceptedException,
     ElementNotVisibleException,
     NoSuchElementException,
     WebDriverException,
@@ -35,12 +34,11 @@ from selenium.webdriver.support.expected_conditions import (
 )
 from selenium.webdriver.support.ui import Select, WebDriverWait
 
-from weblate.auth.models import User
 from weblate.fonts.tests.utils import FONT
 from weblate.lang.models import Language
 from weblate.screenshots.views import ensure_tesseract_language
 from weblate.trans.actions import ActionEvents
-from weblate.trans.models import Change, Component, Project, Unit
+from weblate.trans.models import Change, Component, Project, Translation, Unit
 from weblate.trans.tests.test_models import BaseLiveServerTestCase
 from weblate.trans.tests.test_views import RegistrationTestMixin
 from weblate.trans.tests.utils import (
@@ -60,7 +58,7 @@ if TYPE_CHECKING:
     from selenium.webdriver.remote.webdriver import WebDriver
     from selenium.webdriver.remote.webelement import WebElement
 
-    from weblate.trans.models import Translation
+    from weblate.auth.models import User
 
 TEST_BACKENDS = (
     "social_core.backends.email.EmailAuth",
@@ -225,11 +223,6 @@ class SeleniumTests(
         try:
             element.click()
         except ElementNotVisibleException:
-            self.actions.move_to_element(element).perform()
-            element.click()
-        except ElementClickInterceptedException:
-            wait = WebDriverWait(self._driver, timeout=2)
-            wait.until(lambda _: element.is_displayed())
             self.actions.move_to_element(element).perform()
             element.click()
 
@@ -772,15 +765,8 @@ class SeleniumTests(
             self.click("Users")
         element = self.driver.find_element(By.ID, "id_user")
         element.send_keys("testuser")
-        Select(self.driver.find_element(By.ID, "id_group")).select_by_index(1)
         with self.wait_for_page_load():
             element.submit()
-        user = User.objects.get(username="testuser")
-        self.assertTrue(
-            user.invitation_set.filter(
-                group__defining_project__name="WeblateOrg"
-            ).exists()
-        )
         with self.wait_for_page_load():
             self.click("Access control")
         self.screenshot("manage-users.png")
@@ -1172,12 +1158,8 @@ class SeleniumTests(
     def test_manage(self) -> None:
         self.open_manage()
         self.screenshot("support.png")
-        with self.wait_for_page_load():
-            self.click("Appearance")
+        self.click("Appearance")
         self.screenshot("appearance-settings.png")
-        with self.wait_for_page_load():
-            self.click("Performance report")
-        self.screenshot("performance-report.png")
 
     def test_explanation(self) -> None:
         project = self.create_component()

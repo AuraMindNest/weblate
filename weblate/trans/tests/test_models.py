@@ -213,30 +213,9 @@ class ProjectTest(RepoTestCase):
         # Create project
         project = self.create_project()
 
-        self.assertEqual(
-            {"Administration"},
-            set(project.defined_groups.values_list("name", flat=True)),
-        )
-
         # Enable ACL
         project.access_control = Project.ACCESS_PRIVATE
         project.save()
-        self.assertEqual(
-            {
-                "Administration",
-                "Automatic translation",
-                "Billing",
-                "Bulk editing",
-                "Glossary",
-                "Languages",
-                "Memory",
-                "Screenshots",
-                "Sources",
-                "Translate",
-                "VCS",
-            },
-            set(project.defined_groups.values_list("name", flat=True)),
-        )
 
         # Check user does not have access
         self.assertFalse(user.can_access_project(project))
@@ -249,27 +228,6 @@ class ProjectTest(RepoTestCase):
 
         # We now should have access
         self.assertTrue(user.can_access_project(project))
-
-        project.translation_review = True
-        project.save()
-
-        self.assertEqual(
-            {
-                "Administration",
-                "Automatic translation",
-                "Billing",
-                "Bulk editing",
-                "Glossary",
-                "Languages",
-                "Memory",
-                "Review",
-                "Screenshots",
-                "Sources",
-                "Translate",
-                "VCS",
-            },
-            set(project.defined_groups.values_list("name", flat=True)),
-        )
 
 
 class TranslationTest(RepoTestCase):
@@ -429,7 +387,7 @@ class TranslationTest(RepoTestCase):
         self.assertEqual(PendingUnitChange.objects.count(), 1)
 
     def test_commit_policy(self) -> None:
-        component = self.create_xliff()
+        component = self.create_component()
         translation = component.translation_set.get(language_code="cs")
         user = create_test_user()
 
@@ -447,7 +405,7 @@ class TranslationTest(RepoTestCase):
         unit2.translate(user, "Unit 2 - Test 1", STATE_FUZZY)
 
         unit3 = translation.unit_set.get(
-            source="Try Weblate at &lt;https://demo.weblate.org/&gt;!\n"
+            source="Try Weblate at <https://demo.weblate.org/>!\n"
         )
         unit3.translate(user, "Unit 3 - Test 1", STATE_TRANSLATED)
 
@@ -461,11 +419,6 @@ class TranslationTest(RepoTestCase):
 
         component.commit_pending("test", None)
         self.assertEqual(PendingUnitChange.objects.count(), 3)
-
-        translation = component.translation_set.get(language_code="cs")
-        ttk_unit1, _ = translation.store.find_unit(unit1.context, unit1.source)
-        self.assertEqual(ttk_unit1.target, "Unit 1 - Test 3\n")
-        self.assertTrue(ttk_unit1.is_approved())
 
         project.commit_policy = CommitPolicyChoices.WITHOUT_NEEDS_EDITING
         project.save()
@@ -485,13 +438,7 @@ class TranslationTest(RepoTestCase):
         self.assertEqual(len(changes), 2)
         self.assertEqual([STATE_FUZZY, STATE_FUZZY], [p.state for p in changes])
         component.commit_pending("test", None)
-
         self.assertEqual(PendingUnitChange.objects.count(), 0)
-
-        translation = component.translation_set.get(language_code="cs")
-        ttk_unit1, _ = translation.store.find_unit(unit1.context, unit1.source)
-        self.assertEqual(ttk_unit1.target, "Unit 1 - Test 4\n")
-        self.assertTrue(ttk_unit1.is_fuzzy())
 
     def test_commit_retry_unit_not_found(self) -> None:
         """Test retry logic for units failing due to UnitFoundError works correctly."""
@@ -665,8 +612,6 @@ class SourceUnitTest(ModelTestCase):
         self.assertEqual(Check.objects.count(), 3)
         check = Check.objects.all()[0]
         unit = check.unit
-        # reload component to clear stats cache
-        self.component = unit.translation.component
         self.assertEqual(self.component.stats.allchecks, 3)
         source = unit.source_unit
         source.extra_flags = f"ignore-{check.name}"
@@ -790,17 +735,11 @@ class AnnouncementTest(ModelTestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.second_project = self.create_project("Other", "other")
         Announcement.objects.create(
             language=Language.objects.get(code="cs"), message="test cs"
         )
         Announcement.objects.create(
             language=Language.objects.get(code="de"), message="test de"
-        )
-        Announcement.objects.create(
-            project=self.second_project,
-            language=Language.objects.get(code="cs"),
-            message="test other cs",
         )
         Announcement.objects.create(
             project=self.component.project, message="test project"

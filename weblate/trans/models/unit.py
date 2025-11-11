@@ -37,7 +37,7 @@ from weblate.trans.models.pending import PendingUnitChange
 from weblate.trans.models.project import Project
 from weblate.trans.models.suggestion import Suggestion
 from weblate.trans.models.variant import Variant
-from weblate.trans.signals import unit_post_sync, unit_pre_create
+from weblate.trans.signals import unit_pre_create
 from weblate.trans.util import (
     count_words,
     get_distinct_translations,
@@ -84,7 +84,7 @@ def fill_in_source_translation(units: Iterable[Unit]) -> None:
         unit.translation.component.source_translation = unit.source_unit.translation
 
 
-class UnitQuerySet(models.QuerySet["Unit"]):
+class UnitQuerySet(models.QuerySet):
     def prefetch(self):
         from weblate.trans.models import Component
 
@@ -134,7 +134,6 @@ class UnitQuerySet(models.QuerySet["Unit"]):
 
     def prefetch_all_checks(self):
         return self.prefetch_related(
-            "source_unit",
             models.Prefetch(
                 "check_set",
                 to_attr="all_checks",
@@ -265,7 +264,7 @@ class UnitQuerySet(models.QuerySet["Unit"]):
         if not sort_list:
             if hasattr(obj, "component") and obj.component.is_glossary:
                 sort_list = ["source"]
-            elif isinstance(obj, (Project, Category)):
+            elif isinstance(obj, Project | Category):
                 sort_list = [
                     "translation__component__priority",
                     "translation__component__is_glossary",
@@ -413,7 +412,6 @@ class Unit(models.Model, LoggerMixin):
     previous_source = models.TextField(default="", blank=True)
     target = models.TextField(default="", blank=True)
     state = models.IntegerField(default=STATE_EMPTY, choices=StringState.choices)
-    # Stores string state ignoring Weblate originated read-only state
     original_state = models.IntegerField(
         default=STATE_EMPTY, choices=StringState.choices
     )
@@ -464,10 +462,10 @@ class Unit(models.Model, LoggerMixin):
 
     class Meta:
         app_label = "trans"
-        unique_together = [("translation", "id_hash")]  # noqa: RUF012
+        unique_together = [("translation", "id_hash")]
         verbose_name = "string"
         verbose_name_plural = "strings"
-        indexes = [  # noqa: RUF012
+        indexes = [
             models.Index(
                 MD5(Lower("source")), "translation", name="trans_unit_source_md5"
             ),
@@ -509,8 +507,6 @@ class Unit(models.Model, LoggerMixin):
         self.old_unit: OldUnit
         # Unit attributes used when parsing
         self.unit_attributes: UnitAttributesDict | None = None
-        # To handle pending update for enforced checks
-        self.pending_unit_change: PendingUnitChange | None = None
         # Avoid loading self-referencing source unit from the database
         # Skip this when deferred fields are present to avoid database access
         if (
@@ -609,53 +605,6 @@ class Unit(models.Model, LoggerMixin):
             "context": unit.context,
             "extra_flags": unit.extra_flags,
             "explanation": unit.explanation,
-        }
-
-    def store_disk_state(self) -> None:
-        """
-        Store a snapshot of unit state before pending changes are created.
-
-        Only stores the state if it doesn't already exist (first pending change).
-        """
-        if self.old_unit is None:
-            msg = "`store_old_unit` should be called before saving disk state."
-            raise ValueError(msg)
-        if "disk_state" not in self.details:
-            self.details["disk_state"] = {
-                "target": self.old_unit["target"],
-                "state": self.old_unit["state"],
-                "explanation": self.old_unit["explanation"],
-            }
-            self.save(same_content=True, only_save=True, update_fields=["details"])
-
-    def clear_disk_state(self) -> None:
-        """
-        Clear the disk_state snapshot from the details field.
-
-        This should be called after all pending changes for this unit have been committed.
-        """
-        if "disk_state" in self.details:
-            del self.details["disk_state"]
-            self.save(same_content=True, only_save=True, update_fields=["details"])
-
-    def get_comparison_state(self) -> dict[str, Any]:
-        """
-        Get the fields that can differ in database and disk to compare against during check_sync.
-
-        If disk_state exists, returns it. Otherwise, returns the current unit state.
-        This allows comparing file contents against the state before pending changes.
-
-        Returns:
-            Dictionary containing unit state fields.
-
-        """
-        if "disk_state" in self.details:
-            return self.details["disk_state"]
-
-        return {
-            "target": self.target,
-            "state": self.state,
-            "explanation": self.explanation,
         }
 
     @property
@@ -760,13 +709,7 @@ class Unit(models.Model, LoggerMixin):
             else:
                 component.needs_variants_update = True
 
-    def get_unit_state(
-        self,
-        unit,
-        flags: Flags | str | None,
-        string_changed: bool = False,
-        disk_unit_state: StringState | None = None,
-    ) -> StringState:
+    def get_unit_state(self, unit, flags: str | None, string_changed: bool = False):
         """Calculate translated and fuzzy status."""
         # Read-only from the file format
         if unit.is_readonly():
@@ -787,16 +730,14 @@ class Unit(models.Model, LoggerMixin):
 
         # We need to keep approved/fuzzy state for formats which do not
         # support saving it
-        is_existing_fuzzy_state = self.fuzzy or disk_unit_state == STATE_FUZZY
-        if unit.is_fuzzy(is_existing_fuzzy_state and not string_changed):
+        if unit.is_fuzzy(self.fuzzy and not string_changed):
             return STATE_FUZZY
 
         if not unit.is_translated():
             return STATE_EMPTY
 
-        is_existing_approved_state = self.approved or disk_unit_state == STATE_APPROVED
         if (
-            unit.is_approved(is_existing_approved_state and not string_changed)
+            unit.is_approved(self.approved and not string_changed)
             and self.translation.enable_review
         ):
             return STATE_APPROVED
@@ -960,19 +901,13 @@ class Unit(models.Model, LoggerMixin):
                 source_explanation,
             )
 
-        # Get comparison state (disk_state if exists, otherwise current state)
-        comparison_state = self.get_comparison_state()
-
         # Has source/target changed
         same_source = source == self.source and context == self.context
-        same_target = target == comparison_state["target"]
+        same_target = target == self.target
 
         # Calculate state
         state = self.get_unit_state(
-            unit,
-            flags,
-            string_changed=not same_source or not same_target,
-            disk_unit_state=comparison_state["state"],
+            unit, flags, string_changed=not same_source or not same_target
         )
         original_state = self.get_unit_state(unit, None)
 
@@ -984,10 +919,7 @@ class Unit(models.Model, LoggerMixin):
             and same_target
         ):
             if not same_source and state in {STATE_TRANSLATED, STATE_APPROVED}:
-                if (
-                    self.previous_source == source
-                    and comparison_state["state"] == STATE_FUZZY
-                ):
+                if self.previous_source == source and self.fuzzy:
                     # Source change was reverted
                     source_change = self.source
                     previous_source = ""
@@ -1003,7 +935,7 @@ class Unit(models.Model, LoggerMixin):
                     state = STATE_FUZZY
                 pending = True
             elif (
-                comparison_state["state"] == STATE_FUZZY
+                self.state == STATE_FUZZY
                 and state == STATE_FUZZY
                 and not previous_source
             ):
@@ -1011,10 +943,10 @@ class Unit(models.Model, LoggerMixin):
                 previous_source = self.previous_source
 
         # Update checks on fuzzy update or on content change
-        same_state = state == comparison_state["state"] and flags == Flags(self.flags)
+        same_state = state == self.state and flags == Flags(self.flags)
         same_metadata = (
             location == self.location
-            and explanation == comparison_state["explanation"]
+            and explanation == self.explanation
             and note == self.note
             and pos == self.position
             and not pending
@@ -1024,18 +956,12 @@ class Unit(models.Model, LoggerMixin):
             and same_source
             and same_target
             and same_state
+            and original_state == self.original_state
             and flags == Flags(self.flags)
             and previous_source == self.previous_source
             and self.source_unit == old_source_unit
             and old_source_unit is not None
         )
-
-        # Conditionally check original state changes if it would be used. It is not
-        # properly tracked in PendingUnitChange, so this would not work for units
-        # with pending changes. But there shouldn't be any uncommitable pending changes
-        # for read-only units.
-        if STATE_READONLY in {state, self.state, comparison_state["state"]}:
-            same_data &= original_state == self.original_state
 
         # Check if we actually need to change anything
         if same_data and same_metadata:
@@ -1072,18 +998,12 @@ class Unit(models.Model, LoggerMixin):
         if created:
             unit_pre_create.send(sender=self.__class__, unit=self)
 
-        if not created and not same_target:
-            unit_post_sync.send(sender=self.__class__, unit=self, updated_attr="target")
-
         # Save into database
         self.save(
             force_insert=created,
             same_content=same_source and same_target,
             run_checks=not same_source or not same_target or not same_state,
         )
-        self.clear_disk_state()
-        PendingUnitChange.objects.filter(unit=self).delete()
-
         if pending:
             PendingUnitChange.store_unit_change(unit=self)
         # Track updated sources for source checks
@@ -1243,7 +1163,6 @@ class Unit(models.Model, LoggerMixin):
                     continue
 
                 # Update unit attributes for the current instance, the database is bulk updated later
-                unit.store_old_unit(unit)
                 unit.target = self.target
                 unit.state = self.state
 
@@ -1348,7 +1267,7 @@ class Unit(models.Model, LoggerMixin):
             update_fields.extend(["source"])
 
         # Unit is pending for write
-        self.pending_unit_change = PendingUnitChange.store_unit_change(
+        PendingUnitChange.store_unit_change(
             unit=self,
             author=author,
         )
@@ -1538,7 +1457,6 @@ class Unit(models.Model, LoggerMixin):
                 "state": self.state,
                 "old_state": self.old_unit["state"],
                 "source": self.source,
-                "context": self.context,
             },
         )
         if save:
@@ -1551,7 +1469,7 @@ class Unit(models.Model, LoggerMixin):
         return self.suggestion_set.order()
 
     @cached_property
-    def all_checks(self) -> models.QuerySet[Check]:
+    def all_checks(self) -> Iterable[Check]:
         result = self.check_set.all()
         # Force fetching
         list(result)
@@ -1685,7 +1603,11 @@ class Unit(models.Model, LoggerMixin):
             propagated_units: UnitQuerySet = reduce(
                 operator.or_, (querymap[item] for item in propagation)
             )
-            propagated_units = propagated_units.distinct().prefetch_all_checks()
+            propagated_units = (
+                propagated_units.distinct()
+                .prefetch_related("source_unit")
+                .prefetch_all_checks()
+            )
 
             for unit in propagated_units:
                 try:
@@ -1847,22 +1769,6 @@ class Unit(models.Model, LoggerMixin):
                 same_content=True,
                 update_fields=["state", "original_state"],
             )
-            self.generate_change(
-                user or author, author, ActionEvents.ENFORCED_CHECK, check_new=False
-            )
-            if self.pending_unit_change is not None:
-                # Update PendingUnitChange if there is one
-                self.pending_unit_change.state = STATE_FUZZY
-                self.pending_unit_change.save(update_fields=["state"])
-            elif saved:
-                # There should be a pending unit if saved
-                msg = "Updating unit, but pending unit change is not set!"
-                raise ValueError(msg)
-            else:
-                # Generate pending unit change otherwise
-                PendingUnitChange.store_unit_change(unit=self, author=author)
-                # Indicate as saved
-                saved = True
 
         self.update_translation_memory(user)
 
@@ -1875,7 +1781,7 @@ class Unit(models.Model, LoggerMixin):
 
         return saved
 
-    def get_all_flags(self, override: Flags | str | None = None) -> Flags:
+    def get_all_flags(self, override=None):
         """Return union of own and component flags."""
         # Validate flags from the unit to avoid crash
         try:
@@ -1896,10 +1802,10 @@ class Unit(models.Model, LoggerMixin):
         )
 
     @cached_property
-    def all_flags(self) -> Flags:
+    def all_flags(self):
         return self.get_all_flags()
 
-    def get_unit_flags(self) -> Flags:
+    def get_unit_flags(self):
         return Flags(self.extra_flags)
 
     @cached_property
@@ -2181,7 +2087,7 @@ class Unit(models.Model, LoggerMixin):
         # Always generate change for self
         units = [*units, self]
         if save:
-            self.save(update_fields=["extra_flags"], same_content=True)
+            self.save(update_fields=["extra_flags"], only_save=True)
 
         for unit in units:
             unit.generate_change(

@@ -11,19 +11,6 @@
   --altcha-color-border: #cccccc;
 }
 
-a {
-  text-decoration: none;
-}
-
-a:hover {
-  text-decoration: underline;
-}
-
-.navbar a:hover,
-.nav a:hover {
-  text-decoration: none;
-}
-
 .avatar {
   -webkit-border-radius: 50%;
   -moz-border-radius: 50%;
@@ -131,8 +118,7 @@ h1 {
   margin: 15px;
 }
 
-.progress,
-.progress-stacked {
+.progress {
   margin-bottom: 0;
   height: 14px;
   display: inline-block;
@@ -141,15 +127,7 @@ h1 {
   width: 100%;
 }
 
-/* workaround to get progress bars working
-while keeping backwards compatibility */
-.progress.progress5,
-.progress-stacked.progress5 {
-  display: flex;
-}
-
-.progress-cell .progress,
-.progress-cell .progress-stacked {
+.progress-cell .progress {
   width: 400px;
 }
 
@@ -178,7 +156,6 @@ while keeping backwards compatibility */
 }
 
 .progress-row .progress,
-.progress-row .progress-stacked,
 .chart-progress {
   height: 8px;
   border-radius: 0;
@@ -186,19 +163,8 @@ while keeping backwards compatibility */
   display: block;
 }
 
-/* workaround to get progress bars working
-while keeping backwards compatibility */
-.progress-row .progress.progress5,
-.progress-row .progress-stacked.progress5 {
-  display: flex;
-}
-
 .progress-bar-success {
   background-color: #1fa38599;
-}
-
-.progress-bar-danger {
-  background-color: #f6664c;
 }
 
 .chart-progress .progress-bar-success {
@@ -637,7 +603,6 @@ form + .login-label {
 
 .table .history-row td {
   border-top: none;
-  border-bottom: none;
 }
 .history-row + .history-row td {
   border-top: 1px solid #e9eaec;
@@ -697,7 +662,6 @@ form + .login-label {
   display: flex;
   flex-direction: column;
   gap: 30px;
-  overflow-x: visible;
 }
 
 .btn-float {
@@ -717,6 +681,7 @@ form + .login-label {
 #keys,
 #others,
 #translations,
+#history,
 #machinery,
 #comments {
   overflow-x: auto;
@@ -874,10 +839,13 @@ legend {
 }
 
 .forbidden-term svg,
-.forbidden-term svg,
 .search-icon svg {
   height: 16px;
   width: 16px;
+}
+
+.sort-field {
+  margin: 0;
 }
 
 .query-sort-toggle {
@@ -1290,9 +1258,6 @@ th.number {
 
 .badge.length {
   margin-top: 5px;
-}
-.breadcrumb-item .badge {
-  margin: 0px 5px;
 }
 
 thead th {
@@ -2103,22 +2068,28 @@ a.language:hover {
 .divisor {
   color: #bfc3c8;
 }
+.source-comment {
+  font-weight: normal;
+  vertical-align: top;
+  white-space: normal;
+  font-size: 14px;
+}
 .unit-state-cell {
   width: 6px;
   padding: 0px !important;
   min-width: 6px;
 }
 .unit-state-translated {
-  background-color: #2eccaa !important;
+  background-color: #2eccaa;
 }
 .unit-state-bad {
-  background-color: #f6664c !important;
+  background-color: #f6664c;
 }
 .unit-state-todo {
-  background-color: #e9eaec !important;
+  background-color: #e9eaec;
 }
 .unit-state-approved {
-  background-color: #1fa385 !important;
+  background-color: #1fa385;
 }
 .unit-state-save-timeout {
   animation: morph-state 2s infinite;
@@ -2186,7 +2157,6 @@ a.language:hover {
 .second-factor h5,
 h5.list-group-item-heading {
   font-weight: bolder;
-  margin-bottom: 5px;
 }
 
 .table-supportstatus .progress {
@@ -2245,9 +2215,6 @@ h5.list-group-item-heading {
 }
 
 #show-linked-repo-toggle:not(:checked) ~ .repo-linked {
-  display: none;
-}
-#show-local-repo-toggle:not(:checked) ~ .repo-local {
   display: none;
 }
 label .text-muted {
@@ -2331,11 +2298,6 @@ tbody.warning {
 
 #shortcuts-table-container kbd {
   color: unset;
-}
-
-#shortcuts-table5-container kbd {
-  color: var(--bs-body-color);
-  background-color: var(--bs-body-bg);
 }
 /* END: Shortcuts table styles */
 
@@ -2475,8 +2437,7 @@ tbody.warning {
 
 .tab-pane .table > thead:first-child > tr:first-child > th,
 .card .table > thead:first-child > tr:first-child > th,
-.card .table > tbody:first-child > tr:first-child > td,
-.card .table > tbody:first-child > tr > th {
+.card .table > tbody:first-child > tr:first-child > td {
   border-top: 0;
 }
 
@@ -2570,18 +2531,4 @@ table.table-simple tbody#glossary-terms td {
 .text-warning {
   font-size: 14px;
   margin: 5px 5px 0px;
-}
-
-.card label {
-  font-weight: bold;
-}
-
-.comment-content strong {
-  font-size: 16px;
-  font-weight: bold;
-}
-
-.list-group:has(+ .card-footer) {
-  border-bottom-left-radius: 0px;
-  border-bottom-right-radius: 0px;
 }

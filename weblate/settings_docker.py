@@ -21,9 +21,7 @@ from weblate.utils.environment import (
     get_env_list,
     get_env_map,
     get_env_ratelimit,
-    get_env_redis_url,
     get_env_str,
-    get_saml_idp,
     modify_env_list,
 )
 
@@ -404,8 +402,8 @@ if SOCIAL_AUTH_AUTH0_KEY:
 
 
 # SAML
-WEBLATE_SAML_IDP = get_saml_idp()
-if WEBLATE_SAML_IDP:
+WEBLATE_SAML_IDP_ENTITY_ID = get_env_str("WEBLATE_SAML_IDP_ENTITY_ID")
+if WEBLATE_SAML_IDP_ENTITY_ID:
     AUTHENTICATION_BACKENDS += ("social_core.backends.saml.SAMLAuth",)
     # The keys are generated on container startup if missing
     with open("/app/data/ssl/saml.crt") as handle:
@@ -414,7 +412,20 @@ if WEBLATE_SAML_IDP:
         SOCIAL_AUTH_SAML_SP_PRIVATE_KEY = handle.read()
     SOCIAL_AUTH_SAML_SP_ENTITY_ID = f"{SITE_URL}/accounts/metadata/saml/"
     # Identity Provider
-    SOCIAL_AUTH_SAML_ENABLED_IDPS = {"weblate": WEBLATE_SAML_IDP}
+    SOCIAL_AUTH_SAML_ENABLED_IDPS = {
+        "weblate": {
+            "entity_id": WEBLATE_SAML_IDP_ENTITY_ID,
+            "url": get_env_str("WEBLATE_SAML_IDP_URL"),
+            "x509cert": get_env_str("WEBLATE_SAML_IDP_X509CERT"),
+            "attr_name": get_env_str("WEBLATE_SAML_ID_ATTR_NAME", "full_name"),
+            "attr_username": get_env_str("WEBLATE_SAML_ID_ATTR_USERNAME", "username"),
+            "attr_email": get_env_str("WEBLATE_SAML_ID_ATTR_EMAIL", "email"),
+            "attr_user_permanent_id": get_env_str(
+                "WEBLATE_SAML_ID_ATTR_USER_PERMANENT_ID",
+                "urn:oid:0.9.2342.19200300.100.1.1",
+            ),
+        }
+    }
     SOCIAL_AUTH_SAML_SUPPORT_CONTACT = SOCIAL_AUTH_SAML_TECHNICAL_CONTACT = {
         "givenName": ADMINS[0][0],
         "emailAddress": ADMINS[0][1],
@@ -1159,7 +1170,6 @@ WEBLATE_ADDONS = [
     "weblate.addons.flags.TargetEditAddon",
     "weblate.addons.flags.SameEditAddon",
     "weblate.addons.flags.BulkEditAddon",
-    "weblate.addons.flags.TargetRepoUpdateAddon",
     "weblate.addons.generate.GenerateFileAddon",
     "weblate.addons.generate.PseudolocaleAddon",
     "weblate.addons.generate.PrefillAddon",
@@ -1215,8 +1225,24 @@ DEFAULT_FROM_EMAIL = get_env_str("WEBLATE_DEFAULT_FROM_EMAIL", SERVER_EMAIL)
 # List of URLs your site is supposed to serve
 ALLOWED_HOSTS = get_env_list("WEBLATE_ALLOWED_HOSTS", ["*"])
 
-# Extract redis URL
-REDIS_URL = get_env_redis_url()
+# Extract redis password
+REDIS_PASSWORD = get_env_str("REDIS_PASSWORD")
+REDIS_USER = get_env_str("REDIS_USER")
+REDIS_USER_PASSWORD = (
+    f"{REDIS_USER}:{REDIS_PASSWORD}"
+    if REDIS_USER and REDIS_PASSWORD
+    else f":{REDIS_PASSWORD}"
+    if REDIS_PASSWORD
+    else REDIS_USER  # can be None
+)
+REDIS_PROTO = "rediss" if get_env_bool("REDIS_TLS") else "redis"
+REDIS_URL = "{}://{}{}:{}/{}".format(
+    REDIS_PROTO,
+    f"{REDIS_USER_PASSWORD}@" if REDIS_USER_PASSWORD else "",
+    get_env_str("REDIS_HOST", "cache", required=True),
+    get_env_int("REDIS_PORT", 6379),
+    get_env_int("REDIS_DB", 1),
+)
 
 # Configuration for caching
 CACHES = {
@@ -1239,7 +1265,7 @@ CACHES = {
         "OPTIONS": {"MAX_ENTRIES": 1000},
     },
 }
-if not get_env_bool("REDIS_VERIFY_SSL", True) and REDIS_URL.startswith("rediss://"):
+if not get_env_bool("REDIS_VERIFY_SSL", True) and REDIS_PROTO == "rediss":
     CACHES["default"]["OPTIONS"]["CONNECTION_POOL_KWARGS"]["ssl_cert_reqs"] = None  # type: ignore[index]
 
 
@@ -1342,7 +1368,7 @@ SILENCED_SYSTEM_CHECKS.extend(get_env_list("WEBLATE_SILENCED_SYSTEM_CHECKS"))
 # Celery worker configuration for production
 CELERY_TASK_ALWAYS_EAGER = get_env_bool("WEBLATE_CELERY_EAGER")
 CELERY_BROKER_URL = REDIS_URL
-if REDIS_URL.startswith("rediss://"):
+if REDIS_PROTO == "rediss":
     CELERY_BROKER_URL = "{}?ssl_cert_reqs={}".format(
         CELERY_BROKER_URL,
         "CERT_REQUIRED" if get_env_bool("REDIS_VERIFY_SSL", True) else "CERT_NONE",
@@ -1458,6 +1484,7 @@ SENTRY_TRACES_SAMPLE_RATE = get_env_float("SENTRY_TRACES_SAMPLE_RATE")
 SENTRY_PROFILES_SAMPLE_RATE = get_env_float("SENTRY_PROFILES_SAMPLE_RATE", 1.0)
 SENTRY_TOKEN = get_env_str("SENTRY_TOKEN")
 SENTRY_SEND_PII = get_env_bool("SENTRY_SEND_PII", False)
+AKISMET_API_KEY = get_env_str("WEBLATE_AKISMET_API_KEY")
 ZAMMAD_URL = get_env_str("WEBLATE_ZAMMAD_URL")
 
 # Web Monetization

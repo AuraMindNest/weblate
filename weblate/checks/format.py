@@ -6,23 +6,22 @@ from __future__ import annotations
 
 import re
 from collections import Counter, defaultdict
-from typing import TYPE_CHECKING, ClassVar, Literal
+from re import Pattern
+from typing import TYPE_CHECKING, Literal
 
 from django.utils.functional import SimpleLazyObject
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext, gettext_lazy
 
-from weblate.checks.base import SourceCheck, TargetCheck
+from weblate.checks.base import MissingExtraDict, SourceCheck, TargetCheck
 from weblate.utils.html import format_html_join_comma, list_to_tuples
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
-    from re import Pattern
 
     from django_stubs_ext import StrOrPromise
 
-    from weblate.checks.base import MissingExtraDict
     from weblate.trans.models import Unit
 
     from .models import Check
@@ -353,7 +352,7 @@ class BaseFormatCheck(TargetCheck):
     regexp: Pattern[str] | None = None
     plural_parameter_regexp: Pattern[str] | None = None
     default_disabled = True
-    normalize_remove: ClassVar[set[str]] = set()
+    normalize_remove: set[str] = set()
 
     def check_target_unit(self, sources: list[str], targets: list[str], unit: Unit):
         """Check single unit, handling plurals."""
@@ -552,7 +551,7 @@ class BaseFormatCheck(TargetCheck):
 class BasePrintfCheck(BaseFormatCheck):
     """Base class for printf based format checks."""
 
-    normalize_remove: ClassVar[set[str]] = {"%"}
+    normalize_remove = {"%"}
 
     def __init__(self) -> None:
         super().__init__()
@@ -653,7 +652,7 @@ class SchemeFormatCheck(BasePrintfCheck):
     check_id = "scheme_format"
     name = gettext_lazy("Scheme format")
     description = gettext_lazy("Scheme format string does not match source.")
-    normalize_remove: ClassVar[set[str]] = {"~"}
+    normalize_remove = {"~"}
 
     def format_string(self, string: str) -> str:
         return f"~{string}"
@@ -667,7 +666,7 @@ class PythonBraceFormatCheck(BaseFormatCheck):
     description = gettext_lazy("Python brace format string does not match source.")
     regexp = PYTHON_BRACE_MATCH
     plural_parameter_regexp = re.compile(r"\{(?:count|number|num|n)\}")
-    normalize_remove: ClassVar[set[str]] = {"{", "}"}
+    normalize_remove: set[str] = {"{", "}"}
 
     def extract_string(self, match: re.Match) -> str:
         return extract_string_python_brace(match)
@@ -713,7 +712,7 @@ class CSharpFormatCheck(BaseFormatCheck):
     name = gettext_lazy("C# format")
     description = gettext_lazy("C# format string does not match source.")
     regexp = C_SHARP_MATCH
-    extra_enable_strings = ("csharp-format",)
+    extra_enable_strings = ["csharp-format"]
 
     def is_position_based(self, string: str):
         return name_format_is_position_based(string)

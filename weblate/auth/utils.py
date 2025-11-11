@@ -14,10 +14,8 @@ from django.db import IntegrityError
 from social_core.backends.utils import load_backends
 
 from weblate.auth.data import (
-    GLOBAL_PERM_NAMES,
     GLOBAL_PERMISSIONS,
     GROUPS,
-    PERMISSION_NAMES,
     PERMISSIONS,
     ROLES,
     SELECTION_ALL,
@@ -37,15 +35,16 @@ def get_auth_keys() -> set[str]:
 
 def is_django_permission(permission: str):
     """
-    Check whether permission looks is a Django one.
+    Check whether permission looks like a Django one.
 
-    This is purely based on the list of permissions defined in Weblate.
+    Django permissions are <app>.<action>_<model>, while
+    Weblate ones are <scope>.<action> where action lacks underscores
+    with single exception of "add_more".
     """
-    return (
-        permission not in PERMISSION_NAMES
-        and permission not in GLOBAL_PERM_NAMES
-        and not permission.startswith(("meta:", "billing:"))
-    )
+    parts = permission.split(".", 1)
+    if len(parts) != 2:
+        return False
+    return "_" in parts[1] and parts[1] != "add_more"
 
 
 def migrate_permissions_list(

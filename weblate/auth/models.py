@@ -12,7 +12,7 @@ from collections.abc import (
 from contextvars import ContextVar
 from functools import cache as functools_cache
 from itertools import chain
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Literal, TypedDict, cast
 
 import sentry_sdk
 from appconf import AppConf
@@ -20,7 +20,6 @@ from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import Group as DjangoGroup
-from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Prefetch, Q, UniqueConstraint
 from django.db.models.functions import Upper
@@ -66,9 +65,9 @@ if TYPE_CHECKING:
     from django_otp.models import Device
     from social_core.backends.base import BaseAuth
     from social_django.models import DjangoStorage
+    from social_django.strategy import DjangoStrategy
 
     from weblate.accounts.models import Subscription
-    from weblate.accounts.strategy import WeblateStrategy
     from weblate.auth.results import PermissionResult
     from weblate.wladmin.models import SupportStatusDict
 
@@ -489,12 +488,7 @@ class User(AbstractBaseUser):
         db_index=True,
     )
     date_expires = models.DateTimeField(
-        gettext_lazy("Expires"),
-        null=True,
-        blank=True,
-        default=None,
-        validators=[MinValueValidator(timezone.now)],
-        help_text=gettext_lazy("The account will be disabled after the expiry."),
+        gettext_lazy("Expires"), null=True, blank=True, default=None
     )
     date_joined = models.DateTimeField(
         gettext_lazy("Date joined"), default=timezone.now
@@ -518,13 +512,13 @@ class User(AbstractBaseUser):
 
     EMAIL_FIELD = "email"
     USERNAME_FIELD = "username"
-    REQUIRED_FIELDS = ["email", "full_name"]  # noqa: RUF012
+    REQUIRED_FIELDS = ["email", "full_name"]
     DUMMY_FIELDS = ("first_name", "last_name", "is_staff")
 
     class Meta:
         verbose_name = "User"
         verbose_name_plural = "Users"
-        constraints = [  # noqa: RUF012
+        constraints = [
             UniqueConstraint(Upper("username"), name="weblate_auth_user_username_ci"),
             UniqueConstraint(Upper("email"), name="weblate_auth_user_email_ci"),
         ]
@@ -551,8 +545,6 @@ class User(AbstractBaseUser):
             self.full_name = self.extra_data["last_name"]
         if not self.email:
             self.email = None
-        if not self.is_active:
-            self.date_expires = None
         super().save(*args, **kwargs)
         self.clear_cache()
         if (
@@ -561,14 +553,11 @@ class User(AbstractBaseUser):
             and self.full_name != "Deleted User"
             and not self.is_anonymous
         ):
-            activity: str
-            if original.date_expires and not self.is_active:
-                activity = "disabled-expiry"
-            elif self.is_active:
-                activity = "enabled"
-            else:
-                activity = "disabled"
-            AuditLog.objects.create(user=self, request=None, activity=activity)
+            AuditLog.objects.create(
+                user=self,
+                request=None,
+                activity="enabled" if self.is_active else "disabled",
+            )
 
     def get_absolute_url(self) -> str:
         return reverse("user_page", kwargs={"user": self.username})
@@ -798,7 +787,7 @@ class User(AbstractBaseUser):
             # The name and slug are used when rendering the groups
             Prefetch(
                 "projects",
-                queryset=Project.objects.only("id", "name", "slug"),
+                queryset=Project.objects.only("id", "access_control", "name", "slug"),
             ),
             # The name and code are used when rendering the groups
             Prefetch("languages", queryset=Language.objects.only("id", "name", "code")),
@@ -1023,9 +1012,7 @@ class UserBlock(models.Model):
     class Meta:
         verbose_name = "Blocked user"
         verbose_name_plural = "Blocked users"
-        unique_together = [  # noqa: RUF012
-            ("user", "project"),
-        ]
+        unique_together = [("user", "project")]
 
     def __str__(self) -> str:
         return f"{self.user} blocked for {self.project}"
@@ -1119,24 +1106,15 @@ def setup_project_groups(
     old_access_control = instance.old_access_control
     instance.old_access_control = instance.access_control
 
-    changed_review = (
-        instance.old_translation_review != instance.translation_review
-        or instance.old_source_review != instance.source_review
-    )
     # Handle no groups as newly created project
     if not created and not instance.defined_groups.exists():
         created = True
 
     # No changes needed
-    if (
-        old_access_control == instance.access_control
-        and not changed_review
-        and not created
-        and not new_roles
-    ):
+    if old_access_control == instance.access_control and not created and not new_roles:
         return
 
-    # Do not perform anything with custom ACL
+    # Do not pefrom anything with custom ACL
     if instance.access_control == Project.ACCESS_CUSTOM:
         return
 
@@ -1159,13 +1137,9 @@ def setup_project_groups(
         groups = {group for group in groups if ACL_GROUPS[group] in new_roles}
 
     # Access control changed
-    elif (
-        not created
-        and (
-            instance.access_control == Project.ACCESS_PUBLIC
-            or old_access_control in {Project.ACCESS_PROTECTED, Project.ACCESS_PRIVATE}
-        )
-        and not changed_review
+    elif not created and (
+        instance.access_control == Project.ACCESS_PUBLIC
+        or old_access_control in {Project.ACCESS_PROTECTED, Project.ACCESS_PRIVATE}
     ):
         # Avoid changing groups on some access control changes:
         # - Public groups are always present, so skip change on changing to public
@@ -1296,7 +1270,7 @@ class Invitation(models.Model):
 class WeblateAuthConf(AppConf):
     """Authentication settings."""
 
-    AUTH_RESTRICT_ADMINS: ClassVar[dict] = {}
+    AUTH_RESTRICT_ADMINS = {}
 
     # Anonymous user name
     ANONYMOUS_USER_NAME = "anonymous"
@@ -1314,7 +1288,7 @@ class AuthenticatedHttpRequest(HttpRequest):
     accepted_language: Language
 
     # type hint for social_auth
-    social_strategy: WeblateStrategy
+    social_strategy: DjangoStrategy
 
     # type hint for auth
     backend: BaseAuth | None

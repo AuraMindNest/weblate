@@ -19,14 +19,10 @@ from celery import current_task
 from celery.result import AsyncResult
 from django.conf import settings
 from django.core.cache import cache
-from django.core.exceptions import (
-    ImproperlyConfigured,
-    ObjectDoesNotExist,
-    ValidationError,
-)
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.core.validators import MaxValueValidator
 from django.db import IntegrityError, connection, models, transaction
-from django.db.models import Count, F, Q
+from django.db.models import Count, Q
 from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
 from django.utils.functional import cached_property
@@ -52,7 +48,6 @@ from weblate.trans.defines import (
 )
 from weblate.trans.exceptions import FileParseError, InvalidTemplateError
 from weblate.trans.fields import RegexField
-from weblate.trans.file_format_params import FILE_FORMATS_PARAMS
 from weblate.trans.mixins import (
     CacheKeyMixin,
     ComponentCategoryMixin,
@@ -85,7 +80,6 @@ from weblate.trans.util import (
 from weblate.trans.validators import (
     validate_autoaccept,
     validate_check_flags,
-    validate_file_format_parameters,
     validate_filemask,
     validate_language_code,
 )
@@ -124,7 +118,7 @@ from weblate.utils.validators import (
     validate_re_nonempty,
     validate_slug,
 )
-from weblate.vcs.base import RepositoryError
+from weblate.vcs.base import Repository, RepositoryError
 from weblate.vcs.git import GitMergeRequestBase, LocalRepository
 from weblate.vcs.models import VCS_REGISTRY
 from weblate.vcs.ssh import add_host_key
@@ -136,9 +130,7 @@ if TYPE_CHECKING:
     from weblate.addons.models import Addon
     from weblate.auth.models import AuthenticatedHttpRequest, User
     from weblate.checks.base import BaseCheck
-    from weblate.formats.base import TranslationFormat
     from weblate.trans.models.unit import UnitAttributesDict
-    from weblate.vcs.base import Repository
 
 NEW_LANG_CHOICES = (
     # Translators: Action when adding new translation
@@ -544,7 +536,6 @@ class Component(
         verbose_name=gettext_lazy("File format parameters"),
         default=dict,
         blank=True,
-        validators=[validate_file_format_parameters],
     )
 
     locked = models.BooleanField(
@@ -553,11 +544,6 @@ class Component(
         help_text=gettext_lazy(
             "Locked component will not get any translation updates."
         ),
-    )
-    hide_glossary_matches = models.BooleanField(
-        verbose_name=gettext_lazy("Do not show glossary matches"),
-        default=False,
-        help_text=gettext_lazy("Hides the glossary panel in the translation editor."),
     )
     allow_translation_propagation = models.BooleanField(
         verbose_name=gettext_lazy("Allow translation propagation"),
@@ -864,10 +850,10 @@ class Component(
         app_label = "trans"
         verbose_name = "Component"
         verbose_name_plural = "Components"
-        indexes = [  # noqa: RUF012
+        indexes = [
             models.Index(fields=["project", "allow_translation_propagation"]),
         ]
-        constraints = [  # noqa: RUF012
+        constraints = [
             models.UniqueConstraint(
                 name="component_slug_unique",
                 fields=["project", "category", "slug"],
@@ -916,7 +902,6 @@ class Component(
         """
         from weblate.trans.tasks import component_after_save
 
-        self.drop_file_format_cache()
         self.set_default_branch()
 
         # Linked component cache
@@ -1041,15 +1026,11 @@ class Component(
         # Invalidate source language cache just to be sure, as it is relatively
         # cheap to update
         self.project.invalidate_source_language_cache()
-        for project in self.cached_links:
+        for project in self.links.all():
             project.invalidate_source_language_cache()
 
         if update_tm:
             import_memory.delay_on_commit(self.project.id, self.pk)
-
-    @cached_property
-    def cached_links(self) -> models.QuerySet[Component]:
-        return self.links.all()
 
     def generate_changes(self, old) -> None:
         def getvalue(base, attribute):
@@ -1474,17 +1455,8 @@ class Component(
         return is_repo_link(self.repo)
 
     @property
-    def is_repo_local(self) -> bool:
-        """Check whether a repository is local-only."""
-        return self.vcs == "local"
-
-    @property
     def repository_class(self) -> type[Repository]:
-        try:
-            return VCS_REGISTRY[self.vcs]
-        except KeyError as error:
-            msg = f"Component using VCS {self.vcs}, but it not configured"
-            raise ImproperlyConfigured(msg) from error
+        return VCS_REGISTRY[self.vcs]
 
     @cached_property
     def repository(self) -> Repository:
@@ -1496,7 +1468,7 @@ class Component(
     @perform_on_link
     def get_last_remote_commit(self):
         """Return latest locally known remote commit."""
-        if self.is_repo_local or not self.remote_revision:
+        if self.vcs == "local" or not self.remote_revision:
             return None
         try:
             return self.repository.get_revision_info(self.remote_revision)
@@ -1505,7 +1477,7 @@ class Component(
 
     def get_last_commit(self):
         """Return latest locally known remote commit."""
-        if self.is_repo_local or not self.local_revision:
+        if self.vcs == "local" or not self.local_revision:
             return None
         try:
             return self.repository.get_revision_info(self.local_revision)
@@ -1788,7 +1760,7 @@ class Component(
         if self.is_repo_link:
             return
 
-        if self.is_repo_local:
+        if self.vcs == "local":
             if not os.path.exists(os.path.join(self.full_path, ".git")):
                 if (
                     not self.template
@@ -1850,7 +1822,7 @@ class Component(
         return False
 
     @perform_on_link
-    def do_update(self, request: AuthenticatedHttpRequest | None = None, method=None):
+    def do_update(self, request=None, method=None):
         """Perform repository update."""
         self.translations_progress = 0
         self.translations_count = 0
@@ -2012,7 +1984,7 @@ class Component(
     ) -> bool:
         """Push changes to remote repo."""
         # Skip push for local only repo
-        if self.is_repo_local:
+        if self.vcs == "local":
             return True
 
         # Do we have push configured
@@ -2060,28 +2032,12 @@ class Component(
         return True
 
     @perform_on_link
-    def do_reset(
-        self,
-        request: AuthenticatedHttpRequest | None = None,
-        *,
-        keep_changes: bool = False,
-    ) -> bool:
+    def do_reset(self, request=None) -> bool:
         """Reset repo to match remote."""
-        from weblate.trans.tasks import perform_commit
-
         with self.repository.lock:
             previous_head = self.repository.last_revision
             # First check we're up to date
             self.update_remote_branch()
-
-            if keep_changes:
-                # Mark all strings as pending when keeping changes
-                self.do_file_sync(request, do_commit=False)
-            else:
-                # Explicitly remove all pending changes
-                PendingUnitChange.objects.filter(
-                    unit__translation__component=self
-                ).delete()
 
             # Do actual reset
             try:
@@ -2111,28 +2067,14 @@ class Component(
             self.delete_alert("RepositoryOutdated")
             self.delete_alert("PushFailure")
 
-            if not keep_changes:
-                self.trigger_post_update(
-                    previous_head=previous_head,
-                    skip_push=False,
-                )
+            self.trigger_post_update(previous_head, False)
 
-                # create translation objects for all files
-                self.create_translations(request=request, force=True)
-
-        if keep_changes:
-            # Trigger commit and scan in the background
-            perform_commit.delay_on_commit(
-                self.pk,
-                "reset-sync",
-                user_id=request.user.id if request else None,
-                force_scan=True,
-                previous_head=previous_head,
-            )
-        return True
+            # create translation objects for all files
+            self.create_translations(request=request, force=True)
+            return True
 
     @perform_on_link
-    def do_cleanup(self, request: AuthenticatedHttpRequest | None = None) -> bool:
+    def do_cleanup(self, request=None) -> bool:
         """Clean up the repository."""
         with self.repository.lock:
             try:
@@ -2154,9 +2096,7 @@ class Component(
 
     @perform_on_link
     @transaction.atomic
-    def do_file_sync(
-        self, request: AuthenticatedHttpRequest | None = None, *, do_commit: bool = True
-    ) -> None:
+    def do_file_sync(self, request: AuthenticatedHttpRequest | None = None) -> None:
         from weblate.trans.models import Unit
         from weblate.trans.tasks import perform_commit
 
@@ -2164,8 +2104,7 @@ class Component(
             Q(translation__component=self)
             | Q(translation__component__linked_component=self)
         ).exclude(
-            Q(translation__language_id=F("translation__component__source_language_id"))
-            | Q(translation__filename="")
+            translation__language_id=self.source_language_id, translation__filename=""
         ):
             PendingUnitChange.store_unit_change(unit)
 
@@ -2174,10 +2113,9 @@ class Component(
             user=self.acting_user or (request.user if request else None),
         )
 
-        if do_commit:
-            perform_commit.delay_on_commit(
-                self.pk, "file-sync", user_id=request.user.id if request else None
-            )
+        perform_commit.delay_on_commit(
+            self.pk, "file-sync", user_id=request.user.id if request else None
+        )
 
     @perform_on_link
     @transaction.atomic
@@ -2408,10 +2346,7 @@ class Component(
 
     @perform_on_link
     def update_branch(
-        self,
-        request: AuthenticatedHttpRequest | None = None,
-        method: str | None = None,
-        skip_push: bool = False,
+        self, request=None, method: str | None = None, skip_push: bool = False
     ) -> bool:
         """Update current branch to match remote (if possible)."""
         if method is None:
@@ -2504,14 +2439,11 @@ class Component(
 
                 # Run post update hook, this should be done with repo lock held
                 # to avoid possible race with another update
-                self.trigger_post_update(
-                    previous_head=previous_head,
-                    skip_push=skip_push,
-                )
+                self.trigger_post_update(previous_head, skip_push)
         return True
 
     @perform_on_link
-    def trigger_post_update(self, *, previous_head: str, skip_push: bool) -> None:
+    def trigger_post_update(self, previous_head: str, skip_push: bool) -> None:
         vcs_post_update.send(
             sender=self.__class__,
             component=self,
@@ -2646,7 +2578,7 @@ class Component(
         force: bool = False,
         force_scan: bool = False,
         langs: list[str] | None = None,
-        request: AuthenticatedHttpRequest | None = None,
+        request=None,
         changed_template: bool = False,
         from_link: bool = False,
         change: int | None = None,
@@ -2687,7 +2619,7 @@ class Component(
         force: bool = False,
         force_scan: bool = False,
         langs: list[str] | None = None,
-        request: AuthenticatedHttpRequest | None = None,
+        request=None,
         changed_template: bool = False,
         from_link: bool = False,
         change: int | None = None,
@@ -2726,7 +2658,7 @@ class Component(
         force: bool = False,
         force_scan: bool = False,
         langs: list[str] | None = None,
-        request: AuthenticatedHttpRequest | None = None,
+        request=None,
         changed_template: bool = False,
         from_link: bool = False,
         change: int | None = None,
@@ -2972,7 +2904,7 @@ class Component(
             return
         cache.delete(self.glossary_sources_key)
         self.project.invalidate_glossary_cache()
-        for project in self.cached_links:
+        for project in self.links.all():
             project.invalidate_glossary_cache()
         if "glossary_sources" in self.__dict__:
             del self.__dict__["glossary_sources"]
@@ -3027,7 +2959,7 @@ class Component(
     def set_default_branch(self) -> None:
         """Set default VCS branch if empty."""
         if not self.branch and not self.is_repo_link:
-            self.branch = self.repository_class.get_remote_branch(self.repo)
+            self.branch = VCS_REGISTRY[self.vcs].get_remote_branch(self.repo)
 
     def clean_category(self) -> None:
         if self.category:
@@ -3129,7 +3061,7 @@ class Component(
         dir_path = self.full_path
         for match in matches:
             try:
-                store = self.file_format_cls(  # pylint: disable=too-many-function-args,unexpected-keyword-arg
+                store = self.file_format_cls(
                     os.path.join(dir_path, match),
                     self.template_store,
                     file_format_params=self.file_format_params,
@@ -3167,11 +3099,7 @@ class Component(
         filename = self.get_new_base_filename()
         template = self.has_template()
         return self.file_format_cls.is_valid_base_for_new(
-            filename,
-            template,
-            errors,
-            fast=fast,
-            file_format_params=self.file_format_params,
+            filename, template, errors, fast=fast
         )
 
     def clean_new_lang(self) -> None:
@@ -3290,12 +3218,12 @@ class Component(
         if self.repo is None:
             return
 
-        if not self.is_repo_local and self.repo == "local:":
+        if self.vcs != "local" and self.repo == "local:":
             raise ValidationError(
                 {"vcs": gettext("Choose No remote repository for local: URL.")}
             )
 
-        if self.is_repo_local and self.push:
+        if self.vcs == "local" and self.push:
             raise ValidationError(
                 {"push": gettext("Push URL is not used without a remote repository.")}
             )
@@ -3329,24 +3257,13 @@ class Component(
             )
             raise ValidationError({"push_branch": msg})
 
-    def clean_file_format_params(self) -> None:
-        for param in [
-            p for p in FILE_FORMATS_PARAMS if p.name in self.file_format_params
-        ]:
-            if self.file_format not in param.file_formats:
-                message = gettext(
-                    "The parameter '%(param)s' is not applicable for the file format '%(format)s'."
-                ) % {"param": param.name, "format": self.file_format}
-                raise ValidationError({"file_format_params": message})
-
     def clean(self) -> None:
         """
-        Validate component parameters.
+        Validate component parameter.
 
         - validation fetches repository
         - it tries to find translation files and checks that they are valid
         """
-        self.drop_file_format_cache()
         if self.new_lang == "url" and not self.project.instructions:
             msg = gettext(
                 "Please either fill in an instruction URL "
@@ -3400,9 +3317,6 @@ class Component(
 
         # New language options
         self.clean_new_lang()
-
-        # File format parameters
-        self.clean_file_format_params()
 
         try:
             matches = self.get_mask_matches()
@@ -3462,10 +3376,7 @@ class Component(
         ):
             return
         self.file_format_cls.add_language(
-            fullname,
-            self.source_language,
-            self.get_new_base_filename(),
-            file_format_params=self.file_format_params,
+            fullname, self.source_language, self.get_new_base_filename()
         )
 
         # Skip commit in case Component is not yet saved (called during validation)
@@ -3642,17 +3553,14 @@ class Component(
         return self.translation_set.filter(language__code__in=AMBIGUOUS.keys())
 
     @property
+    def pending_units(self):
+        """Return queryset with pending units."""
+        return PendingUnitChange.objects.for_component(self)
+
+    @property
     def count_pending_units(self):
         """Return count of pending units."""
-        from weblate.trans.models import Unit
-
-        return (
-            Unit.objects.filter(
-                translation__component=self, pending_changes__isnull=False
-            )
-            .distinct()
-            .count()
-        )
+        return PendingUnitChange.objects.for_component(self).count()
 
     @property
     def count_repo_missing(self):
@@ -3719,10 +3627,12 @@ class Component(
     def file_format_flags(self):
         return Flags(self.file_format_cls.check_flags)
 
-    @cached_property
-    def file_format_cls(self) -> type[TranslationFormat]:
+    @property
+    def file_format_cls(self):
         """Return file format object."""
-        return FILE_FORMATS[self.file_format]
+        if self._file_format is None or self._file_format.name != self.file_format:
+            self._file_format = FILE_FORMATS[self.file_format]
+        return self._file_format
 
     def has_template(self) -> bool:
         """Return true if component is using template for translation."""
@@ -3748,12 +3658,9 @@ class Component(
         if "key_filter_re" in self.__dict__:
             del self.__dict__["key_filter_re"]
 
-    def drop_file_format_cache(self) -> None:
-        self.__dict__.pop("file_format_cls", None)
-
     def load_intermediate_store(self):
         """Load translate-toolkit store for intermediate."""
-        return self.file_format_cls(  # pylint: disable=too-many-function-args,unexpected-keyword-arg
+        return self.file_format_cls(
             self.get_intermediate_filename(),
             language_code=self.source_language.code,
             source_language=self.source_language.code,
@@ -3775,7 +3682,7 @@ class Component(
     def load_template_store(self, fileobj=None):
         """Load translate-toolkit store for template."""
         with self.start_sentry_span("load_template_store"):
-            return self.file_format_cls(  # pylint: disable=too-many-function-args,unexpected-keyword-arg
+            return self.file_format_cls(
                 fileobj or self.get_template_filename(),
                 language_code=self.source_language.code,
                 source_language=self.source_language.code,
@@ -3869,8 +3776,8 @@ class Component(
     @transaction.atomic
     def add_new_language(  # noqa: C901
         self,
-        language: Language,
-        request: AuthenticatedHttpRequest | None,
+        language,
+        request,
         send_signal: bool = True,
         create_translations: bool = True,
         show_messages: bool = True,
@@ -3944,12 +3851,7 @@ class Component(
                 if show_messages:
                     messages.error(request, gettext("Translation file already exists!"))
             else:
-                file_format.add_language(
-                    fullname,
-                    language,
-                    base_filename,
-                    file_format_params=self.file_format_params,
-                )
+                file_format.add_language(fullname, language, base_filename)
                 if send_signal:
                     translation_post_add.send(
                         sender=self.__class__, translation=translation
@@ -4123,7 +4025,7 @@ class Component(
         return gettext("Add new translation string")
 
     def suggest_repo_link(self):
-        if self.is_repo_link or self.is_repo_local:
+        if self.is_repo_link or self.vcs == "local":
             return None
 
         same_repo = self.project.component_set.filter(

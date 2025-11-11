@@ -5,16 +5,12 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, cast
 
 from appconf import AppConf
 
 from weblate.utils.classloader import ClassLoader
 
 from .base import BatchMachineTranslation
-
-if TYPE_CHECKING:
-    from .types import SettingsDict
 
 MACHINERY = ClassLoader(
     "WEBLATE_MACHINERY",
@@ -60,9 +56,8 @@ class WeblateConf(AppConf):
 
 
 def validate_service_configuration(
-    service_name: str,
-    configuration: str | SettingsDict,
-) -> tuple[BatchMachineTranslation | None, SettingsDict, list[str]]:
+    service_name: str, configuration: str | dict
+) -> tuple[BatchMachineTranslation | None, dict, list[str]]:
     """
     Validate given service configuration.
 
@@ -78,11 +73,9 @@ def validate_service_configuration(
         msg = f"Service not found: {service_name}"
         return None, {}, [msg]
 
-    service_configuration: SettingsDict
-
     if isinstance(configuration, str):
         try:
-            service_configuration = cast("SettingsDict", json.loads(configuration))
+            service_configuration = json.loads(configuration)
         except json.JSONDecodeError as error:
             msg = f"Invalid service configuration ({service_name}): {error}"
             return service, {}, [msg]
@@ -94,7 +87,7 @@ def validate_service_configuration(
         form = service.settings_form(service, data=service_configuration)
         # validate form
         if not form.is_valid():
-            errors.extend([str(error) for error in form.non_field_errors()])
+            errors.extend(list(form.non_field_errors()))
 
             for field in form:
                 errors.extend(

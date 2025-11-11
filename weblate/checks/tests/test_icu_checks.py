@@ -228,16 +228,6 @@ class ICUMessageFormatCheckTest(CheckTestCase):
             )
         )
 
-    def test_unannotated_plural(self) -> None:
-        self.assertFalse(
-            self.check.check_format(
-                "{count} apples",
-                "{count, plural, one {# apple} other {# apples}}",
-                False,
-                self.get_mock(),
-            )
-        )
-
     def test_good_plural(self) -> None:
         self.assertFalse(
             self.check.check_format(

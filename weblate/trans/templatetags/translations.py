@@ -11,7 +11,7 @@ from datetime import date, datetime
 from html import escape as html_escape
 from typing import TYPE_CHECKING
 
-from django import template
+from django import forms, template
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.humanize.templatetags.humanize import intcomma
 from django.template.loader import render_to_string
@@ -19,7 +19,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.formats import number_format as django_number_format
 from django.utils.html import escape, format_html, format_html_join, linebreaks, urlize
-from django.utils.safestring import mark_safe
+from django.utils.safestring import SafeString, mark_safe
 from django.utils.translation import gettext, gettext_lazy, ngettext, pgettext
 from siphashc import siphash
 
@@ -32,9 +32,12 @@ from weblate.lang.models import Language
 from weblate.trans.filter import FILTERS, get_filter_choice
 from weblate.trans.forms import FieldDocsMixin
 from weblate.trans.models import (
+    Alert,
     Announcement,
     Category,
+    Change,
     Component,
+    ComponentList,
     ContributorAgreement,
     Project,
     Translation,
@@ -55,6 +58,7 @@ from weblate.utils.stats import (
     CategoryLanguage,
     GhostCategoryLanguageStats,
     GhostProjectLanguageStats,
+    GhostStats,
     ProjectLanguage,
 )
 from weblate.utils.templatetags.icons import icon
@@ -63,21 +67,12 @@ from weblate.utils.views import SORT_CHOICES
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable
 
-    from django import forms
     from django.db.models import Model, QuerySet
+    from django.forms.boundfield import BoundField
     from django.template.context import Context
-    from django.utils.safestring import SafeString
     from django_stubs_ext import StrOrPromise
 
     from weblate.metrics.wrapper import MetricsWrapper
-    from weblate.trans.models import (
-        Alert,
-        Change,
-        ComponentList,
-    )
-    from weblate.utils.stats import (
-        GhostStats,
-    )
 
 register = template.Library()
 
@@ -910,15 +905,13 @@ def translation_progress_render(
     if approved_percent > 0.1:
         approved_tag = format_html(
             """
-            <div class="progress progress5"
-                 role="progressbar"
-                 aria-valuenow="{approved}"
-                 aria-valuemin="0"
-                 aria-valuemax="100"
-                 style="width: {approved}%"
-                 title="{title}">
-                    <div class="progress-bar"></div>
-            </div>
+            <div class="progress-bar"
+                role="progressbar"
+                aria-valuenow="{approved}"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                style="width: {approved}%"
+                title="{title}"></div>
             """,
             approved=f"{approved_percent:.1f}",
             title=gettext("Approved"),
@@ -926,22 +919,20 @@ def translation_progress_render(
     if good_percent > 0.1:
         good_tag = format_html(
             """
-            <div class="progress progress5"
-                 role="progressbar"
-                 aria-valuenow="{good}"
-                 aria-valuemin="0"
-                 aria-valuemax="100"
-                 style="width: {good}%"
-                 title="{title}">
-                    <div class="progress-bar progress-bar-success"></div>
-            </div>
+            <div class="progress-bar progress-bar-success"
+                role="progressbar"
+                aria-valuenow="{good}"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                style="width: {good}%"
+                title="{title}"></div>
             """,
             good=f"{good_percent:.1f}",
             title=gettext("Translated without any problems"),
         )
 
     return format_html(
-        """<div class="progress-stacked progress5" title="{}">{}{}</div>""",
+        """<div class="progress" title="{}">{}{}</div>""",
         gettext("Needs attention"),
         approved_tag,
         good_tag,
@@ -1081,9 +1072,7 @@ def get_location_links(user: User | None, unit):
 
 
 @register.simple_tag(takes_context=True)
-def announcements(
-    context: Context, project=None, component=None, language=None, bootstrap_5=False
-):
+def announcements(context: Context, project=None, component=None, language=None):
     """Display announcement messages for given context."""
     user = context["user"]
 
@@ -1098,9 +1087,8 @@ def announcements(
                         "tags": f"{announcement.severity} announcement",
                         "message": render_markdown(announcement.message),
                         "announcement": announcement,
-                        "bootstrap_5": bootstrap_5,
                         "can_delete": user.has_perm(
-                            "meta:announcement.delete", announcement
+                            "announcement.delete", announcement
                         ),
                     },
                 ),
@@ -1120,8 +1108,9 @@ def active_tab(context: Context, slug):
 
 @register.simple_tag(takes_context=True)
 def active_link(context: Context, slug):
-    active = "active" if slug == context["active_tab_slug"] else ""
-    return format_html('class="nav-link {}"', active)
+    if slug == context["active_tab_slug"]:
+        return mark_safe('class="active"')
+    return ""
 
 
 def _needs_agreement(component, user: User) -> bool:
@@ -1335,7 +1324,7 @@ def indicate_alerts(
     project: Project | None = None
     project_language: ProjectLanguage | None = None
 
-    if isinstance(obj, (Translation, GhostTranslation)):
+    if isinstance(obj, Translation | GhostTranslation):
         translation = obj
         component = obj.component
         project = component.project
@@ -1393,6 +1382,30 @@ def indicate_alerts(
 @register.filter(is_safe=True)
 def markdown(text: str) -> str:
     return format_html('<div class="markdown">{}</div>', render_markdown(text))
+
+
+@register.filter
+def choiceval(boundfield: BoundField) -> str:
+    """
+    Get literal value from a field's choices.
+
+    Empty value is returned if value is not selected or invalid.
+    """
+    value = boundfield.value()
+    if value is None:
+        return ""
+    if value is True:
+        return gettext("enabled")
+    if not hasattr(boundfield.field, "choices"):
+        return value
+    choices: dict[str, str] = {
+        str(choice): value for choice, value in boundfield.field.choices
+    }
+    if isinstance(value, list):
+        return format_html_join_comma(
+            "{}", list_to_tuples(choices.get(val, val) for val in value)
+        )
+    return choices.get(value, value)
 
 
 @register.filter
@@ -1498,7 +1511,7 @@ def urlize_ugc(value: str, autoescape: bool = True) -> str:
 def get_glossary_badge(component: Component | GhostStats) -> StrOrPromise:
     if isinstance(component, Component) and component.is_glossary:
         return format_html(
-            '<span class="badge label-{}">{}</span>',
+            '<span class="label label-{}">{}</span>',
             component.glossary_color,
             gettext("Glossary"),
         )
@@ -1590,15 +1603,6 @@ def path_object_breadcrumbs(path_object, flags: bool = True):
 
 
 @register.simple_tag
-def path_object_breadcrumbs5(path_object, flags: bool = True):
-    return format_html_join(
-        "\n",
-        '<li class="breadcrumb-item"><a href="{}">{}</a></li>',
-        get_breadcrumbs(path_object, flags=flags),
-    )
-
-
-@register.simple_tag
 def get_projectlanguage(project: Project, language: Language) -> ProjectLanguage:
     return ProjectLanguage(project=project, language=language)
 
@@ -1634,9 +1638,7 @@ def list_objects_number(
     url_end: str | SafeString
     url_start = url_end = ""
     if value == 0 and not show_zero:
-        value_formatted = format_html(
-            """<span class="visually-hidden">{}</span>""", value
-        )
+        value_formatted = format_html("""<span class="sr-only">{}</span>""", value)
     else:
         if search_url or translate_url:
             url_start = format_html(
@@ -1723,46 +1725,6 @@ def list_objects_percent(
     )
 
 
-@register.inclusion_tag("snippets/info5.html", takes_context=True)
-def show_info5(  # noqa: PLR0913
-    context: Context,
-    *,
-    project: Project | None = None,
-    component: Component | None = None,
-    translation: Translation | None = None,
-    language: Language | None = None,
-    componentlist: ComponentList | None = None,
-    stats: BaseStats | None = None,
-    metrics: MetricsWrapper | None = None,
-    show_source: bool = False,
-    show_global: bool = False,
-    show_full_language: bool = True,
-    top_users: QuerySet[Profile] | None = None,
-    total_translations: int | None = None,
-):
-    """
-    Render project information table.
-
-    This merely exists to be able to pass default values to {% include %}.
-    """
-    return {
-        "user": context["user"],
-        "project": project,
-        "component": component,
-        "translation": translation,
-        "language": language,
-        "componentlist": componentlist,
-        "stats": stats,
-        "metrics": metrics,
-        "show_source": show_source,
-        "show_global": show_global,
-        "show_full_language": show_full_language,
-        "top_users": top_users,
-        "total_translations": total_translations,
-        "bootstrap_5": True,
-    }
-
-
 @register.inclusion_tag("snippets/info.html", takes_context=True)
 def show_info(  # noqa: PLR0913
     context: Context,
@@ -1822,7 +1784,6 @@ def format_last_changes_content(
     debug: bool = False,
     search_url: str | None = None,
     offset: int | None = None,
-    bootstrap_5: bool = False,
 ):
     """
     Format last changes content for display.
@@ -1863,18 +1824,4 @@ def format_last_changes_content(
         "debug": debug,
         "search_url": search_url,
         "offset": offset,
-        "bootstrap_5": bootstrap_5,
     }
-
-
-@register.simple_tag
-def get_git_export_example_url() -> str:
-    url = reverse(
-        "git-export",
-        kwargs={
-            "path": ["PROJECT", "COMPONENT"],
-            "git_request": "info/refs",
-        },
-    )
-    # Strip trailing info/refs part:
-    return url[:-9]

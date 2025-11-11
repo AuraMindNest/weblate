@@ -6,7 +6,6 @@
 
 import os
 from tempfile import NamedTemporaryFile
-from typing import ClassVar
 
 from weblate.checks.tests.test_checks import MockUnit
 from weblate.formats.convert import (
@@ -38,7 +37,7 @@ class ConvertFormatTest(BaseFormatTest):
     CONVERT_TEMPLATE = ""
     CONVERT_TRANSLATION = ""
     CONVERT_EXPECTED = ""
-    CONVERT_EXISTING: ClassVar[list[MockUnit]] = []
+    CONVERT_EXISTING: list[MockUnit] = []
 
     def test_convert(self) -> None:
         if not self.CONVERT_TEMPLATE:
@@ -132,9 +131,7 @@ Bye
 
 Nazdar
 """
-    CONVERT_EXISTING: ClassVar[list[MockUnit]] = [
-        MockUnit(source="Hello", target="Ahoj")
-    ]
+    CONVERT_EXISTING = [MockUnit(source="Hello", target="Ahoj")]
 
     def test_existing_units(self) -> None:
         with open(self.FILE, "rb") as handle:

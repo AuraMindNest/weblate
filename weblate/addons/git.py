@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from itertools import chain
-from typing import TYPE_CHECKING, ClassVar, cast
+from typing import TYPE_CHECKING, cast
 
 from django.utils.translation import gettext_lazy
 
@@ -17,7 +17,6 @@ from weblate.vcs.base import RepositoryError
 from weblate.vcs.models import VCS_REGISTRY
 
 if TYPE_CHECKING:
-    from weblate.addons.base import CompatDict
     from weblate.trans.models import Component
     from weblate.vcs.git import GitRepository
 
@@ -27,10 +26,10 @@ class GitSquashAddon(BaseAddon):
     verbose = gettext_lazy("Squash Git commits")
     description = gettext_lazy("Squash Git commits prior to pushing changes.")
     settings_form = GitSquashForm
-    compat: ClassVar[CompatDict] = {
+    compat = {
         "vcs": VCS_REGISTRY.git_based,
     }
-    events: ClassVar[set[AddonEvent]] = {
+    events: set[AddonEvent] = {
         AddonEvent.EVENT_POST_COMMIT,
     }
     icon = "compress.svg"
@@ -63,13 +62,7 @@ class GitSquashAddon(BaseAddon):
                 languages[code].extend(translation.filenames)
         return languages
 
-    def get_git_commit_messages(
-        self,
-        repository: GitRepository,
-        log_format: str,
-        remote: str,
-        filenames: list[str] | None,
-    ) -> str:
+    def get_git_commit_messages(self, repository, log_format, remote, filenames):
         command = [
             "log",
             f"--format={log_format}",
@@ -251,9 +244,7 @@ class GitSquashAddon(BaseAddon):
             repository.execute(["checkout", repository.branch])
             repository.delete_branch(tmp)
 
-    def post_commit(
-        self, component: Component, store_hash: bool, activity_log_id: int | None = None
-    ) -> None:
+    def post_commit(self, component: Component, store_hash: bool) -> None:
         # Operate on parent
         if component.linked_component:
             component = component.linked_component

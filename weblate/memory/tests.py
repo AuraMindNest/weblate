@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import json
-import tempfile
 from io import StringIO
 from typing import Any
 
@@ -16,8 +15,7 @@ from django.urls import reverse
 from jsonschema import validate
 from weblate_schemas import load_schema
 
-from weblate.lang.data import FORMULA_WITH_ZERO
-from weblate.lang.models import Language, Plural
+from weblate.lang.models import Language
 from weblate.memory.machine import WeblateMemory
 from weblate.memory.models import Memory
 from weblate.memory.tasks import (
@@ -32,12 +30,12 @@ from weblate.utils.hash import hash_to_checksum
 from weblate.utils.state import STATE_TRANSLATED
 
 
-def add_document(source: str = "Hello", target: str = "Ahoj") -> None:
+def add_document() -> None:
     Memory.objects.create(
         source_language=Language.objects.get(code="en"),
         target_language=Language.objects.get(code="cs"),
-        source=source,
-        target=target,
+        source="Hello",
+        target="Ahoj",
         origin="test",
         from_file=True,
         shared=False,
@@ -94,96 +92,13 @@ class MemoryModelTest(TransactionsTestMixin, FixtureTestCase):
         del machinery["origin"]
         self.assertEqual(machinery, {"quality": [100], "translation": ["Ahoj"]})
 
-    def test_machine_plurals(self) -> None:
-        unit = self.get_unit("Orangutan has %d banana.\n")
-
-        # Use plural with zero
-        translation = unit.translation
-        language = translation.language
-        plural = translation.plural
-        translation.plural = language.plural_set.get_or_create(
-            source=Plural.SOURCE_CLDR_ZERO,
-            defaults={
-                "formula": FORMULA_WITH_ZERO[plural.formula],
-                "number": plural.number + 1,
-            },
-        )[0]
-        translation.save()
-
-        add_document("Orangutan has banana.", "Orangutan má banán.")
-        machine_translation = WeblateMemory({})
-        # Use ridiculously low threshold to get matches on all PostgreSQL versions
-        # while testing as this behavior differs.
-        machine_translation.batch_translate([unit], threshold=1)
-        machinery = unit.machinery
-        del machinery["origin"]
-        self.assertEqual(
-            machinery,
-            {
-                "quality": [89, 91, 89, 89],
-                "translation": [
-                    "Orangutan má banán.",
-                    "Orangutan má banán.",
-                    "Orangutan má banán.",
-                    "Orangutan má banán.",
-                ],
-            },
-        )
-
-    def do_import_file_command_test(
-        self, filename: str, expected_count: int, **cmd_kwargs
-    ) -> None:
-        call_command("import_memory", filename, **cmd_kwargs)
-        self.assertEqual(
-            Memory.objects.filter(status=Memory.STATUS_ACTIVE, from_file=True).count(),
-            expected_count,
-        )
-
     def test_import_tmx_command(self) -> None:
-        self.do_import_file_command_test(get_test_file("memory.tmx"), 2)
+        call_command("import_memory", get_test_file("memory.tmx"))
+        self.assertEqual(Memory.objects.count(), 2)
 
     def test_import_tmx2_command(self) -> None:
-        self.do_import_file_command_test(get_test_file("memory2.tmx"), 1)
-
-    def test_imported_memory_status(self) -> None:
-        unit = self.get_unit()
-        unit.context = "Unit Context"
-        unit.save()
-        self.project.translation_review = True
-        self.project.save()
-        machine_translation = WeblateMemory({})
-        with tempfile.NamedTemporaryFile(suffix=".json") as temp_file:
-            temp_file.write(
-                json.dumps(
-                    [
-                        {
-                            "source_language": "en",
-                            "target_language": "cs",
-                            "source": "Hello, world!\n",
-                            "target": "Ahoj!",
-                            "origin": "Project",
-                            "context": "Unit Context",
-                            "category": 1,
-                        }
-                    ]
-                ).encode("utf-8")
-            )
-            temp_file.flush()
-            call_command("import_memory", temp_file.name)
+        call_command("import_memory", get_test_file("memory2.tmx"))
         self.assertEqual(Memory.objects.count(), 1)
-        suggestion = self.search_suggestion(
-            machine_translation, unit, "Hello, world!\n", origin="File"
-        )
-        # quality of imported memory is not affected by penalty
-        self.assertEqual(suggestion["quality"], 100)
-
-        unit.context = "Different context"
-        unit.save()
-        unit.refresh_from_db()
-        suggestion = self.search_suggestion(
-            machine_translation, unit, "Hello, world!\n", origin="File"
-        )
-        self.assertEqual(suggestion["quality"], 95)
 
     def test_import_map(self) -> None:
         call_command(
@@ -220,7 +135,8 @@ class MemoryModelTest(TransactionsTestMixin, FixtureTestCase):
         self.assertEqual(Memory.objects.count(), 0)
 
     def test_import_json_command(self) -> None:
-        self.do_import_file_command_test(get_test_file("memory.json"), 1)
+        call_command("import_memory", get_test_file("memory.json"))
+        self.assertEqual(Memory.objects.count(), 1)
 
     def test_import_broken_json_command(self) -> None:
         with self.assertRaises(CommandError):
@@ -234,7 +150,7 @@ class MemoryModelTest(TransactionsTestMixin, FixtureTestCase):
 
     def import_file_with_languages_test(
         self,
-        filepath: str,
+        filename: str,
         source_language: str,
         target_language: str,
         expected_result: int,
@@ -242,13 +158,13 @@ class MemoryModelTest(TransactionsTestMixin, FixtureTestCase):
         """Test memory file upload requiring source and target languages."""
         # check source and target languages are required
         with self.assertRaises(CommandError):
-            call_command("import_memory", filepath)
+            call_command("import_memory", get_test_file(filename))
         self.assertEqual(Memory.objects.count(), 0)
 
         with self.assertRaises(CommandError):
             call_command(
                 "import_memory",
-                filepath,
+                get_test_file(filename),
                 source_language=source_language,
             )
         self.assertEqual(Memory.objects.count(), 0)
@@ -256,7 +172,7 @@ class MemoryModelTest(TransactionsTestMixin, FixtureTestCase):
         with self.assertRaises(CommandError):
             call_command(
                 "import_memory",
-                filepath,
+                get_test_file(filename),
                 target_language=target_language,
             )
         self.assertEqual(Memory.objects.count(), 0)
@@ -265,19 +181,20 @@ class MemoryModelTest(TransactionsTestMixin, FixtureTestCase):
         with self.assertRaises(CommandError):
             call_command(
                 "import_memory",
-                filepath,
+                get_test_file(filename),
                 source_language=source_language,
                 target_language="zzz",
             )
         self.assertEqual(Memory.objects.count(), 0)
 
         # successful import
-        self.do_import_file_command_test(
-            filepath,
-            expected_result,
+        call_command(
+            "import_memory",
+            get_test_file(filename),
             source_language="en",
             target_language="cs",
         )
+        self.assertEqual(Memory.objects.count(), expected_result)
 
     def test_import_xliff(self) -> None:
         """Test the import of an XLIFF file."""
@@ -292,46 +209,16 @@ class MemoryModelTest(TransactionsTestMixin, FixtureTestCase):
 
         self.assertEqual(Memory.objects.count(), 0)
 
-        self.import_file_with_languages_test(
-            get_test_file("ids-translated.xliff"), "en", "cs", 2
-        )
+        self.import_file_with_languages_test("ids-translated.xliff", "en", "cs", 2)
 
     def test_import_po(self) -> None:
         """Test the import of an GNU PO file."""
-        with tempfile.NamedTemporaryFile(suffix=".po") as temp_file:
-            temp_file.write(
-                rb"""
-msgid ""
-msgstr ""
-"Project-Id-Version: Weblate Hello World 2012\n"
-"Report-Msgid-Bugs-To: <noreply@example.net>\n"
-"POT-Creation-Date: 2012-03-14 15:54+0100\n"
-"PO-Revision-Date: 2013-08-25 15:23+0200\n"
-"Last-Translator: testuser <>\n"
-"Language-Team: Czech <http://example.com/projects/test/test/cs/>\n"
-"Language: cs\n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
-"X-Generator: Weblate 1.7-dev\n"
-
-#: main.c:11
-#, c-format
-msgctxt "Greeting"
-msgid "Hello, world!\n"
-msgstr "Nazdar svete!\n"
-"""
-            )
-            temp_file.flush()
-            self.import_file_with_languages_test(temp_file.name, "en", "cs", 1)
-        memory = Memory.objects.get()
-        self.assertEqual(memory.context, "Greeting")
+        self.import_file_with_languages_test("cs.po", "en", "cs", 1)
 
     def test_import_unsupported_format(self) -> None:
         """Test the import of an unsupported file."""
         with self.assertRaises(CommandError):
-            self.import_file_with_languages_test(get_test_file("cs.ts"), "en", "cs", 0)
+            self.import_file_with_languages_test("cs.ts", "en", "cs", 0)
 
     def test_import_project(self) -> None:
         import_memory(self.project.id)
@@ -465,8 +352,7 @@ msgstr "Nazdar svete!\n"
         origin: str = "Project",
     ) -> dict:
         results = mt.search(unit, source, user)
-        if origin != "File":
-            origin = f"{origin}: {self.component.full_slug}"
+        origin = f"{origin}: {self.component.full_slug}"
         results = [r for r in results if origin in r["origin"]]
         if text:
             results = [r for r in results if text in r["text"]]

@@ -1,24 +1,18 @@
 # Copyright © Michal Čihař <michal@weblate.org>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, ClassVar
 
 from requests.exceptions import RequestException
 
-from .base import MachineTranslation, MachineTranslationError
+from .base import DownloadTranslations, MachineTranslation, MachineTranslationError
 from .forms import KeyMachineryForm
-
-if TYPE_CHECKING:
-    from .base import DownloadTranslations
 
 GOOGLE_API_ROOT = "https://translation.googleapis.com/language/translate/v2/"
 
 
 class GoogleBaseTranslation(MachineTranslation):
     # Map codes used by Google to the ones used by Weblate
-    language_map: ClassVar[dict[str, str]] = {
+    language_map = {
         "nb": "no",
         "nb_NO": "no",
         "fil": "tl",

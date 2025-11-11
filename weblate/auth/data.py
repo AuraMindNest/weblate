@@ -72,8 +72,6 @@ PERMISSIONS = (
     # Translators: Permission name
     ("unit.review", gettext_noop("Review strings")),
     # Translators: Permission name
-    ("unit.bulk_edit", gettext_noop("Bulk edit strings")),
-    # Translators: Permission name
     ("unit.override", gettext_noop("Edit string when suggestions are enforced")),
     # Translators: Permission name
     ("unit.template", gettext_noop("Edit source strings")),
@@ -132,15 +130,9 @@ GLOBAL_PERMISSIONS = (
     # Translators: Permission name
     ("group.edit", gettext_noop("Manage teams")),
     # Translators: Permission name
-    ("group.view", gettext_noop("View team info")),
-    # Translators: Permission name
     ("user.edit", gettext_noop("Manage users")),
     # Translators: Permission name
-    ("user.view", gettext_noop("View user info")),
-    # Translators: Permission name
     ("role.edit", gettext_noop("Manage roles")),
-    # Translators: Permission name
-    ("role.view", gettext_noop("View role info")),
     # Translators: Permission name
     ("announcement.edit", gettext_noop("Manage announcements")),
     # Translators: Permission name
@@ -238,10 +230,6 @@ ROLES = (
         filter_perms("translation.", {"translation.auto"}),
     ),
     (
-        pgettext_noop("Access-control role", "Bulk editing"),
-        {"unit.bulk_edit"},
-    ),
-    (
         pgettext_noop("Access-control role", "Automatic translation"),
         {"translation.auto"},
     ),
@@ -311,9 +299,6 @@ ACL_GROUPS = {
     pgettext_noop(
         "Per-project access-control team name", "Screenshots"
     ): "Manage screenshots",
-    pgettext_noop(
-        "Per-project access-control team name", "Bulk editing"
-    ): "Bulk editing",
     pgettext_noop(
         "Per-project access-control team name", "Automatic translation"
     ): "Automatic translation",

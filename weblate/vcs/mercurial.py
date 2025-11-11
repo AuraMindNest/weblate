@@ -6,12 +6,13 @@
 
 from __future__ import annotations
 
+import os
 import os.path
 import re
 from configparser import RawConfigParser
 from pathlib import Path
 from shutil import which
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from django.utils.translation import gettext_lazy
 
@@ -23,24 +24,13 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from datetime import datetime
 
-    from django_stubs_ext import StrOrPromise
-
-
-VERSION_RE = re.compile(r".*\(version ([^)]*)\).*")
-
 
 class HgRepository(Repository):
     """Repository implementation for Mercurial."""
 
-    _cmd: ClassVar[str] = "rhg" if which("rhg") is not None else "hg"
-    _cmd_last_revision: ClassVar[list[str]] = [
-        "log",
-        "--limit",
-        "1",
-        "--template",
-        "{node}",
-    ]
-    _cmd_last_remote_revision: ClassVar[list[str]] = [
+    _cmd = "rhg" if which("rhg") is not None else "hg"
+    _cmd_last_revision = ["log", "--limit", "1", "--template", "{node}"]
+    _cmd_last_remote_revision = [
         "log",
         "--limit",
         "1",
@@ -49,17 +39,19 @@ class HgRepository(Repository):
         "--branch",
         ".",
     ]
-    _cmd_list_changed_files: ClassVar[list[str]] = ["status", "--rev"]
-    _version: ClassVar[str | None] = None
+    _cmd_list_changed_files = ["status", "--rev"]
+    _version = None
 
-    name: ClassVar[StrOrPromise] = "Mercurial"
-    push_label: ClassVar[StrOrPromise] = gettext_lazy(
+    name = "Mercurial"
+    push_label = gettext_lazy(
         "This will push changes to the upstream Mercurial repository."
     )
-    req_version: ClassVar[str] = "6.8"
-    default_branch: ClassVar[str] = "default"
-    ref_to_remote: ClassVar[str] = "head() and branch(.) and not closed() - ."
-    ref_from_remote: ClassVar[str] = "outgoing()"
+    req_version = "6.8"
+    default_branch = "default"
+    ref_to_remote = "head() and branch(.) and not closed() - ."
+    ref_from_remote = "outgoing()"
+
+    VERSION_RE = re.compile(r".*\(version ([^)]*)\).*")
 
     def is_valid(self):
         """Check whether this is a valid repository."""
@@ -277,7 +269,7 @@ class HgRepository(Repository):
     def _get_version(cls):
         """Return VCS program version."""
         output = cls._popen(["version", "-q"], merge_err=False)
-        matches = VERSION_RE.match(output)
+        matches = cls.VERSION_RE.match(output)
         if matches is None:
             msg = f"Could not parse version string: {output}"
             raise OSError(msg)

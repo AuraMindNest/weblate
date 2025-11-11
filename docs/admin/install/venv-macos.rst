@@ -19,8 +19,8 @@ Installing on macOS
     # Web server option 2: Apache with ``mod_wsgi``
     brew install httpd
 
-    # Caching backend: Valkey
-    brew install valkey
+    # Caching backend: Redis
+    brew install redis
 
     # Database server: PostgreSQL
     brew install postgresql

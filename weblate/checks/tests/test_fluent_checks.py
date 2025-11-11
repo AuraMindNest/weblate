@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import itertools
 import re
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from django.test import SimpleTestCase
 
@@ -23,7 +23,7 @@ from weblate.checks.fluent.syntax import (
 )
 
 if TYPE_CHECKING:
-    from weblate.checks.base import BaseCheck, SourceCheck, TargetCheck
+    from weblate.checks.base import BaseCheck
 
 from weblate.checks.tests.test_checks import MockUnit
 
@@ -118,11 +118,8 @@ class FluentCheckTestBase(SimpleTestCase):
                 f"Description for {check.check_id} should match regex for {unit}",
             )
 
-    SOURCE_CHECKS: ClassVar[list[SourceCheck]] = [
-        FluentSourceSyntaxCheck(),
-        FluentSourceInnerHTMLCheck(),
-    ]
-    TARGET_CHECKS: ClassVar[list[TargetCheck]] = [
+    SOURCE_CHECKS = [FluentSourceSyntaxCheck(), FluentSourceInnerHTMLCheck()]
+    TARGET_CHECKS = [
         FluentTargetSyntaxCheck(),
         FluentPartsCheck(),
         FluentReferencesCheck(),

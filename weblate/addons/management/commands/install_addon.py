@@ -1,10 +1,8 @@
 # Copyright © Michal Čihař <michal@weblate.org>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
-from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
 
 from django.core.management.base import CommandError
 
@@ -12,14 +10,11 @@ from weblate.addons.models import ADDONS, Addon
 from weblate.auth.models import User, get_anonymous
 from weblate.trans.management.commands import WeblateComponentCommand
 
-if TYPE_CHECKING:
-    from django.core.management.base import CommandParser
-
 
 class Command(WeblateComponentCommand):
     help = "installs add-on to all listed components"
 
-    def add_arguments(self, parser: CommandParser) -> None:
+    def add_arguments(self, parser) -> None:
         super().add_arguments(parser)
         parser.add_argument("--addon", required=True, help="Add-on name")
         parser.add_argument(

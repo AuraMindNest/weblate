@@ -37,57 +37,14 @@ Configure this as a list of e-mail addresses:
    * :setting:`CONTACT_FORM`
    * :setting:`ADMINS`
 
+.. setting:: AKISMET_API_KEY
 
-.. setting:: ALLOWED_ASSET_DOMAINS
+AKISMET_API_KEY
+---------------
 
-ALLOWED_ASSET_DOMAINS
----------------------
-
-.. versionadded:: 5.14
-
-Configures which domains are allowed for fetching assets in Weblate.
-
-This enhances security by preventing loading assets from untrusted sources.
-Assets are downloaded once by the Weblate server and stored locally, rather than
-being served directly from external domains to users.
-
-It expects a list of host/domain names. You can use fully qualified names
-(e.g ``www.example.com``) or prepend with a period as a wildcard to match
-all subdomains (e.g ``.example.com`` will match ``cdn.example.com`` or ``static.example.com``).
-
-Defaults to `[*]` which will allow all domains.
-
-**Example**
-
-.. code-block:: python
-
-   ALLOWED_ASSET_DOMAINS = [
-       # Allows only cdn.anotherdomain.org
-       "cdn.anotherdomain.org",
-       # Allows example.com and all its subdomains
-       ".example.com",
-   ]
-
-This is currently used in the following places:
-
-* Screenshot uploads, see :ref:`screenshots`
-
-.. seealso::
-
-   * :setting:`ALLOWED_ASSET_SIZE`
-
-.. setting:: ALLOWED_ASSET_SIZE
-
-ALLOWED_ASSET_SIZE
-------------------
-
-.. versionadded:: 5.14
-
-Configures size limit for fetching assets in Weblate. Defaults to 4 MB.
-
-.. seealso::
-
-   * :setting:`ALLOWED_ASSET_DOMAINS`
+Weblate can use Akismet to check incoming anonymous suggestions for spam.
+Visit `akismet.com <https://akismet.com/>`_ to purchase an API key
+and associate it with a site.
 
 .. setting:: ALTCHA_MAX_NUMBER
 
@@ -241,7 +198,6 @@ You can select which ones to use:
 
    * :ref:`autofix`
    * :ref:`custom-autofix`
-   * :ref:`custom-modules`
 
 .. setting:: BACKGROUND_TASKS
 
@@ -416,8 +372,7 @@ You can turn on only a few:
 .. seealso::
 
    * :ref:`checks`
-   * :ref:`own-checks`
-   * :ref:`custom-modules`
+   * :ref:`custom-checks`
 
 .. setting:: COMMENT_CLEANUP_DAYS
 
@@ -866,10 +821,6 @@ List for credentials for GitLab servers.
         },
     }
 
-.. note::
-
-   The personal access token needs the :guilabel:`api` scope to be able to use the API.
-
 .. include:: /snippets/vcs-credentials.rst
 
 .. seealso::
@@ -961,7 +912,7 @@ List for credentials for Bitbucket Cloud servers.
         "bitbucket.org": {
             "username": "your-username",
             "workspace": "your-workspace-slug",
-            "token": "your-api-token",
+            "token": "your-app-password",
         },
     }
 
@@ -976,15 +927,15 @@ The following configuration is available for each host:
 ``workspace``
     The user workspace slug.
 ``token``
-    The API token with `pullrequest:write` permission.
+    The App password with `pullrequest:write` permission.
 
 Additional settings not described here can be found at :ref:`settings-credentials`.
 
 .. seealso::
 
    * :ref:`vcs-bitbucket-cloud`
-   * `Create an API token <https://support.atlassian.com/bitbucket-cloud/docs/create-an-api-token/>`_
-   * `API token permissions <https://support.atlassian.com/bitbucket-cloud/docs/api-token-permissions/>`_
+   * `Create an App password <https://support.atlassian.com/bitbucket-cloud/docs/create-an-app-password/>`_
+   * `App password permissions <https://support.atlassian.com/bitbucket-cloud/docs/app-password-permissions/>`_
 
 .. setting:: AZURE_DEVOPS_CREDENTIALS
 
@@ -1623,31 +1574,6 @@ Defines a regular expression to limit what can be entered as :ref:`project-web`.
    * :setting:`PROJECT_WEB_RESTRICT_HOST`
    * :setting:`PROJECT_WEB_RESTRICT_NUMERIC`
 
-.. setting:: RATELIMIT_NOTIFICATION_LIMITS
-
-RATELIMIT_NOTIFICATION_LIMITS
------------------------------
-
-.. versionadded:: 5.14
-
-Limits how many notifications for a single user will be sent out.
-
-The default setting is:
-
-.. code-block:: python
-
-    # Multi-level rate limiting for email notifications
-    # Each tuple contains (max_emails, time_window_seconds)
-    RATELIMIT_NOTIFICATION_LIMITS = [
-        # Prevent burst sends - 3 emails per 2 minutes
-        (3, 120),
-        # Equalize to avoid getting blocked for too long - 10 emails per hour
-        (10, 3600),
-        # Daily limit: 50 emails per day
-        (50, 86400),
-    ]
-
-
 .. setting:: RATELIMIT_ATTEMPTS
 
 RATELIMIT_ATTEMPTS
@@ -2021,7 +1947,7 @@ Their offer: diffie-hellman-group1-sha1`, you can turn that on using:
 
 .. seealso::
 
-   `OpenSSH Legacy Options <https://www.openssh.org/legacy.html>`_
+   `OpenSSH Legacy Options <https://www.openssh.com/legacy.html>`_
 
 .. setting:: STATUS_URL
 
@@ -2223,7 +2149,6 @@ example:
 .. seealso::
 
    * :ref:`addons`
-   * :ref:`custom-modules`
    * :setting:`DEFAULT_ADDONS`
    * :setting:`ADDON_ACTIVITY_LOG_EXPIRY`
 
@@ -2277,9 +2202,7 @@ List of machinery services available for use.
 
 .. seealso::
 
-   * :doc:`/admin/machine`
-   * :ref:`custom-machinery`
-   * :ref:`custom-modules`
+   :doc:`/admin/machine`
 
 .. setting:: WEBLATE_GPG_IDENTITY
 

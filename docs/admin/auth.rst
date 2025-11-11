@@ -514,6 +514,9 @@ Example configuration:
             "entity_id": "https://idp.testshib.org/idp/shibboleth",
             "url": "https://idp.testshib.org/idp/profile/SAML2/Redirect/SSO",
             "x509cert": "MIIEDjCCAvagAwIBAgIBADA ... 8Bbnl+ev0peYzxFyF5sQA==",
+            "attr_name": "full_name",
+            "attr_username": "username",
+            "attr_email": "email",
         }
     }
     SOCIAL_AUTH_SAML_ORG_INFO = {
@@ -533,7 +536,7 @@ Example configuration:
     }
 
 The default configuration extracts user details from following attributes,
-configure your IdP to provide them:
+configure your IDP to provide them:
 
 +--------------+-----------------------------------------+
 | Attribute    | SAML URI reference                      |
@@ -549,13 +552,10 @@ configure your IdP to provide them:
 | Username     | ``urn:oid:0.9.2342.19200300.100.1.1``   |
 +--------------+-----------------------------------------+
 
-When configuring Weblate SP in your IdP, it is recommended to choose persistent
-:guilabel:`Name ID format`.
-
 .. hint::
 
-   The example above and the Docker image define an IdP called ``weblate``.
-   You might need to configure this string as :guilabel:`Relay` in your IdP.
+   The example above and the Docker image define an IDP called ``weblate``.
+   You might need to configure this string as :guilabel:`Relay` in your IDP.
 
 .. note::
 

@@ -66,7 +66,7 @@ def create_another_user() -> User:
 class RepoTestMixin:
     """Mixin for testing with test repositories."""
 
-    updated_base_repos: set[str] = set()  # noqa: RUF012
+    updated_base_repos: set[str] = set()
     CREATE_GLOSSARIES: bool = False
 
     local_repo_path = "local:"
@@ -323,9 +323,9 @@ class RepoTestMixin:
             "webextension/_locales/en/messages.json",
         )
 
-    def create_ftl(self, **kwargs) -> Component:
+    def create_ftl(self) -> Component:
         return self._create_component(
-            "fluent", "ftl/locales/*/test.ftl", "ftl/locales/en/test.ftl", **kwargs
+            "fluent", "ftl/locales/*/test.ftl", "ftl/locales/en/test.ftl"
         )
 
     def create_json_intermediate(self, **kwargs) -> Component:

@@ -1,9 +1,6 @@
 # Copyright © Michal Čihař <michal@weblate.org>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
 
 from django.db import transaction
 
@@ -12,47 +9,33 @@ from weblate.trans.actions import ActionEvents
 from weblate.trans.models import Component, Unit
 from weblate.trans.models.label import TRANSLATION_LABELS
 from weblate.trans.models.pending import PendingUnitChange
-from weblate.utils.state import (
-    STATE_APPROVED,
-    STATE_FUZZY,
-    STATE_TRANSLATED,
-)
-
-if TYPE_CHECKING:
-    from django.db.models import QuerySet
-
-    from weblate.auth.models import User
-    from weblate.trans.models import Label, Project
-    from weblate.trans.models.unit import UnitQuerySet
+from weblate.utils.state import STATE_APPROVED, STATE_FUZZY, STATE_TRANSLATED
 
 EDITABLE_STATES = {STATE_FUZZY, STATE_TRANSLATED, STATE_APPROVED}
 
 
 def bulk_perform(  # noqa: C901
-    user: User | None,
-    unit_set: UnitQuerySet,
+    user,
+    unit_set,
     *,
-    query: str,
-    target_state: int | str,
-    add_flags: str | Flags,
-    remove_flags: str | Flags,
-    add_labels: QuerySet[Label],
-    remove_labels: QuerySet[Label],
-    project: Project,
-    components: QuerySet[Component] | list[Component] | None = None,
-) -> int:
+    query,
+    target_state,
+    add_flags,
+    remove_flags,
+    add_labels,
+    remove_labels,
+    project,
+    components=None,
+):
     matching = unit_set.search(query, project=project)
     if components is None:
         components = Component.objects.filter(
             id__in=matching.values_list("translation__component_id", flat=True)
         )
 
-    if isinstance(target_state, str):
-        target_state = int(target_state)
-    if isinstance(add_flags, str):
-        add_flags = Flags(add_flags)
-    if isinstance(remove_flags, str):
-        remove_flags = Flags(remove_flags)
+    target_state = int(target_state)
+    add_flags = Flags(add_flags)
+    remove_flags = Flags(remove_flags)
     add_labels_pks = {label.pk for label in add_labels}
     remove_labels_pks = {label.pk for label in remove_labels}
 
@@ -130,7 +113,8 @@ def bulk_perform(  # noqa: C901
                         new_flags = flags.format()
                         if source_unit.extra_flags != new_flags:
                             source_unit.is_batch_update = True
-                            source_unit.update_extra_flags(new_flags, user)
+                            source_unit.extra_flags = new_flags
+                            source_unit.save(update_fields=["extra_flags"])
                             changed = True
 
                     if add_labels or remove_labels:

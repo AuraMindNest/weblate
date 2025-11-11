@@ -623,13 +623,6 @@ File format
 
 Translation file format, see also :ref:`formats`.
 
-.. _component-file_format_params:
-
-File format parameters
-++++++++++++++++++++++
-
-Parameters used to configure how translation files are processed, see also :ref:`file_format_params`.
-
 .. _component-report_source_bugs:
 
 Source string bug reporting address
@@ -640,24 +633,6 @@ notification about any source string comments made in Weblate.
 
 With the :ref:`gettext` format, this address is also saved by Weblate in the
 :mailheader:`Report-Msgid-Bugs-To` header of the file.
-
-.. _component-hide_glossary_matches:
-
-Do not show glossary matches
-++++++++++++++++++++++++++++
-
-Hides the glossary panel and its matches in the translation editor for this component.
-When enabled, glossary suggestions for this component are not computed, and the Glossary
-panel (including its “Add term to glossary” action) is hidden in the editor.
-
-.. note::
-
-   Glossary self-references are always excluded from matches even when this option is disabled.
-
-.. seealso::
-
-   * :ref:`glossary`
-   * :ref:`component-is_glossary`
 
 .. _component-allow_translation_propagation:
 

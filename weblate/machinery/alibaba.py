@@ -1,20 +1,16 @@
 # Copyright © Michal Čihař <michal@weblate.org>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
-from __future__ import annotations
+
 
 import json
-from typing import TYPE_CHECKING, ClassVar
 
 from aliyunsdkalimt.request.v20181012 import TranslateGeneralRequest
 from aliyunsdkcore.client import AcsClient
 from django.utils.functional import cached_property
 
-from .base import MachineTranslation, MachineTranslationError
+from .base import DownloadTranslations, MachineTranslation, MachineTranslationError
 from .forms import AlibabaMachineryForm
-
-if TYPE_CHECKING:
-    from .base import DownloadTranslations
 
 
 class AlibabaTranslation(MachineTranslation):
@@ -23,7 +19,7 @@ class AlibabaTranslation(MachineTranslation):
     name = "Alibaba"
     max_score = 80
 
-    language_map: ClassVar[dict[str, str]] = {
+    language_map = {
         "zh_Hans": "zh",
         "zh_Hant": "zh-tw",
     }

@@ -20,6 +20,7 @@ from weblate.utils.errors import add_breadcrumb
 
 from .base import (
     BatchMachineTranslation,
+    DownloadMultipleTranslations,
     MachineryRateLimitError,
     MachineTranslationError,
 )
@@ -31,10 +32,6 @@ if TYPE_CHECKING:
     from openai import OpenAI
 
     from weblate.trans.models import Unit
-
-    from .base import (
-        DownloadMultipleTranslations,
-    )
 
 
 PROMPT = """
@@ -74,7 +71,6 @@ class BaseOpenAITranslation(BatchMachineTranslation):
     max_score = 90
     request_timeout = 60
     client: OpenAI
-    glossary_support = True
 
     def __init__(self, settings=None) -> None:
         super().__init__(settings)

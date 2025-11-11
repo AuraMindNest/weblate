@@ -10,10 +10,6 @@ if [ ! -f services-up ]; then
     cd ci
 fi
 
-if [ -n "$2" ] && [ "$2" != "valkey" ]; then
-    filename="docker-compose-$1-$2.yml"
-else
-    filename="docker-compose-$1.yml"
-fi
+filename="docker-compose-$1.yml"
 
 docker compose --file "$filename" up -d

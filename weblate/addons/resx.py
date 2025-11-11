@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from django.utils.translation import gettext_lazy
 from translate.storage.resx import RESXFile
@@ -12,8 +12,6 @@ from translate.storage.resx import RESXFile
 from weblate.addons.cleanup import BaseCleanupAddon
 
 if TYPE_CHECKING:
-    from weblate.addons.base import CompatDict
-    from weblate.formats.ttkit import RESXFormat
     from weblate.trans.models import Component, Translation, Unit
 
     IndexType = dict[int, Unit]
@@ -28,15 +26,13 @@ class ResxUpdateAddon(BaseCleanupAddon):
         "string."
     )
     icon = "refresh.svg"
-    compat: ClassVar[CompatDict] = {
-        "file_format": {"resx"},
-    }
+    compat = {"file_format": {"resx"}}
 
     @staticmethod
     def build_index(storage) -> IndexType:
         return {unit.getid(): unit for unit in storage.units}
 
-    def build_indexes(self, component: Component) -> tuple[IndexType, IndexType]:
+    def build_indexes(self, component: Component):
         index = self.build_index(component.template_store.store)
         if component.intermediate:
             intermediate = self.build_index(component.intermediate_store.store)
@@ -45,19 +41,13 @@ class ResxUpdateAddon(BaseCleanupAddon):
         return index, intermediate
 
     @staticmethod
-    def get_index(
-        index: IndexType, intermediate: IndexType, translation: Translation
-    ) -> IndexType:
+    def get_index(index: IndexType, intermediate: IndexType, translation: Translation):
         if intermediate and translation.is_source:
             return intermediate
         return index
 
     def update_resx(
-        self,
-        index: IndexType,
-        translation: Translation,
-        storage: RESXFormat,
-        changes: set[int],
+        self, index: IndexType, translation: Translation, storage, changes: set[int]
     ) -> None:
         """
         Filter obsolete units in RESX storage.
@@ -77,7 +67,7 @@ class ResxUpdateAddon(BaseCleanupAddon):
         # Remove extra units and apply target changes
         for unit in storage.store.units:
             unitid = unit.getid()
-            if unitid not in index and storage.store.body is not None:
+            if unitid not in index:
                 storage.store.body.remove(unit.xmlelement)
                 changed = True
             if unitid in changes:
@@ -88,7 +78,7 @@ class ResxUpdateAddon(BaseCleanupAddon):
             storage.save()
 
     @staticmethod
-    def find_changes(index: IndexType, storage: RESXFile) -> set[int]:
+    def find_changes(index: IndexType, storage) -> set[int]:
         """Find changed string IDs in upstream repository."""
         result = set()
 

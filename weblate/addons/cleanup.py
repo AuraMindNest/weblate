@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from django.utils.translation import gettext_lazy
 
@@ -39,7 +39,7 @@ class CleanupAddon(BaseCleanupAddon):
         "no longer present in the base file."
     )
     icon = "eraser.svg"
-    events: ClassVar[set[AddonEvent]] = {
+    events: set[AddonEvent] = {
         AddonEvent.EVENT_PRE_COMMIT,
         AddonEvent.EVENT_POST_UPDATE,
     }
@@ -60,13 +60,7 @@ class CleanupAddon(BaseCleanupAddon):
             self.extra_files.extend(filenames)
             # Do not update hash here as this is just before parsing updated files
 
-    def pre_commit(
-        self,
-        translation,
-        author: str,
-        store_hash: bool,
-        activity_log_id: int | None = None,
-    ) -> None:
+    def pre_commit(self, translation, author: str, store_hash: bool) -> None:
         if translation.is_source and not translation.component.intermediate:
             return
         try:
@@ -85,7 +79,7 @@ class RemoveBlankAddon(BaseCleanupAddon):
     description = gettext_lazy(
         "Removes strings without a translation from translation files."
     )
-    events: ClassVar[set[AddonEvent]] = {
+    events: set[AddonEvent] = {
         AddonEvent.EVENT_POST_COMMIT,
         AddonEvent.EVENT_POST_UPDATE,
     }
@@ -101,9 +95,7 @@ class RemoveBlankAddon(BaseCleanupAddon):
             if previous_head == "weblate:post-commit":
                 translation.store_hash()
 
-    def post_commit(
-        self, component: Component, store_hash: bool, activity_log_id: int | None = None
-    ) -> None:
+    def post_commit(self, component: Component, store_hash: bool) -> None:
         self.post_update(
             component,
             "weblate:post-commit" if store_hash else "weblate:post-commit-no-store",

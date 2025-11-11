@@ -283,7 +283,6 @@
               {% if not user.is_authenticated %}
                 {% if registration_open %}
                   <li class="nav-item">
-                    {# Translators: Register on the site #}
                     <a class="nav-link button" id="register-button" href="{% url 'register' %}">{% translate "Register" %}</a>
                   </li>
                 {% endif %}
@@ -296,50 +295,43 @@
 
               {# Adding new translations #}
               {% if user.is_authenticated %}
-                {% perm "project.add" user as user_can_add_project %}
-                {% if component %}
-                  {% perm 'translation.add' component as user_can_add_translation %}
-                {% endif %}
-                {% if user_can_add_project or user.managed_projects or user_can_add_translation|default:False or offer_hosting %}
-                  <li class="nav-item dropdown">
-                    <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">
-                      <span class="d-none d-sm-inline">{% icon "plus.svg" %}</span>
-                      <span class="d-inline d-sm-none">{% translate "Add" %}</span>
-                    </a>
-                    <ul class="dropdown-menu dropdown-menu-end shadow">
-                      {% if user_can_add_project or offer_hosting %}
-                        <li>
-                          <a class="dropdown-item" href="{% url 'create-project' %}">{% translate "Add new translation project" %}</a>
-                        </li>
-                      {% endif %}
-                      {% if user.managed_projects %}
-                        <li>
-                          <a class="dropdown-item"
-                             href="{% url 'create-component' %}{% if project %}?project={{ project.id }}{% endif %}">{% translate "Add new translation component" %}</a>
-                        </li>
-                      {% endif %}
-                      {% if component and user_can_add_translation %}
+                <li class="nav-item dropdown">
+                  <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown">
+                    <span class="d-none d-sm-inline">{% icon "plus.svg" %}</span>
+                    <span class="d-inline d-sm-none">{% translate "Add" %}</span>
+                  </a>
+                  <ul class="dropdown-menu dropdown-menu-end shadow">
+                    <li>
+                      <a class="dropdown-item" href="{% url 'create-project' %}">{% translate "Add new translation project" %}</a>
+                    </li>
+                    <li>
+                      <a class="dropdown-item"
+                         href="{% url 'create-component' %}{% if project %}?project={{ project.id }}{% endif %}">{% translate "Add new translation component" %}</a>
+                    </li>
+                    {% if component %}
+                      {% perm 'translation.add' component as user_can_add_translation %}
+                      {% if user_can_add_translation %}
                         <li>
                           <a class="dropdown-item"
                              href="{% url "new-language" path=component.get_url_path %}">{% translate "Start new translation" %}</a>
                         </li>
                       {% endif %}
-                      {% if offer_hosting %}
+                    {% endif %}
+                    {% if offer_hosting %}
+                      <li>
+                        <hr class="dropdown-divider">
+                      </li>
+                      {% if payment_enabled %}
                         <li>
-                          <hr class="dropdown-divider">
-                        </li>
-                        {% if payment_enabled %}
-                          <li>
-                            <a class="dropdown-item" href="{% url 'trial' %}">{% translate "Try Weblate for free" %}</a>
-                          </li>
-                        {% endif %}
-                        <li>
-                          <a class="dropdown-item" href="{% url 'hosting' %}">{% translate "Ask for Libre hosting" %}</a>
+                          <a class="dropdown-item" href="{% url 'trial' %}">{% translate "Try Weblate for free" %}</a>
                         </li>
                       {% endif %}
-                    </ul>
-                  </li>
-                {% endif %}
+                      <li>
+                        <a class="dropdown-item" href="{% url 'hosting' %}">{% translate "Ask for Libre hosting" %}</a>
+                      </li>
+                    {% endif %}
+                  </ul>
+                </li>
               {% endif %}
 
               {# Profile and logout for authenticated #}
@@ -433,7 +425,7 @@
                     <a class="dropdown-item" href="{% documentation 'index' %}">{% translate "Documentation" %}</a>
                   </li>
                   <li>
-                    <a class="dropdown-item" id="shortcuts-btn5" href="#">{% translate "Keyboard shortcuts" %}</a>
+                    <a class="dropdown-item" id="shortcuts-btn" href="#">{% translate "Keyboard shortcuts" %}</a>
                   </li>
                   <li>
                     <li class="dropdown-header">{% translate "Weblate project" %}</li>
@@ -463,7 +455,7 @@
           <ol class="breadcrumb">
             <li class="bread-icon">{% icon bread_image|default:"error.svg" %}</li>
             {% block breadcrumbs %}
-              <li class="breadcrumb-item">
+              <li>
                 <a href="{% url 'home' %}">{% translate "Dashboard" %}</a>
               </li>
             {% endblock breadcrumbs %}
@@ -515,10 +507,9 @@
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <button type="button"
-                    class="btn-close"
-                    data-bs-dismiss="modal"
-                    aria-label="{% translate "Close" %}"></button>
+            <button type="button" class="close" data-dismiss="modal">
+              <span aria-hidden="true">×</span><span class="sr-only">{% translate "Close" %}</span>
+            </button>
             <h4 class="modal-title" id="screenshotModal"></h4>
           </div>
           <div class="modal-body">
@@ -528,12 +519,12 @@
             <a class="btn btn-warning"
                id="modalDetailsLink"
                data-edit-text="{% translate 'Edit screenshot' %}">{% translate "Screenshot details" %}</a>
-            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">{% translate "Close" %}</button>
+            <button type="button" class="btn btn-primary" data-dismiss="modal">{% translate "Close" %}</button>
           </div>
         </div>
       </div>
     </div>
-    {% include 'keyboard-shortcuts5.html' %}
+    {% include 'keyboard-shortcuts.html' %}
     {% include 'footer.html' %}
   </body>
 </html>

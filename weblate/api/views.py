@@ -16,7 +16,7 @@ from django.contrib.messages import get_messages
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Model, Q
 from django.forms.utils import from_current_timezone
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
@@ -69,6 +69,7 @@ from weblate.api.serializers import (
     MemorySerializer,
     MetricsSerializer,
     MonolingualUnitSerializer,
+    NewUnitSerializer,
     NotificationSerializer,
     ProjectLockSerializer,
     ProjectMachinerySettingsSerializer,
@@ -88,7 +89,7 @@ from weblate.api.serializers import (
     edit_service_settings_response_serializer,
     get_reverse_kwargs,
 )
-from weblate.auth.models import Group, Role, User
+from weblate.auth.models import AuthenticatedHttpRequest, Group, Role, User
 from weblate.auth.results import PermissionResult
 from weblate.formats.models import EXPORTERS
 from weblate.lang.models import Language
@@ -104,7 +105,6 @@ from weblate.trans.models import (
     Change,
     Component,
     ComponentList,
-    Label,
     Project,
     Unit,
 )
@@ -133,27 +133,16 @@ from weblate.utils.views import download_translation_file, zip_download
 from .renderers import FlatJsonRenderer, OpenMetricsRenderer
 
 if TYPE_CHECKING:
-    from django.db.models import Model
-    from django.http import HttpResponse
     from rest_framework.request import Request
 
-    from weblate.api.serializers import (
-        NewUnitSerializer,
-    )
-    from weblate.auth.models import AuthenticatedHttpRequest
-
-REPO_OPERATIONS: dict[str, tuple[str, str, tuple, dict, bool]] = {
-    "push": ("vcs.push", "do_push", (), {}, True),
-    "pull": ("vcs.update", "do_update", (), {}, True),
-    "pull-rebase": ("vcs.update", "do_update", (), {"method": "rebase"}, True),
-    "pull-merge": ("vcs.update", "do_update", (), {"method": "merge"}, True),
-    "pull-merge-noff": ("vcs.update", "do_update", (), {"method": "merge_noff"}, True),
-    "reset": ("vcs.reset", "do_reset", (), {}, True),
-    "reset-keep": ("vcs.reset", "do_reset", (), {"keep_changes": True}, True),
-    "cleanup": ("vcs.reset", "do_cleanup", (), {}, True),
-    "commit": ("vcs.commit", "commit_pending", ("api",), {}, False),
-    "file-sync": ("vcs.reset", "do_file_sync", (), {}, True),
-    "file-scan": ("vcs.reset", "do_file_scan", (), {}, True),
+REPO_OPERATIONS = {
+    "push": ("vcs.push", "do_push", (), True),
+    "pull": ("vcs.update", "do_update", (), True),
+    "reset": ("vcs.reset", "do_reset", (), True),
+    "cleanup": ("vcs.reset", "do_cleanup", (), True),
+    "commit": ("vcs.commit", "commit_pending", ("api",), False),
+    "file-sync": ("vcs.reset", "do_file_sync", (), True),
+    "file-scan": ("vcs.reset", "do_file_scan", (), True),
 }
 
 DOC_TEXT = """
@@ -246,27 +235,24 @@ class DownloadViewSet(viewsets.ReadOnlyModelViewSet):
             raise Http404(msg)
         return super().perform_content_negotiation(request, force)
 
-    def download_file(
-        self, filename: str, content_type: str, component: Component | None = None
-    ) -> HttpResponse:
+    def download_file(self, filename, content_type, component=None):
         """Download file."""
         if os.path.isdir(filename):
-            return zip_download(
-                filename,
-                [filename],
-                name=component.slug if component else "weblate",
-            )
-        try:
-            open_file = open(filename, "rb")  # noqa: SIM115
-        except FileNotFoundError as error:
-            msg = "File not found"
-            raise Http404(msg) from error
-        return FileResponse(
-            open_file,
-            content_type=content_type,
-            as_attachment=True,
-            filename=os.path.basename(filename),
-        )
+            response = zip_download(filename, [filename])
+            basename = component.slug if component else "weblate"
+            filename = f"{basename}.zip"
+        else:
+            try:
+                response = FileResponse(
+                    open(filename, "rb"),  # noqa: SIM115
+                    content_type=content_type,
+                )
+            except FileNotFoundError as error:
+                msg = "File not found"
+                raise Http404(msg) from error
+            filename = os.path.basename(filename)
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
 
 
 class WeblateViewSet(DownloadViewSet):
@@ -275,7 +261,7 @@ class WeblateViewSet(DownloadViewSet):
     def repository_operation(
         self, request: Request, obj, project: Project, operation: str
     ):
-        permission, method, args, kwargs, takes_request = REPO_OPERATIONS[operation]
+        permission, method, args, takes_request = REPO_OPERATIONS[operation]
 
         if not request.user.has_perm(permission, project):
             raise PermissionDenied
@@ -283,8 +269,8 @@ class WeblateViewSet(DownloadViewSet):
         obj.acting_user = request.user
 
         if takes_request:
-            return getattr(obj, method)(*args, request, **kwargs)
-        return getattr(obj, method)(*args, request.user, **kwargs)
+            return getattr(obj, method)(*args, request)
+        return getattr(obj, method)(*args, request.user)
 
     @extend_schema(
         description="Return information about VCS repository status.", methods=["get"]
@@ -419,7 +405,7 @@ class UserFilter(filters.FilterSet):
 
     class Meta:
         model = User
-        fields = ("username", "id")
+        fields = ["username", "id"]
 
 
 @extend_schema_view(
@@ -435,9 +421,7 @@ class UserViewSet(viewsets.ModelViewSet):
     filterset_class = UserFilter
 
     def get_serializer_class(self):
-        if self.request.user.has_perm("user.view") or self.request.user.has_perm(
-            "user.edit"
-        ):
+        if self.request.user.has_perm("user.edit"):
             return FullUserSerializer
         return BasicUserSerializer
 
@@ -446,7 +430,7 @@ class UserViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return User.objects.none()
         queryset = User.objects.order_by("id")
-        if not user.has_perm("user.edit") and not user.has_perm("user.view"):
+        if not user.has_perm("user.edit"):
             return queryset
         return queryset.prefetch_related("groups", "profile", "profile__languages")
 
@@ -463,12 +447,8 @@ class UserViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if not user.is_authenticated:
             queryset = User.objects.none()
-        elif (
-            not (user.has_perm("user.edit") or user.has_perm("user.view"))
-            and self.lookup_field not in request.GET
-        ):
-            # Order to avoid warning from the paginator
-            queryset = User.objects.filter(pk=user.pk).order_by("id")
+        elif not user.has_perm("user.edit") and self.lookup_field not in request.GET:
+            queryset = User.objects.filter(pk=user.pk)
         else:
             queryset = self.get_queryset()
 
@@ -677,11 +657,12 @@ class GroupViewSet(viewsets.ModelViewSet):
     lookup_field = "id"
 
     def get_queryset(self):
-        user = self.request.user
-        if user.has_perm("group.edit") or user.has_perm("group.view"):
+        if self.request.user.has_perm("group.edit"):
             queryset = Group.objects.all()
         else:
-            queryset = Group.objects.filter(Q(user=user) | Q(admins=user)).distinct()
+            queryset = Group.objects.filter(
+                Q(user=self.request.user) | Q(admins=self.request.user)
+            ).distinct()
         return queryset.order_by("id")
 
     def perm_check(
@@ -920,8 +901,7 @@ class GroupViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="admins")
     def grant_admin(self, request: Request, id):  # noqa: A002
         group = self.get_object()
-        if not request.user.has_perm("meta:team.users", group):
-            self.perm_check(request, group)
+        self.perm_check(request, group)
         user_id = request.data.get("user_id")
         if not user_id:
             msg = "User ID is required"
@@ -940,8 +920,7 @@ class GroupViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["delete"], url_path="admins/(?P<user_pk>[0-9]+)")
     def revoke_admin(self, request: Request, id, user_pk):  # noqa: A002
         group = self.get_object()
-        if not request.user.has_perm("meta:team.users", group):
-            self.perm_check(request, group)
+        self.perm_check(request, group)
         try:
             user = group.admins.get(pk=user_pk)  # Using user_pk from the URL path
         except User.DoesNotExist as error:
@@ -968,11 +947,12 @@ class RoleViewSet(viewsets.ModelViewSet):
     lookup_field = "id"
 
     def get_queryset(self):
-        user = self.request.user
-        if user.has_perm("role.edit") or user.has_perm("role.view"):
+        if self.request.user.has_perm("role.edit"):
             return Role.objects.order_by("id").all()
         return (
-            Role.objects.filter(group__in=user.groups.all()).order_by("id").distinct()
+            Role.objects.filter(group__in=self.request.user.groups.all())
+            .order_by("id")
+            .distinct()
         )
 
     def perm_check(self, request: Request) -> None:
@@ -1189,34 +1169,12 @@ class ProjectViewSet(
                     status=HTTP_201_CREATED,
                 )
 
-        # GET request - return all labels for the project
         queryset = obj.label_set.all().order_by("id")
         page = self.paginate_queryset(queryset)
+
         serializer = LabelSerializer(page, many=True, context={"request": request})
+
         return self.get_paginated_response(serializer.data)
-
-    @extend_schema(
-        description="Delete a label from a project.",
-        methods=["delete"],
-        parameters=[OpenApiParameter("label_id", int, OpenApiParameter.PATH)],
-    )
-    @action(detail=True, methods=["delete"], url_path="labels/(?P<label_id>[0-9]+)")
-    @transaction.atomic
-    def delete_labels(self, request: Request, slug, label_id):
-        obj = self.get_object()
-
-        if not request.user.has_perm("project.edit", obj):
-            self.permission_denied(request, "Can not delete labels")
-
-        try:
-            label = obj.label_set.get(id=label_id)
-        except Label.DoesNotExist as error:
-            msg = f"Label with ID {label_id} was not found in project {obj}"
-            raise Http404(msg) from error
-
-        label.delete()
-
-        return Response(status=HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["post"])
     def addons(self, request: Request, **kwargs):
@@ -2377,7 +2335,7 @@ class ChangeFilter(filters.FilterSet):
 
     class Meta:
         model = Change
-        fields = ("action", "user", "timestamp")
+        fields = ["action", "user", "timestamp"]
 
 
 class ChangesFilterBackend(filters.DjangoFilterBackend):

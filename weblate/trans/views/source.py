@@ -36,7 +36,7 @@ def edit_context(request: AuthenticatedHttpRequest, pk):
 
     do_add = "addflag" in request.POST
     if do_add or "removeflag" in request.POST:
-        if not request.user.has_perm("meta:unit.flag", unit.translation):
+        if not request.user.has_perm("unit.flag", unit.translation):
             raise PermissionDenied
         flag = request.POST.get("addflag", request.POST.get("removeflag"))
         flags = unit.get_unit_flags()
@@ -53,7 +53,8 @@ def edit_context(request: AuthenticatedHttpRequest, pk):
             flags.remove(flag)
         new_flags = flags.format()
         if new_flags != unit.extra_flags:
-            unit.update_extra_flags(new_flags, request.user)
+            unit.extra_flags = new_flags
+            unit.save(same_content=True, update_fields=["extra_flags"])
     else:
         if not request.user.has_perm("source.edit", unit.translation):
             raise PermissionDenied

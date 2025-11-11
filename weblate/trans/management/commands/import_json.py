@@ -1,11 +1,9 @@
 # Copyright © Michal Čihař <michal@weblate.org>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
-from __future__ import annotations
 
+import argparse
 import json
-from pathlib import Path
-from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.core.management.base import CommandError
@@ -14,16 +12,13 @@ from django.utils.text import slugify
 from weblate.trans.models import Component, Project
 from weblate.utils.management.base import BaseCommand
 
-if TYPE_CHECKING:
-    from django.core.management.base import CommandParser
-
 
 class Command(BaseCommand):
     """Command for mass importing of repositories into Weblate based on JSON data."""
 
     help = "imports projects based on JSON data"
 
-    def add_arguments(self, parser: CommandParser) -> None:
+    def add_arguments(self, parser) -> None:
         super().add_arguments(parser)
         parser.add_argument(
             "--project", default=None, required=True, help="Project where to operate"
@@ -47,7 +42,7 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "json-file",
-            type=Path,
+            type=argparse.FileType("r"),
             help="JSON file containing component definition",
         )
 
@@ -70,16 +65,14 @@ class Command(BaseCommand):
             except Component.DoesNotExist as error:
                 msg = "Main component does not exist!"
                 raise CommandError(msg) from error
+
         try:
-            with options["json-file"].open("r") as handle:
-                try:
-                    data = json.load(handle)
-                except json.JSONDecodeError as error:
-                    msg = "Could not parse JSON file!"
-                    raise CommandError(msg) from error
-        except OSError as error:
-            msg = f"Could not open file: {error}"
+            data = json.load(options["json-file"])
+        except json.JSONDecodeError as error:
+            msg = "Could not parse JSON file!"
             raise CommandError(msg) from error
+        finally:
+            options["json-file"].close()
 
         allfields = {
             field.name

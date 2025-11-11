@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from dateutil.parser import isoparse
 from django.core.cache import cache
@@ -12,6 +12,7 @@ from requests.exceptions import HTTPError, RequestException
 
 from .base import (
     BatchMachineTranslation,
+    DownloadMultipleTranslations,
     GlossaryDoesNotExistError,
     GlossaryMachineTranslationMixin,
     XMLMachineTranslationMixin,
@@ -25,10 +26,6 @@ if TYPE_CHECKING:
     from weblate.lang.models import Language
     from weblate.trans.models import Unit
 
-    from .base import (
-        DownloadMultipleTranslations,
-    )
-
 
 class DeepLTranslation(
     XMLMachineTranslationMixin, GlossaryMachineTranslationMixin, BatchMachineTranslation
@@ -39,7 +36,7 @@ class DeepLTranslation(
     # This seems to be currently best MT service, so score it a bit
     # better than other ones.
     max_score = 91
-    language_map: ClassVar[dict[str, str]] = {
+    language_map = {
         "zh_Hans": "zh",
         "zh_Hant": "",  # Traditional Chinese not supported but would map to zh
         "pt": "pt-pt",

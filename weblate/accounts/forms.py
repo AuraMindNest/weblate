@@ -9,9 +9,9 @@ import json
 from binascii import unhexlify
 from datetime import datetime, timedelta
 from time import time
-from typing import TYPE_CHECKING, ClassVar, cast
+from typing import TYPE_CHECKING, cast
 
-from altcha import ChallengeOptions, create_challenge, verify_solution
+from altcha import Challenge, ChallengeOptions, create_challenge, verify_solution
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Div, Field, Fieldset, Layout, Submit
 from django import forms
@@ -39,7 +39,7 @@ from weblate.accounts.utils import (
     get_all_user_mails,
     invalidate_reset_codes,
 )
-from weblate.auth.models import Group, User
+from weblate.auth.models import AuthenticatedHttpRequest, Group, User
 from weblate.lang.models import Language
 from weblate.logger import LOGGER
 from weblate.trans.defines import FULLNAME_LENGTH
@@ -57,11 +57,7 @@ from weblate.utils.ratelimit import check_rate_limit, get_rate_setting, reset_ra
 from weblate.utils.validators import validate_fullname
 
 if TYPE_CHECKING:
-    from altcha import Challenge
     from django_otp.models import Device
-    from django_stubs_ext import StrOrPromise
-
-    from weblate.auth.models import AuthenticatedHttpRequest
 
 
 class UniqueEmailMixin(forms.Form):
@@ -127,7 +123,7 @@ class UniqueUsernameField(UsernameField):
 
 
 class FullNameField(forms.CharField):
-    default_validators = [validate_fullname]  # noqa: RUF012
+    default_validators = [validate_fullname]
 
     def __init__(self, *args, **kwargs) -> None:
         kwargs["max_length"] = FULLNAME_LENGTH
@@ -164,7 +160,7 @@ class LanguagesForm(ProfileBaseForm):
     class Meta:
         model = Profile
         fields = ("language", "languages", "secondary_languages")
-        widgets = {  # noqa: RUF012
+        widgets = {
             "language": SortedSelect,
             "languages": SortedSelectMultiple,
             "secondary_languages": SortedSelectMultiple,
@@ -276,9 +272,7 @@ class SubscriptionForm(ProfileBaseForm):
             "auto_watch",
             "watched",
         )
-        widgets = {  # noqa: RUF012
-            "watched": forms.SelectMultiple,
-        }
+        widgets = {"watched": forms.SelectMultiple}
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -330,7 +324,7 @@ class DashboardSettingsForm(ProfileBaseForm):
     class Meta:
         model = Profile
         fields = ("dashboard_view", "dashboard_component_list")
-        widgets = {  # noqa: RUF012
+        widgets = {
             "dashboard_view": forms.RadioSelect,
             "dashboard_component_list": forms.HiddenInput,
         }
@@ -394,7 +388,7 @@ class UserForm(forms.ModelForm):
     class Meta:
         model = User
         fields = ("username", "full_name", "email")
-        field_classes = {  # noqa: RUF012
+        field_classes = {
             "username": UniqueUsernameField,
             "full_name": FullNameField,
         }
@@ -617,14 +611,7 @@ class ContactForm(CaptchaForm):
         widget=forms.Textarea,
     )
 
-    field_order = [  # noqa: RUF012
-        "subject",
-        "name",
-        "email",
-        "message",
-        "captcha",
-        "altcha",
-    ]
+    field_order = ["subject", "name", "email", "message", "captcha"]
 
 
 class EmailForm(CaptchaForm, UniqueEmailMixin):
@@ -638,11 +625,7 @@ class EmailForm(CaptchaForm, UniqueEmailMixin):
         help_text=gettext_lazy("An e-mail with a confirmation link will be sent here."),
     )
 
-    field_order = [  # noqa: RUF012
-        "email",
-        "captcha",
-        "altcha",
-    ]
+    field_order = ["email", "captcha"]
 
 
 class RegistrationForm(EmailForm):
@@ -655,6 +638,8 @@ class RegistrationForm(EmailForm):
     # This has to be without underscore for social-auth
     fullname = FullNameField()
 
+    field_order = ["email", "username", "fullname", "captcha"]
+
     def __init__(
         self, request=None, data=None, initial=None, hide_captcha: bool = False
     ) -> None:
@@ -663,16 +648,6 @@ class RegistrationForm(EmailForm):
         self.request = request
         super().__init__(
             request=request, data=data, initial=initial, hide_captcha=hide_captcha
-        )
-        self.helper = FormHelper(self)
-        self.helper.form_tag = False
-        self.helper.layout = Layout(
-            "email",
-            "username",
-            "fullname",
-            "captcha",
-            "altcha",
-            ContextDiv(template="accounts/register-password.html"),
         )
 
     def clean(self):
@@ -775,7 +750,7 @@ class LoginForm(forms.Form):
     username = forms.CharField(max_length=254, label=gettext_lazy("Username or e-mail"))
     password = PasswordField(label=gettext_lazy("Password"))
 
-    error_messages = {  # noqa: RUF012
+    error_messages = {
         "invalid_login": gettext_lazy(
             "Please enter the correct username and password."
         ),
@@ -1046,7 +1021,7 @@ class UserSearchForm(forms.Form):
     q = QueryField(parser="user")
     sort_by = forms.CharField(required=False, widget=forms.HiddenInput)
 
-    sort_choices: ClassVar[dict[str, StrOrPromise]] = {
+    sort_choices = {
         "username": gettext_lazy("Username"),
         "full_name": gettext_lazy("Full name"),
         "date_joined": gettext_lazy("Date joined"),
@@ -1151,7 +1126,7 @@ class TOTPDeviceForm(forms.Form):
         ),
     )
 
-    error_messages = {  # noqa: RUF012
+    error_messages = {
         "invalid_token": gettext_lazy("The entered token is not valid."),
     }
 

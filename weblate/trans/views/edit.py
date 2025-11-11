@@ -334,8 +334,7 @@ def perform_translation(unit, form, request: AuthenticatedHttpRequest) -> bool:
     """Handle translation and stores it to a backend."""
     user = request.user
     profile = user.profile
-    component = unit.translation.component
-    project = component.project
+    project = unit.translation.component.project
     # Remember old checks
     oldchecks = unit.all_checks_names
     # Alternative translations handling
@@ -343,7 +342,8 @@ def perform_translation(unit, form, request: AuthenticatedHttpRequest) -> bool:
 
     # Update explanation for glossary
     change_explanation = (
-        component.is_glossary and unit.explanation != form.cleaned_data["explanation"]
+        unit.translation.component.is_glossary
+        and unit.explanation != form.cleaned_data["explanation"]
     )
     # Save
     saved = unit.translate(
@@ -396,13 +396,7 @@ def perform_translation(unit, form, request: AuthenticatedHttpRequest) -> bool:
     if (
         saved
         and form.cleaned_data["state"] >= STATE_TRANSLATED
-        and (
-            # Any new checks?
-            newchecks > oldchecks
-            or
-            # Any enforced check?
-            (component.enforced_checks and newchecks & set(component.enforced_checks))
-        )
+        and newchecks > oldchecks
     ):
         # Show message to user
         messages.error(
@@ -437,7 +431,7 @@ def handle_translate(
     if "suggest" in request.POST:
         go_next = perform_suggestion(unit, form, request)
     elif not request.user.has_perm("unit.edit", unit):
-        if request.user.has_perm("meta:unit.flag", unit):
+        if request.user.has_perm("unit.flag", unit):
             unit.update_explanation(form.cleaned_data["explanation"], request.user)
         else:
             messages.error(
@@ -1005,7 +999,7 @@ def save_zen(request: AuthenticatedHttpRequest, path):
     if not form.is_valid():
         show_form_errors(request, form)
     elif not request.user.has_perm("unit.edit", unit):
-        if request.user.has_perm("meta:unit.flag", unit):
+        if request.user.has_perm("unit.flag", unit):
             unit.update_explanation(form.cleaned_data["explanation"], request.user)
         else:
             messages.error(

@@ -4,29 +4,24 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
-from typing import TYPE_CHECKING, ClassVar
+from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
 from django.utils import timezone
 
 from weblate.glossary.models import get_glossary_terms
 
 from .base import (
+    DownloadTranslations,
     MachineTranslation,
     MachineTranslationError,
+    SettingsDict,
     XMLMachineTranslationMixin,
 )
 from .forms import MicrosoftMachineryForm
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from weblate.trans.models import Unit
-
-    from .base import (
-        DownloadTranslations,
-        SettingsDict,
-    )
 
 TOKEN_URL = "https://{0}{1}/sts/v1.0/issueToken?Subscription-Key={2}"  # noqa: S105
 TOKEN_EXPIRY = timedelta(minutes=9)
@@ -38,9 +33,8 @@ class MicrosoftCognitiveTranslation(XMLMachineTranslationMixin, MachineTranslati
     name = "Azure AI Translator"
     max_score = 90
     settings_form = MicrosoftMachineryForm
-    glossary_support = True
 
-    language_map: ClassVar[dict[str, str]] = {
+    language_map = {
         "zh_TW": "zh-Hant",
         "zh_CN": "zh-Hans",
         "yue_Hant": "yue",

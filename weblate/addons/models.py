@@ -5,13 +5,13 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Literal, Protocol, overload
+from typing import TYPE_CHECKING, Literal, overload
 
 import sentry_sdk
 from appconf import AppConf
 from django.db import Error as DjangoDatabaseError
 from django.db import models, transaction
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.urls import reverse
@@ -19,12 +19,11 @@ from django.utils.functional import cached_property
 
 from weblate.logger import LOGGER
 from weblate.trans.actions import ActionEvents
-from weblate.trans.models import Alert, Change, Component, Project, Unit
+from weblate.trans.models import Alert, Change, Component, Project, Translation, Unit
 from weblate.trans.signals import (
     change_bulk_create,
     component_post_update,
     translation_post_add,
-    unit_post_sync,
     unit_pre_create,
     vcs_post_commit,
     vcs_post_push,
@@ -43,11 +42,9 @@ from .events import AddonEvent
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
-    from django.db.models import QuerySet
     from django_stubs_ext import StrOrPromise
 
     from weblate.auth.models import User
-    from weblate.trans.models import Translation
 
 # Initialize addons registry
 ADDONS = ClassLoader("WEBLATE_ADDONS", construct=False, base_class=BaseAddon)
@@ -235,9 +232,7 @@ class Event(models.Model):
     event = models.IntegerField(choices=AddonEvent.choices)
 
     class Meta:
-        unique_together = [  # noqa: RUF012
-            ("addon", "event"),
-        ]
+        unique_together = [("addon", "event")]
         verbose_name = "add-on event"
         verbose_name_plural = "add-on events"
 
@@ -261,7 +256,6 @@ class AddonsConf(AppConf):
         "weblate.addons.flags.TargetEditAddon",
         "weblate.addons.flags.SameEditAddon",
         "weblate.addons.flags.BulkEditAddon",
-        "weblate.addons.flags.TargetRepoUpdateAddon",
         "weblate.addons.generate.GenerateFileAddon",
         "weblate.addons.generate.PseudolocaleAddon",
         "weblate.addons.generate.PrefillAddon",
@@ -302,22 +296,14 @@ REPO_EVENTS = {
 }
 
 
-class AddonCallbackMethod(Protocol):
-    def __call__(
-        self, addon: Addon, component: Component, *, activity_log_id: int
-    ) -> dict | None: ...
-
-
 def execute_addon_event(
     addon: Addon,
     component: Component | None,
     scope: Translation | Component | Project | None,
     event: AddonEvent,
-    method: str | AddonCallbackMethod,
+    method: str | Callable[[Addon, Component], None],
     args: tuple | None = None,
 ) -> None:
-    from weblate.addons.tasks import update_addon_activity_log
-
     # Trigger repository scoped add-ons only on the main component
     if (
         addon.repo_scope
@@ -343,15 +329,6 @@ def execute_addon_event(
     # Log logging result and error flag for add-on activity log
     log_result = None
     error_occurred = False
-    if args is None:
-        args = ()
-
-    activity_log = AddonActivityLog.objects.create(
-        addon=addon,
-        component=component,
-        event=event,
-        pending=True,
-    )
 
     with transaction.atomic():
         addon_logger("debug", "running %s add-on: %s", event.label, addon.name)
@@ -374,17 +351,13 @@ def execute_addon_event(
             # Execute event in senty span to track performance
             with sentry_sdk.start_span(op=f"addon.{event.name}", name=addon.name):
                 if isinstance(method, str):
-                    log_result = getattr(addon.addon, method)(
-                        *args, activity_log_id=activity_log.pk
-                    )
+                    log_result = getattr(addon.addon, method)(*args)
                 elif component is None:
                     log_result = "Missing component parameter!"
                     error_occurred = True
                 else:
                     # Callback is used in tasks
-                    log_result = method(
-                        addon, component, activity_log_id=activity_log.pk
-                    )
+                    log_result = method(addon, component)
         except DjangoDatabaseError:
             raise
         except Exception as error:
@@ -407,11 +380,11 @@ def execute_addon_event(
         finally:
             # Check if add-on is still installed and log activity
             if event not in NO_LOG_EVENTS and addon.pk is not None:
-                update_addon_activity_log(
-                    activity_log.pk,
-                    log_result,
-                    pending=False,
-                    error_occurred=error_occurred,
+                AddonActivityLog.objects.create(
+                    addon=addon,
+                    component=component,
+                    event=event,
+                    details={"result": log_result, "error": error_occurred},
                 )
 
 
@@ -624,16 +597,6 @@ def bulk_change_create_handler(sender, instances: list[Change], **kwargs) -> Non
         addon_change.delay_on_commit(filtered)
 
 
-@receiver(unit_post_sync)
-def unit_post_sync_handler(sender, unit: Unit, updated_attr: str, **kwargs) -> None:
-    handle_addon_event(
-        AddonEvent.EVENT_UNIT_POST_SYNC,
-        "unit_post_sync",
-        (unit, updated_attr),
-        translation=unit.translation,
-    )
-
-
 class AddonActivityLog(models.Model):
     addon = models.ForeignKey(Addon, on_delete=models.deletion.CASCADE)
     component = models.ForeignKey(
@@ -642,26 +605,14 @@ class AddonActivityLog(models.Model):
     event = models.IntegerField(choices=AddonEvent.choices)
     created = models.DateTimeField(auto_now_add=True)
     details = models.JSONField(default=dict)
-    pending = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = "add-on activity log"
         verbose_name_plural = "add-on activity logs"
-        ordering = [  # noqa: RUF012
-            "-created"
-        ]
+        ordering = ["-created"]
 
     def __str__(self) -> str:
         return f"{self.addon}: {self.get_event_display()} at {self.created}"
 
     def get_details_display(self) -> str:
         return self.addon.addon.render_activity_log(self)
-
-    def update_result(self, result: str) -> None:
-        """Update the result field in the details JSON."""
-        details = self.details or {}
-        if current_result := details.get("result"):
-            result = f"{current_result}\n{result}"
-
-        details["result"] = result
-        self.details = details

@@ -6,12 +6,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from django.test import SimpleTestCase
 
 from weblate.checks.format import (
     AutomatticComponentsCheck,
+    BaseFormatCheck,
     CFormatCheck,
     CSharpFormatCheck,
     ESTemplateLiteralsCheck,
@@ -38,11 +37,6 @@ from weblate.lang.models import Language
 from weblate.trans.models import Component, Project, Translation, Unit
 from weblate.trans.tests.test_views import FixtureTestCase
 from weblate.trans.util import join_plural
-
-if TYPE_CHECKING:
-    from weblate.checks.format import (
-        BaseFormatCheck,
-    )
 
 
 class PythonFormatCheckTest(CheckTestCase):
@@ -986,26 +980,17 @@ class JavaMessageFormatCheckTest(CheckTestCase):
     def test_quotes(self) -> None:
         self.assertFalse(
             self.check.check_format(
-                "{0} string {1}",
-                "'{1}' strin''g '{0}'",  # codespell:ignore
-                False,
-                self.unit,
+                "{0} string {1}", "'{1}' strin''g '{0}'", False, self.unit
             )
         )
         self.assertTrue(
             self.check.check_format(
-                "{0} string {1}",
-                "'{1}' strin''g '{0}",  # codespell:ignore
-                False,
-                self.unit,
+                "{0} string {1}", "'{1}' strin''g '{0}", False, self.unit
             )
         )
         self.assertTrue(
             self.check.check_format(
-                "{0} string {1}",
-                "'{1}' strin'g '{0}'",  # codespell:ignore
-                False,
-                self.unit,
+                "{0} string {1}", "'{1}' strin'g '{0}'", False, self.unit
             )
         )
 

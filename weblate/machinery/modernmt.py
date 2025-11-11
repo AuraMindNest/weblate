@@ -1,13 +1,11 @@
 # Copyright © Michal Čihař <michal@weblate.org>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
-from __future__ import annotations
 
 import csv
 import json
 import os
 import tempfile
-from typing import TYPE_CHECKING, ClassVar
 
 from dateutil.parser import isoparse
 from requests.exceptions import HTTPError
@@ -15,16 +13,12 @@ from requests.exceptions import HTTPError
 import weblate.utils.version
 
 from .base import (
+    DownloadTranslations,
     GlossaryDoesNotExistError,
     GlossaryMachineTranslationMixin,
     MachineTranslationError,
 )
 from .forms import ModernMTMachineryForm
-
-if TYPE_CHECKING:
-    from .base import (
-        DownloadTranslations,
-    )
 
 
 class ModernMTTranslation(GlossaryMachineTranslationMixin):
@@ -34,7 +28,7 @@ class ModernMTTranslation(GlossaryMachineTranslationMixin):
     max_score = 90
     settings_form = ModernMTMachineryForm
 
-    language_map: ClassVar[dict[str, str]] = {
+    language_map = {
         "fa": "pes",
         "pt": "pt-PT",
         "sr": "sr-Cyrl",

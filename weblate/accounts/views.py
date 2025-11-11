@@ -10,7 +10,7 @@ from base64 import b32encode
 from binascii import unhexlify
 from collections import defaultdict
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 import qrcode
@@ -75,7 +75,6 @@ from social_core.exceptions import (
     AuthMissingParameter,
     AuthStateForbidden,
     AuthStateMissing,
-    AuthTokenError,
     AuthUnreachableProvider,
     InvalidEmail,
     MissingBackend,
@@ -98,6 +97,7 @@ from weblate.accounts.forms import (
     NotificationForm,
     OTPTokenForm,
     PasswordConfirmForm,
+    ProfileBaseForm,
     ProfileForm,
     RegistrationForm,
     ResetForm,
@@ -147,14 +147,10 @@ from weblate.utils.ratelimit import check_rate_limit, session_ratelimit_post
 from weblate.utils.request import get_ip_address, get_user_agent
 from weblate.utils.stats import prefetch_stats
 from weblate.utils.token import get_token
-from weblate.utils.version import USER_AGENT
 from weblate.utils.views import get_paginator, parse_path
 from weblate.utils.zammad import ZammadError, submit_zammad_ticket
 
 if TYPE_CHECKING:
-    from django.forms import Form
-
-    from weblate.accounts.forms import ProfileBaseForm
     from weblate.accounts.types import DeviceType
     from weblate.auth.models import AuthenticatedHttpRequest
 
@@ -185,9 +181,6 @@ CONTACT_SUBJECTS = {
 ANCHOR_RE = re.compile(r"^#[a-z]+$")
 
 NOTIFICATION_PREFIX_TEMPLATE = "notifications__{}"
-
-# Override python-social-auth User-Agent header
-settings.SOCIAL_AUTH_USER_AGENT = USER_AGENT
 
 
 class EmailSentView(TemplateView):
@@ -635,7 +628,7 @@ def trial(request: AuthenticatedHttpRequest):
         return redirect(reverse("contact") + "?t=trial")
 
     if request.method == "POST":
-        from weblate.billing.models import Billing, BillingEvent, Plan
+        from weblate.billing.models import Billing, Plan
 
         AuditLog.objects.create(request.user, request, "trial")
         billing = Billing.objects.create(
@@ -643,7 +636,6 @@ def trial(request: AuthenticatedHttpRequest):
             state=Billing.STATE_TRIAL,
             expiry=timezone.now() + timedelta(days=14),
         )
-        billing.billinglog_set.create(event=BillingEvent.CREATED, user=request.user)
         billing.owners.add(request.user)
         messages.info(
             request,
@@ -752,7 +744,6 @@ class UserPage(UpdateView):
             .prefetch_related("defining_project")
             .order()
         )
-        context["bootstrap_5"] = True
         return context
 
 
@@ -912,7 +903,7 @@ class WeblateLogoutView(TemplateView):
     - login_required decorator
     """
 
-    http_method_names = ["post", "options"]  # noqa: RUF012
+    http_method_names = ["post", "options"]
     template_name = "registration/logged_out.html"
     request: AuthenticatedHttpRequest
 
@@ -1492,12 +1483,6 @@ def social_complete(request: AuthenticatedHttpRequest, backend: str):
             request,
             gettext("The supplied username is already in use for another account."),
         )
-    except AuthTokenError as error:
-        report_error("Could not authenticate")
-        return registration_fail(
-            request,
-            gettext("Authentication failed: %s") % error,
-        )
     except AuthAlreadyAssociated:
         return registration_fail(
             request,
@@ -1840,7 +1825,7 @@ class SecondFactorMixin(View):
 class SecondFactorLoginView(SecondFactorMixin, RedirectURLMixin, FormView):
     template_name = "accounts/2fa.html"
     next_page = settings.LOGIN_REDIRECT_URL
-    forms: ClassVar[dict[str, Form]] = {
+    forms = {
         "totp": TOTPTokenForm,
         "webauthn": WebAuthnTokenForm,
         "recovery": OTPTokenForm,

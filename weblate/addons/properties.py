@@ -13,16 +13,12 @@ src/main/java/org/freeplane/ant/FormatTranslation.java
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, ClassVar
 
 from django.utils.translation import gettext_lazy
 
 from weblate.addons.base import BaseAddon
 from weblate.addons.events import AddonEvent
 from weblate.addons.forms import PropertiesSortAddonForm
-
-if TYPE_CHECKING:
-    from weblate.addons.base import CompatDict
 
 SPLITTER = re.compile(r"\s*=\s*")
 UNICODE = re.compile(r"\\[uU][0-9a-fA-F]{4}")
@@ -73,7 +69,7 @@ def value_quality(value) -> int:
     return 3
 
 
-def filter_lines(lines: list[str]) -> list[str]:
+def filter_lines(lines):
     """Filter comments, empty lines and duplicate strings."""
     result: list[str] = []
     lastkey = None
@@ -139,25 +135,17 @@ def format_file(filename: str, case_sensitive: bool) -> bool:
 
 
 class PropertiesSortAddon(BaseAddon):
-    events: ClassVar[set[AddonEvent]] = {
+    events: set[AddonEvent] = {
         AddonEvent.EVENT_PRE_COMMIT,
     }
     name = "weblate.properties.sort"
     verbose = gettext_lazy("Format the Java properties file")
     description = gettext_lazy("Formats and sorts the Java properties file.")
-    compat: ClassVar[CompatDict] = {
-        "file_format": {"properties-utf8", "properties", "gwt"},
-    }
+    compat = {"file_format": {"properties-utf8", "properties", "gwt"}}
     icon = "sort-alphabetical.svg"
     settings_form = PropertiesSortAddonForm
 
-    def pre_commit(
-        self,
-        translation,
-        author: str,
-        store_hash: bool,
-        activity_log_id: int | None = None,
-    ) -> None:
+    def pre_commit(self, translation, author: str, store_hash: bool) -> None:
         case_sensitive = self.instance.configuration.get("case_sensitive", False)
         changed = format_file(translation.get_filename(), case_sensitive)
         if changed and store_hash:

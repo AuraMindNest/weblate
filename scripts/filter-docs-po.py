@@ -14,12 +14,8 @@ from __future__ import annotations
 
 import re
 import sys
-from typing import TYPE_CHECKING
 
-from translate.storage.pypo import pofile
-
-if TYPE_CHECKING:
-    from translate.storage.pypo import pounit
+from translate.storage.pypo import pofile, pounit
 
 EXCLUDE_RE = re.compile(
     r"""

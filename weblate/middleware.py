@@ -12,7 +12,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_ipv46_address
-from django.http import Http404, HttpResponsePermanentRedirect
+from django.http import Http404, HttpResponse, HttpResponsePermanentRedirect
 from django.shortcuts import redirect
 from django.urls import is_valid_path, reverse
 from django.urls.exceptions import NoReverseMatch
@@ -32,7 +32,6 @@ from weblate.utils.site import get_site_url
 from weblate.utils.views import parse_path
 
 if TYPE_CHECKING:
-    from django.http import HttpResponse
     from django.http.request import HttpRequest
 
     from weblate.accounts.strategy import WeblateStrategy
@@ -355,10 +354,10 @@ class CSPBuilder:
         return domain
 
     def build_csp_redoc(self) -> None:
-        if self.request.resolver_match and self.request.resolver_match.view_name in {
-            "redoc",
-            "swagger",
-        }:
+        if (
+            self.request.resolver_match
+            and self.request.resolver_match.view_name == "redoc"
+        ):
             self.directives["script-src"].add("'unsafe-inline'")
             self.directives["img-src"].add("data:")
 

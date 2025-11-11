@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 from io import BytesIO
-from typing import TYPE_CHECKING
 from unittest import TestCase
 from urllib.parse import urlsplit
 from zipfile import ZipFile
@@ -24,9 +23,9 @@ from django.utils.translation import activate
 from openpyxl import load_workbook
 from PIL import Image
 
-from weblate.auth.models import Group, get_anonymous, setup_project_groups
+from weblate.auth.models import Group, User, get_anonymous, setup_project_groups
 from weblate.lang.models import Language
-from weblate.trans.models import Component, ComponentList, Project
+from weblate.trans.models import Component, ComponentList, Project, Translation, Unit
 from weblate.trans.tests.test_models import RepoTestCase
 from weblate.trans.tests.utils import (
     create_another_user,
@@ -34,13 +33,7 @@ from weblate.trans.tests.utils import (
     wait_for_celery,
 )
 from weblate.utils.hash import hash_to_checksum
-from weblate.utils.state import STATE_TRANSLATED
 from weblate.utils.xml import parse_xml
-
-if TYPE_CHECKING:
-    from weblate.auth.models import User
-    from weblate.trans.models import Translation, Unit
-    from weblate.utils.state import StringState
 
 
 class RegistrationTestMixin(TestCase):
@@ -172,13 +165,11 @@ class ViewTestCase(RepoTestCase):
         target: str,
         source: str = "Hello, world!\n",
         language: str = "cs",
-        translation: Translation | None = None,
         user: User | None = None,
-        state: StringState = STATE_TRANSLATED,
-    ) -> Unit:
-        unit = self.get_unit(source, language, translation=translation)
-        unit.translate(user or self.user, target, state)
-        return unit
+    ) -> None:
+        unit = self.get_unit(source, language)
+        unit.target = target
+        unit.save_backend(user or self.user)
 
     def edit_unit(
         self,

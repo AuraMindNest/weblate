@@ -459,8 +459,8 @@ class LanguageQuerySet(models.QuerySet):
                 return self.get(code__iexact=accept_lang)
             except Language.DoesNotExist:
                 try:
-                    return self.filter(code__iexact=accept_lang.replace("-", "_"))[0]
-                except IndexError:
+                    return self.get(code__iexact=accept_lang.replace("-", "_"))
+                except Language.DoesNotExist:
                     continue
         return None
 
@@ -1173,9 +1173,6 @@ class PluralMapper:
         self.target_plural = target_plural
         self.same_plurals = source_plural.same_as(target_plural)
 
-    def __str__(self):
-        return f"<PluralMapper '{self.source_plural}' -> '{self.target_plural}'>"
-
     @cached_property
     def target_map(self) -> tuple[tuple[int | None, int | None], ...]:
         exact_source_map: dict[int, int] = {}
@@ -1197,7 +1194,6 @@ class PluralMapper:
         for i in range(target_plural.number):
             examples = target_plural.examples.get(i, [])
             if len(examples) == 1:
-                # Map plurals 1:1
                 number = int(examples[0])
                 if number in exact_source_map:
                     result.append((exact_source_map[number], None))
@@ -1206,25 +1202,9 @@ class PluralMapper:
                 else:
                     result.append((-1, number))
             elif i == last:
-                # Map last plural
                 result.append((-1, None))
             else:
-                # Look for examples subset
-                values = []
-                for example in examples:
-                    try:
-                        value = int(example)
-                    except ValueError:
-                        continue
-                    values.append(value)
-                mapped = {
-                    all_source_map[value] for value in values if value in all_source_map
-                }
-                if len(mapped) == 1:
-                    result.append((mapped.pop(), None))
-                else:
-                    # Fall back to not mapping
-                    result.append((None, None))
+                result.append((None, None))
         return tuple(result)
 
     def map(self, unit: Unit, other_unit: Unit | None = None) -> list[str]:

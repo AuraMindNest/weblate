@@ -1,16 +1,10 @@
 # Copyright © Michal Čihař <michal@weblate.org>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
 
 from weblate.billing.models import Billing
 from weblate.billing.tasks import billing_notify
 from weblate.utils.management.base import BaseCommand
-
-if TYPE_CHECKING:
-    from django.core.management.base import CommandParser
 
 
 class Command(BaseCommand):
@@ -18,7 +12,7 @@ class Command(BaseCommand):
 
     help = "checks billing limits"
 
-    def add_arguments(self, parser: CommandParser) -> None:
+    def add_arguments(self, parser) -> None:
         parser.add_argument("--valid", action="store_true", help="list valid ones")
         parser.add_argument(
             "--notify", action="store_true", help="send email notifications"

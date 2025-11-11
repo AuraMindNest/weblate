@@ -3,8 +3,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from django.core.exceptions import PermissionDenied
 from django.forms import inlineformset_factory
 from django.http import Http404, HttpResponseRedirect
@@ -15,21 +13,17 @@ from django.views.generic import DetailView, UpdateView
 
 from weblate.auth.forms import ProjectTeamForm, SitewideTeamForm
 from weblate.auth.models import (
+    AuthenticatedHttpRequest,
     AutoGroup,
     Group,
     Invitation,
+    User,
 )
 from weblate.trans.forms import UserAddTeamForm, UserManageForm
 from weblate.trans.util import redirect_next, redirect_param
 from weblate.utils import messages
 from weblate.utils.views import get_paginator, show_form_errors
 from weblate.wladmin.forms import ChangedCharField
-
-if TYPE_CHECKING:
-    from weblate.auth.models import (
-        AuthenticatedHttpRequest,
-        User,
-    )
 
 
 class TeamUpdateView(UpdateView):
@@ -139,7 +133,7 @@ class TeamUpdateView(UpdateView):
 
         form = self.get_form()
         if form is None:
-            raise PermissionDenied
+            return self.form_invalid(form, None)
 
         if "delete" in request.POST:
             return self.handle_delete(request)

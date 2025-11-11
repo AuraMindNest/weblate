@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.contrib import auth
@@ -16,10 +15,7 @@ from django_otp.middleware import OTPMiddleware
 
 from weblate.accounts.models import set_lang_cookie
 from weblate.accounts.utils import adjust_session_expiry
-from weblate.auth.models import get_anonymous
-
-if TYPE_CHECKING:
-    from weblate.auth.models import AuthenticatedHttpRequest
+from weblate.auth.models import AuthenticatedHttpRequest, get_anonymous
 
 
 def get_user(request: AuthenticatedHttpRequest):
@@ -141,7 +137,7 @@ class RequireLoginMiddleware:
         if "weblate.gitexport" in settings.INSTALLED_APPS:
             import weblate.gitexport.views
 
-            if request.path.startswith(f"{settings.URL_PREFIX}/git/"):
+            if request.path.startswith("/git/"):
                 if request.headers.get("authorization"):
                     return None
                 return weblate.gitexport.views.response_authenticate()

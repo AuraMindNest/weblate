@@ -148,15 +148,14 @@ the project’s menu :guilabel:`Operations` ↓ :guilabel:`Users`.
     You can limit teams to languages or components,
     and assign them designated access roles (see :ref:`privileges`).
 
-.. _team-admins:
 
 Team administrators
 +++++++++++++++++++
 
 .. versionadded:: 4.15
 
-Each team can have team administrators, who can add and remove users within the team.
-
+Each team can have team administrator,
+who can add and remove users within the team.
 This is useful in case you want to build self-governed teams.
 
 .. _invite-user:
@@ -227,8 +226,7 @@ team memberships same as with users.
 
 .. seealso::
 
-   * :ref:`api-tokens`
-   * :ref:`expiring-accounts`
+   :ref:`api-tokens`
 
 .. _custom-acl:
 
@@ -642,10 +640,6 @@ List of privileges
 |                              |                                           +---------------------------------------+
 |                              |                                           | :guilabel:`Review strings`            |
 |                              +-------------------------------------------+---------------------------------------+
-|                              | Bulk edit strings                         | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Bulk editing`              |
-|                              +-------------------------------------------+---------------------------------------+
 |                              | Edit string when suggestions are enforced | :guilabel:`Administration`            |
 |                              |                                           +---------------------------------------+
 |                              |                                           | :guilabel:`Translation coordinator`   |
@@ -816,15 +810,9 @@ List of privileges
 |                              +-------------------------------------------+---------------------------------------+
 |                              | Manage teams                              |                                       |
 |                              +-------------------------------------------+---------------------------------------+
-|                              | View team info                            |                                       |
-|                              +-------------------------------------------+---------------------------------------+
 |                              | Manage users                              |                                       |
 |                              +-------------------------------------------+---------------------------------------+
-|                              | View user info                            |                                       |
-|                              +-------------------------------------------+---------------------------------------+
 |                              | Manage roles                              |                                       |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | View role info                            |                                       |
 |                              +-------------------------------------------+---------------------------------------+
 |                              | Manage announcements                      |                                       |
 |                              +-------------------------------------------+---------------------------------------+
@@ -887,7 +875,6 @@ List of built-in roles
        * :guilabel:`Delete existing translation`
        * :guilabel:`Download translation file`
        * :guilabel:`Add new string`
-       * :guilabel:`Bulk edit strings`
        * :guilabel:`Dismiss failing check`
        * :guilabel:`Remove a string`
        * :guilabel:`Edit strings`
@@ -1006,8 +993,6 @@ List of built-in roles
        * :guilabel:`Add several languages for translation`
        * :guilabel:`Delete existing translation`
        * :guilabel:`Download translation file`
-   * - `Bulk editing`
-     - * :guilabel:`Bulk edit strings`
    * - `Automatic translation`
      - * :guilabel:`Perform automatic translation`
    * - `Manage translation memory`
@@ -1103,12 +1088,3 @@ all the site pages. This is basically the way to lock your Weblate installation.
 .. hint::
 
     You can use built-in :ref:`invite-user` to add new users.
-
-.. _expiring-accounts:
-
-Expiring user accounts
-----------------------
-
-Each account can have an expiry set. After the expiration, the account will be
-automatically disabled. This is used for :ref:`project-api`, but can be
-utilized for regular users as well.

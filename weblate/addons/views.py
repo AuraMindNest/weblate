@@ -132,9 +132,7 @@ class AddonList(PathViewMixin, ListView):
 
         form = None
         if addon.settings_form is None:
-            addon.create(
-                component=obj_component, project=obj_project, acting_user=request.user
-            )
+            addon.create(component=obj_component, project=obj_project)
             return self.redirect_list()
 
         if "form" in request.POST:

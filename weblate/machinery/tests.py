@@ -10,7 +10,7 @@ from copy import copy
 from datetime import UTC, datetime
 from functools import partial
 from io import StringIO
-from typing import TYPE_CHECKING, ClassVar, NoReturn
+from typing import TYPE_CHECKING, NoReturn
 from unittest.mock import MagicMock, Mock, call, patch
 
 import httpx
@@ -39,8 +39,10 @@ from weblate.machinery.apertium import ApertiumAPYTranslation
 from weblate.machinery.aws import AWSTranslation
 from weblate.machinery.baidu import BAIDU_API, BaiduTranslation
 from weblate.machinery.base import (
+    BatchMachineTranslation,
     MachineryRateLimitError,
     MachineTranslationError,
+    SettingsDict,
 )
 from weblate.machinery.cyrtranslit import CyrTranslitTranslation
 from weblate.machinery.deepl import DeepLTranslation
@@ -72,11 +74,6 @@ from .types import SourceLanguageChoices
 
 if TYPE_CHECKING:
     from requests import PreparedRequest
-
-    from weblate.machinery.base import (
-        BatchMachineTranslation,
-        SettingsDict,
-    )
 
 AMAGAMA_LIVE = "https://amagama-live.translatehouse.org/api/v1"
 
@@ -278,7 +275,7 @@ class BaseMachineTranslationTest(TestCase):
     SOURCE_BLANK = "Hello"
     SOURCE_TRANSLATED = "Hello, world!"
     EXPECTED_LEN = 2
-    CONFIGURATION: ClassVar[SettingsDict] = {}
+    CONFIGURATION: SettingsDict = {}
 
     def get_machine(self, cache=False):
         machine = self.MACHINE_CLS(self.CONFIGURATION)
@@ -632,7 +629,7 @@ class MyMemoryTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = MyMemoryTranslation
     EXPECTED_LEN = 3
     NOTSUPPORTED = "ia"
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "email": "test@weblate.org",
         "username": "user",
         "key": "key",
@@ -655,7 +652,7 @@ class ApertiumAPYTranslationTest(BaseMachineTranslationTest):
     ENGLISH = "eng"
     SUPPORTED = "spa"
     EXPECTED_LEN = 1
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "url": "http://apertium.example.com",
     }
 
@@ -715,7 +712,7 @@ class ApertiumAPYTranslationTest(BaseMachineTranslationTest):
 class MicrosoftCognitiveTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = MicrosoftCognitiveTranslation
     EXPECTED_LEN = 1
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "key": "KEY",
         "endpoint_url": "api.cognitive.microsoft.com",
         "base_url": "api.cognitive.microsofttranslator.com",
@@ -768,7 +765,7 @@ class MicrosoftCognitiveTranslationTest(BaseMachineTranslationTest):
 
 
 class MicrosoftCognitiveTranslationRegionTest(MicrosoftCognitiveTranslationTest):
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "key": "KEY",
         "endpoint_url": "api.cognitive.microsoft.com",
         "base_url": "api.cognitive.microsofttranslator.com",
@@ -810,7 +807,7 @@ class MicrosoftCognitiveTranslationRegionTest(MicrosoftCognitiveTranslationTest)
 class GoogleTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = GoogleTranslation
     EXPECTED_LEN = 1
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "key": "KEY",
     }
 
@@ -855,7 +852,7 @@ class GoogleTranslationTest(BaseMachineTranslationTest):
 class GoogleV3TranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = GoogleV3Translation
     EXPECTED_LEN = 1
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "project": "translating-7586",
         "location": "global",
         "credentials": GOOGLEV3_KEY,
@@ -1135,7 +1132,7 @@ class TMServerTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = TMServerTranslation
     EXPECTED_LEN = 1
     SOURCE_TRANSLATED = "Hello"
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "url": AMAGAMA_LIVE,
     }
 
@@ -1166,7 +1163,7 @@ class TMServerTranslationTest(BaseMachineTranslationTest):
 class YandexTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = YandexTranslation
     EXPECTED_LEN = 1
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "key": "KEY",
     }
 
@@ -1217,7 +1214,7 @@ class YandexTranslationTest(BaseMachineTranslationTest):
 class YandexV2TranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = YandexV2Translation
     EXPECTED_LEN = 1
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "key": "KEY",
     }
 
@@ -1281,7 +1278,7 @@ class YoudaoTranslationTest(BaseMachineTranslationTest):
     SUPPORTED = "de"
     NOTSUPPORTED = "cs"
     ENGLISH = "EN"
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "key": "id",
         "secret": "secret",
     }
@@ -1306,7 +1303,7 @@ class NeteaseSightTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = NeteaseSightTranslation
     EXPECTED_LEN = 1
     SUPPORTED = "zh"
-    CONFIGURATION: ClassVar[SettingsDict] = {"key": "id", "secret": "secret"}
+    CONFIGURATION = {"key": "id", "secret": "secret"}
 
     def mock_empty(self) -> NoReturn:
         self.skipTest("Not tested")
@@ -1329,7 +1326,7 @@ class BaiduTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = BaiduTranslation
     EXPECTED_LEN = 1
     NOTSUPPORTED = "ia"
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "key": "id",
         "secret": "secret",
     }
@@ -1369,7 +1366,7 @@ class BaiduTranslationTest(BaseMachineTranslationTest):
 class SystranTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = SystranTranslation
     EXPECTED_LEN = 1
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "key": "key",
     }
 
@@ -1402,7 +1399,7 @@ class SystranTranslationTest(BaseMachineTranslationTest):
 class SAPTranslationHubTest(BaseMachineTranslationTest):
     MACHINE_CLS = SAPTranslationHub
     EXPECTED_LEN = 1
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "key": "x",
         "username": "",
         "password": "",
@@ -1444,7 +1441,7 @@ class SAPTranslationHubTest(BaseMachineTranslationTest):
 
 
 class SAPTranslationHubAuthTest(SAPTranslationHubTest):
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "key": "id",
         "username": "username",
         "password": "password",
@@ -1458,7 +1455,7 @@ class ModernMTHubTest(BaseMachineTranslationTest):
     EXPECTED_LEN = 1
     ENGLISH = "en"
     SUPPORTED = "it"
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "key": "KEY",
         "url": "https://api.modernmt.com/",
     }
@@ -1756,7 +1753,7 @@ class DeepLTranslationTest(BaseMachineTranslationTest):
     ENGLISH = "EN"
     SUPPORTED = "DE"
     NOTSUPPORTED = "CS"
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "key": "KEY",
         "url": "https://api.deepl.com/v2/",
     }
@@ -2082,7 +2079,7 @@ class LibreTranslateTranslationTest(BaseMachineTranslationTest):
     ENGLISH = "en"
     SUPPORTED = "es"
     NOTSUPPORTED = "cs"
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "url": "https://libretranslate.com/",
         "key": "",
     }
@@ -2145,7 +2142,7 @@ class AWSTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = AWSTranslation
     EXPECTED_LEN = 1
     NOTSUPPORTED = "ia"
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "region": "us-west-2",
         "key": "key",
         "secret": "secret",
@@ -2270,7 +2267,7 @@ class AWSTranslationTest(BaseMachineTranslationTest):
         self.skipTest("Not tested")
 
     def setup_stubber_with_glossaries(
-        self, machine: AWSTranslation, fail_delete: bool = True
+        self, machine: BatchMachineTranslation, fail_delete: bool = True
     ) -> Stubber:
         """Set up stubber for translation with glossary test."""
         stubber = Stubber(machine.client)
@@ -2421,7 +2418,7 @@ class AlibabaTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = AlibabaTranslation
     EXPECTED_LEN = 1
     NOTSUPPORTED = "tog"
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "key": "key",
         "secret": "secret",
         "region": "cn-hangzhou",
@@ -2457,7 +2454,7 @@ class OpenAITranslationTest(BaseMachineTranslationTest):
     ENGLISH = "en"
     SUPPORTED = "zh-TW"
     NOTSUPPORTED = None
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "key": "x",
         "model": "auto",
         "persona": "",
@@ -2519,7 +2516,7 @@ class OpenAITranslationTest(BaseMachineTranslationTest):
 
 
 class OpenAICustomTranslationTest(OpenAITranslationTest):
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "key": "x",
         "model": "auto",
         "persona": "",
@@ -2580,25 +2577,25 @@ class OpenAICustomTranslationTest(OpenAITranslationTest):
         self.mock_response()
         settings = self.CONFIGURATION.copy()
         machine = self.MACHINE_CLS
-        form = machine.settings_form(machine, settings)
+        form = self.MACHINE_CLS.settings_form(machine, settings)
         self.assertTrue(form.is_valid())
 
         settings["model"] = "custom"
-        form = machine.settings_form(machine, settings)
+        form = self.MACHINE_CLS.settings_form(machine, settings)
         self.assertFalse(form.is_valid())
 
         settings["custom_model"] = "custom"
-        form = machine.settings_form(machine, settings)
+        form = self.MACHINE_CLS.settings_form(machine, settings)
         self.assertTrue(form.is_valid())
 
         settings["model"] = "auto"
-        form = machine.settings_form(machine, settings)
+        form = self.MACHINE_CLS.settings_form(machine, settings)
         self.assertFalse(form.is_valid())
 
 
 class AzureOpenAITranslationTest(OpenAITranslationTest):
     MACHINE_CLS: type[BatchMachineTranslation] = AzureOpenAITranslation
-    CONFIGURATION: ClassVar[SettingsDict] = {
+    CONFIGURATION = {
         "key": "x",
         "deployment": "my-deployment",
         "persona": "",

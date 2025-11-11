@@ -24,12 +24,8 @@ from weblate.utils.site import get_site_url
 from weblate.utils.views import key_name
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-
     from weblate.addons.models import AddonActivityLog
     from weblate.trans.models import Change
-
-    PayloadType = Mapping[str, int | str | list]
 
 
 class MessageNotDeliveredError(Exception):
@@ -39,20 +35,22 @@ class MessageNotDeliveredError(Exception):
 class JSONWebhookBaseAddon(ChangeBaseAddon):
     icon = "webhook.svg"
 
-    def build_webhook_payload(self, change: Change) -> PayloadType:
+    def build_webhook_payload(self, change: Change) -> dict[str, int | str | list]:
         raise NotImplementedError
 
-    def build_headers(self, change: Change, payload: PayloadType) -> dict[str, str]:
+    def build_headers(
+        self, change: Change, payload: dict[str, int | str | list]
+    ) -> dict[str, str]:
         return {}
 
     def render_activity_log(self, activity: AddonActivityLog) -> str:
         return render_to_string(
             "addons/webhook_log.html",
-            {"activity": activity, "details": activity.details.get("result")},
+            {"activity": activity, "details": activity.details["result"]},
         )
 
     def send_message(
-        self, change: Change, headers: dict, payload: PayloadType
+        self, change: Change, headers: dict, payload: dict[str, int | str | list[str]]
     ) -> requests.Response:
         try:
             return request(
@@ -66,9 +64,7 @@ class JSONWebhookBaseAddon(ChangeBaseAddon):
         except requests.exceptions.ConnectionError as error:
             raise MessageNotDeliveredError from error
 
-    def change_event(
-        self, change: Change, activity_log_id: int | None = None
-    ) -> dict | None:
+    def change_event(self, change: Change) -> dict | None:
         """Deliver notification message."""
         config = self.instance.configuration
         events = {int(event) for event in config["events"]}
@@ -99,7 +95,7 @@ class WebhookAddon(JSONWebhookBaseAddon):
 
     settings_form = WebhooksAddonForm
 
-    def build_webhook_payload(self, change: Change) -> PayloadType:
+    def build_webhook_payload(self, change: Change) -> dict[str, int | str | list]:
         """Build a Schema-valid payload from change event."""
         data: dict[str, int | str | list] = {
             "change_id": change.id,
@@ -134,7 +130,9 @@ class WebhookAddon(JSONWebhookBaseAddon):
         self.validate_payload(data)
         return data
 
-    def build_headers(self, change: Change, payload: PayloadType) -> dict[str, str]:
+    def build_headers(
+        self, change: Change, payload: dict[str, int | str | list]
+    ) -> dict[str, str]:
         """Build headers following Standard Webhooks specifications."""
         webhook_id = change.get_uuid().hex
         attempt_time = dj_timezone.now()
@@ -183,7 +181,7 @@ class SlackWebhookAddon(JSONWebhookBaseAddon):
     icon = "slack.svg"
     settings_form = BaseWebhooksAddonForm
 
-    def build_webhook_payload(self, change: Change) -> PayloadType:
+    def build_webhook_payload(self, change: Change) -> dict[str, int | str | list]:
         message_header = ""
         if change.path_object:
             message_header += key_name(change.path_object) + " - "

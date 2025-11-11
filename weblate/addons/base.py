@@ -8,7 +8,7 @@ import os
 import subprocess
 from contextlib import suppress
 from itertools import chain
-from typing import TYPE_CHECKING, Any, ClassVar, TypedDict, cast
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -23,14 +23,12 @@ from weblate.trans.util import get_clean_env
 from weblate.utils import messages
 from weblate.utils.errors import report_error
 from weblate.utils.files import cleanup_error_message
-from weblate.utils.html import format_html_join_comma, list_to_tuples
 from weblate.utils.render import render_template
 from weblate.utils.validators import validate_filename
 
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-    from django.forms.boundfield import BoundField
     from django_stubs_ext import StrOrPromise
 
     from weblate.addons.forms import BaseAddonForm
@@ -48,10 +46,10 @@ class CompatDict(TypedDict, total=False):
 class BaseAddon:
     """Base class for Weblate add-ons."""
 
-    events: ClassVar[set[AddonEvent]] = set()
+    events: set[AddonEvent] = set()
     settings_form: type[BaseAddonForm] | None = None
     name = ""
-    compat: ClassVar[CompatDict] = {}
+    compat: CompatDict = {}
     multiple = False
     verbose: StrOrPromise = "Base add-on"
     description: StrOrPromise = "Base add-on"
@@ -70,9 +68,6 @@ class BaseAddon:
         self.instance: Addon = storage
         self.alerts: list[dict[str, str]] = []
         self.extra_files: list[str] = []
-
-    def __repr__(self) -> str:
-        return f"<{self.__class__.__name__} instance={self.instance}>"
 
     @cached_property
     def doc_anchor(self) -> str:
@@ -156,38 +151,8 @@ class BaseAddon:
             kwargs["data"] = self.instance.configuration
         return self.settings_form(user, self, **kwargs)
 
-    def show_setting_field(self, field: BoundField) -> bool:
-        return not field.is_hidden and field.value()
-
-    def get_setting_value(self, field: BoundField) -> StrOrPromise:
-        value = field.value()
-        if value is True:
-            return gettext("enabled")
-        if field_choices := getattr(field.field, "choices", None):
-            choices: dict[str, str] = {
-                str(choice): value for choice, value in field_choices
-            }
-            if isinstance(value, list):
-                return format_html_join_comma(
-                    "{}",
-                    list_to_tuples(choices.get(val, val) for val in value),
-                )
-            return choices.get(value, value)
-        return value
-
-    def get_settings_fields(self) -> list[tuple[StrOrPromise, StrOrPromise]]:
-        form = self.get_settings_form(None)
-        if form is None:
-            return []
-
-        return [
-            (
-                field.label,
-                self.get_setting_value(field),
-            )
-            for field in form
-            if self.show_setting_field(field)
-        ]
+    def get_ui_form(self) -> BaseAddonForm | None:
+        return self.get_settings_form(None)
 
     def configure(self, configuration: dict[str, Any]) -> None:
         """Save configuration."""
@@ -222,56 +187,28 @@ class BaseAddon:
                     self.post_configure_run_component(component)
 
     def post_configure_run_component(self, component: Component) -> None:
-        from weblate.addons.models import execute_addon_event
-
         # Trigger post configure event for a VCS component
         previous = component.repository.last_revision
         if not (POST_CONFIGURE_EVENTS & self.events):
             return
 
-        base_event_args = (self.instance, component, component)
         if AddonEvent.EVENT_POST_COMMIT in self.events:
             component.log_debug("running post_commit add-on: %s", self.name)
-            execute_addon_event(
-                *(base_event_args),
-                AddonEvent.EVENT_POST_COMMIT,
-                "post_commit",
-                (
-                    component,
-                    True,
-                ),
-            )
+            self.post_commit(component, True)
         if AddonEvent.EVENT_POST_UPDATE in self.events:
             component.log_debug("running post_update add-on: %s", self.name)
             # The post_update typically operates on files, so make sure these are updated
             component.commit_pending("add-on", None)
-            execute_addon_event(
-                *(base_event_args),
-                AddonEvent.EVENT_POST_UPDATE,
-                "post_update",
-                (component, "", False),
-            )
+            self.post_update(component, "", False)
         if AddonEvent.EVENT_COMPONENT_UPDATE in self.events:
             component.log_debug("running component_update add-on: %s", self.name)
-            execute_addon_event(
-                *(base_event_args),
-                AddonEvent.EVENT_COMPONENT_UPDATE,
-                "component_update",
-                (component,),
-            )
+            self.component_update(component)
         if AddonEvent.EVENT_POST_PUSH in self.events:
             component.log_debug("running post_push add-on: %s", self.name)
-            execute_addon_event(
-                *(base_event_args),
-                AddonEvent.EVENT_POST_PUSH,
-                "post_push",
-                (component,),
-            )
+            self.post_push(component)
         if AddonEvent.EVENT_DAILY in self.events:
             component.log_debug("running daily add-on: %s", self.name)
-            execute_addon_event(
-                *(base_event_args), AddonEvent.EVENT_DAILY, "daily", (component,)
-            )
+            self.daily(component)
 
         current = component.repository.last_revision
         if previous != current:
@@ -295,31 +232,21 @@ class BaseAddon:
             for key, values in cls.compat.items()
         )
 
-    def pre_push(
-        self, component: Component, activity_log_id: int | None = None
-    ) -> dict | None:
+    def pre_push(self, component: Component) -> None:
         """Event handler before repository is pushed upstream."""
         # To be implemented in a subclass
 
-    def post_push(
-        self, component: Component, activity_log_id: int | None = None
-    ) -> dict | None:
+    def post_push(self, component: Component) -> None:
         """Event handler after repository is pushed upstream."""
         # To be implemented in a subclass
 
-    def pre_update(
-        self, component: Component, activity_log_id: int | None = None
-    ) -> dict | None:
+    def pre_update(self, component: Component) -> None:
         """Event handler before repository is updated from upstream."""
         # To be implemented in a subclass
 
     def post_update(
-        self,
-        component: Component,
-        previous_head: str,
-        skip_push: bool,
-        activity_log_id: int | None = None,
-    ) -> dict | None:
+        self, component: Component, previous_head: str, skip_push: bool
+    ) -> None:
         """
         Event handler after repository is updated from upstream.
 
@@ -333,51 +260,32 @@ class BaseAddon:
         # To be implemented in a subclass
 
     def pre_commit(
-        self,
-        translation: Translation,
-        author: str,
-        store_hash: bool,
-        activity_log_id: int | None = None,
-    ) -> dict | None:
+        self, translation: Translation, author: str, store_hash: bool
+    ) -> None:
         """Event handler before changes are committed to the repository."""
         # To be implemented in a subclass
 
-    def post_commit(
-        self,
-        component: Component,
-        store_hash: bool,
-        activity_log_id: int | None = None,
-    ) -> dict | None:
+    def post_commit(self, component: Component, store_hash: bool) -> None:
         """Event handler after changes are committed to the repository."""
         # To be implemented in a subclass
 
-    def post_add(
-        self, translation: Translation, activity_log_id: int | None = None
-    ) -> dict | None:
+    def post_add(self, translation: Translation) -> None:
         """Event handler after new translation is added."""
         # To be implemented in a subclass
 
-    def unit_pre_create(
-        self, unit: Unit, activity_log_id: int | None = None
-    ) -> dict | None:
+    def unit_pre_create(self, unit: Unit) -> None:
         """Event handler before new unit is created."""
         # To be implemented in a subclass
 
-    def daily(
-        self, component: Component, activity_log_id: int | None = None
-    ) -> dict | None:
+    def daily(self, component: Component) -> None:
         """Event handler daily."""
         # To be implemented in a subclass
 
-    def component_update(
-        self, component: Component, activity_log_id: int | None = None
-    ) -> dict | None:
+    def component_update(self, component: Component) -> None:
         """Event handler for component update."""
         # To be implemented in a subclass
 
-    def change_event(
-        self, change: Change, activity_log_id: int | None = None
-    ) -> dict | None:
+    def change_event(self, change: Change) -> None:
         """Event handler for change event."""
         # To be implemented in a subclass
 
@@ -508,8 +416,7 @@ class BaseAddon:
         )
 
     def render_activity_log(self, activity: AddonActivityLog) -> str:
-        # The details might be empty for pending entries
-        result = activity.details.get("result")
+        result = activity.details["result"]
         if result is None:
             return ""
         if isinstance(result, str):
@@ -526,7 +433,7 @@ class UpdateBaseAddon(BaseAddon):
     It hooks to post update and commits all changed translations.
     """
 
-    events: ClassVar[set[AddonEvent]] = {
+    events: set[AddonEvent] = {
         AddonEvent.EVENT_POST_UPDATE,
     }
 
@@ -540,11 +447,7 @@ class UpdateBaseAddon(BaseAddon):
         raise NotImplementedError
 
     def post_update(
-        self,
-        component: Component,
-        previous_head: str,
-        skip_push: bool,
-        activity_log_id: int | None = None,
+        self, component: Component, previous_head: str, skip_push: bool
     ) -> None:
         # Ignore file parse error, it will be properly tracked as an alert
         with component.repository.lock:
@@ -556,7 +459,7 @@ class UpdateBaseAddon(BaseAddon):
 class ChangeBaseAddon(BaseAddon):
     """Base class for add-ons that listen for Change notifications."""
 
-    events: ClassVar[set[AddonEvent]] = {
+    events: set[AddonEvent] = {
         AddonEvent.EVENT_CHANGE,
     }
 

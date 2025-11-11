@@ -113,8 +113,6 @@ class ACLTest(FixtureTestCase, RegistrationTestMixin):
         # Ensure user is now listed
         response = self.client.get(self.access_url)
         self.assertContains(response, self.second_user.username)
-        invitation_audit = self.second_user.auditlog_set.get(activity="invited")
-        self.assertIsNone(invitation_audit.address)
 
     def test_invite_invalid(self) -> None:
         """Test inviting invalid form."""
@@ -349,21 +347,21 @@ class ACLTest(FixtureTestCase, RegistrationTestMixin):
         self.project.access_control = Project.ACCESS_PROTECTED
         self.project.translation_review = True
         self.project.save()
-        self.assertEqual(11 + billing_group, self.project.defined_groups.count())
+        self.assertEqual(10 + billing_group, self.project.defined_groups.count())
         self.project.access_control = Project.ACCESS_PRIVATE
         self.project.translation_review = True
         self.project.save()
-        self.assertEqual(11 + billing_group, self.project.defined_groups.count())
+        self.assertEqual(10 + billing_group, self.project.defined_groups.count())
         self.project.access_control = Project.ACCESS_CUSTOM
         self.project.save()
-        self.assertEqual(11 + billing_group, self.project.defined_groups.count())
+        self.assertEqual(10 + billing_group, self.project.defined_groups.count())
         self.project.access_control = Project.ACCESS_CUSTOM
         self.project.save()
-        self.assertEqual(11 + billing_group, self.project.defined_groups.count())
+        self.assertEqual(10 + billing_group, self.project.defined_groups.count())
         self.project.defined_groups.all().delete()
         self.project.access_control = Project.ACCESS_PRIVATE
         self.project.save()
-        self.assertEqual(11 + billing_group, self.project.defined_groups.count())
+        self.assertEqual(10 + billing_group, self.project.defined_groups.count())
         self.project.delete()
 
     def test_restricted_component(self) -> None:

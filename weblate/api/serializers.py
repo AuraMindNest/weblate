@@ -10,7 +10,7 @@ from zipfile import BadZipfile
 
 from django.conf import settings
 from django.db import models
-from django.db.models import Model, TextChoices
+from django.db.models import Model
 from django.utils.translation import gettext_lazy
 from drf_spectacular.extensions import OpenApiSerializerExtension
 from drf_spectacular.plumbing import build_basic_type, build_object_type
@@ -25,7 +25,7 @@ from rest_framework import serializers
 
 from weblate.accounts.models import Subscription
 from weblate.addons.models import ADDONS, Addon
-from weblate.auth.models import Group, Permission, Role, User
+from weblate.auth.models import AuthenticatedHttpRequest, Group, Permission, Role, User
 from weblate.auth.results import PermissionResult
 from weblate.checks.models import CHECKS
 from weblate.lang.models import Language, Plural
@@ -59,8 +59,6 @@ from weblate.utils.views import (
 if TYPE_CHECKING:
     from drf_spectacular.openapi import AutoSchema
     from rest_framework.request import Request
-
-    from weblate.auth.models import AuthenticatedHttpRequest
 
 _MT = TypeVar("_MT", bound=Model)  # Model Type
 
@@ -169,7 +167,7 @@ class LanguageSerializer(serializers.ModelSerializer[Language]):
             "url",
             "statistics_url",
         )
-        extra_kwargs = {  # noqa: RUF012
+        extra_kwargs = {
             "url": {"view_name": "api:language-detail", "lookup_field": "code"},
             "code": {"validators": []},
         }
@@ -263,18 +261,12 @@ class FullUserSerializer(serializers.ModelSerializer[User]):
             "is_active",
             "is_bot",
             "date_joined",
-            "date_expires",
             "last_login",
             "url",
             "statistics_url",
             "contributions_url",
         )
-        read_only_fields = (
-            "id",
-            "date_joined",
-            "last_login",
-        )
-        extra_kwargs = {  # noqa: RUF012
+        extra_kwargs = {
             "url": {"view_name": "api:user-detail", "lookup_field": "username"}
         }
 
@@ -319,9 +311,7 @@ class RoleSerializer(serializers.ModelSerializer[Role]):
             "permissions",
             "url",
         )
-        extra_kwargs = {  # noqa: RUF012
-            "url": {"view_name": "api:role-detail", "lookup_field": "id"},
-        }
+        extra_kwargs = {"url": {"view_name": "api:role-detail", "lookup_field": "id"}}
 
     def create(self, validated_data):
         permissions_validated = validated_data.pop("permissions", [])
@@ -383,7 +373,7 @@ class CommentSerializer(serializers.Serializer[Comment]):
 
     class Meta:
         model = Comment
-        fields = ("scope", "comment", "timestamp", "user_email", "id", "user")
+        fields = ["scope", "comment", "timestamp", "user_email", "id", "user"]
 
     def validate_scope(self, value):
         unit: Unit | None = self.context.get("unit", None)
@@ -464,12 +454,6 @@ class GroupSerializer(serializers.ModelSerializer[Group]):
         queryset=Project.objects.none(),
         required=False,
     )
-    admins = serializers.HyperlinkedRelatedField(
-        view_name="api:user-detail",
-        lookup_field="username",
-        many=True,
-        read_only=True,
-    )
 
     class Meta:
         model = Group
@@ -486,11 +470,8 @@ class GroupSerializer(serializers.ModelSerializer[Group]):
             "componentlists",
             "components",
             "enforced_2fa",
-            "admins",
         )
-        extra_kwargs = {  # noqa: RUF012
-            "url": {"view_name": "api:group-detail", "lookup_field": "id"},
-        }
+        extra_kwargs = {"url": {"view_name": "api:group-detail", "lookup_field": "id"}}
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -563,7 +544,7 @@ class ProjectSerializer(serializers.ModelSerializer[Project]):
             "machinery_settings",
             "locked",
         )
-        extra_kwargs = {  # noqa: RUF012
+        extra_kwargs = {
             "url": {"view_name": "api:project-detail", "lookup_field": "slug"}
         }
 
@@ -688,7 +669,6 @@ class ComponentSerializer(RemovableSerializer[Component]):
             "intermediate",
             "new_base",
             "file_format",
-            "file_format_params",
             "license",
             "license_url",
             "agreement",
@@ -740,7 +720,7 @@ class ComponentSerializer(RemovableSerializer[Component]):
             "linked_component",
             "locked",
         )
-        extra_kwargs = {  # noqa: RUF012
+        extra_kwargs = {
             "url": {
                 "view_name": "api:component-detail",
                 "lookup_field": ("project__slug", "slug"),
@@ -982,7 +962,7 @@ class TranslationSerializer(RemovableSerializer[Translation]):
             "changes_list_url",
             "units_list_url",
         )
-        extra_kwargs = {  # noqa: RUF012
+        extra_kwargs = {
             "url": {
                 "view_name": "api:translation-detail",
                 "lookup_field": (
@@ -1070,38 +1050,9 @@ class UploadRequestSerializer(ReadOnlySerializer):
             )
 
 
-class RepoOperations(TextChoices):
-    COMMIT = "commit", gettext_lazy("Commit")
-    PULL = "pull", gettext_lazy("Update")
-    PULL_REBASE = "pull-rebase", gettext_lazy("Update with rebase")
-    PULL_MERGE = "pull-merge", gettext_lazy("Update with merge")
-    PULL_MERGE_NOFF = (
-        "pull-merge-noff",
-        gettext_lazy("Update with merge without fast-forward"),
-    )
-    PUSH = "push", gettext_lazy("Push")
-    RESET = "reset", gettext_lazy("Reset all changes in the Weblate repository")
-    RESET_KEEP = (
-        "reset-keep",
-        gettext_lazy("Reset the Weblate repository and reapply translations"),
-    )
-    CLEANUP = (
-        "cleanup",
-        gettext_lazy("Cleanup all untracked files in the Weblate repository"),
-    )
-    FILE_SYNC = (
-        "file-sync",
-        gettext_lazy("Force writing all translations to the Weblate repository"),
-    )
-    FILE_SCAN = (
-        "file-scan",
-        gettext_lazy("Rescan all translation files in the Weblate repository"),
-    )
-
-
 class RepoRequestSerializer(ReadOnlySerializer):
     operation = serializers.ChoiceField(
-        choices=RepoOperations.choices,
+        choices=("commit", "pull", "push", "reset", "cleanup")
     )
 
 
@@ -1296,9 +1247,7 @@ class UnitSerializer(serializers.ModelSerializer[Unit]):
             "timestamp",
             "last_updated",
         )
-        extra_kwargs = {  # noqa: RUF012
-            "url": {"view_name": "api:unit-detail"},
-        }
+        extra_kwargs = {"url": {"view_name": "api:unit-detail"}}
 
 
 class UnitWriteSerializer(serializers.ModelSerializer[Unit]):
@@ -1408,9 +1357,7 @@ class CategorySerializer(RemovableSerializer[Category]):
             "url",
             "statistics_url",
         )
-        extra_kwargs = {  # noqa: RUF012
-            "url": {"view_name": "api:category-detail"},
-        }
+        extra_kwargs = {"url": {"view_name": "api:category-detail"}}
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -1474,9 +1421,7 @@ class ScreenshotSerializer(RemovableSerializer[Screenshot]):
             "units",
             "url",
         )
-        extra_kwargs = {  # noqa: RUF012
-            "url": {"view_name": "api:screenshot-detail"}
-        }
+        extra_kwargs = {"url": {"view_name": "api:screenshot-detail"}}
 
 
 class ScreenshotCreateSerializer(ScreenshotSerializer):
@@ -1491,9 +1436,7 @@ class ScreenshotCreateSerializer(ScreenshotSerializer):
             "url",
             "image",
         )
-        extra_kwargs = {  # noqa: RUF012
-            "url": {"view_name": "api:screenshot-detail"}
-        }
+        extra_kwargs = {"url": {"view_name": "api:screenshot-detail"}}
 
 
 class ScreenshotFileSerializer(serializers.ModelSerializer[Screenshot]):
@@ -1502,9 +1445,7 @@ class ScreenshotFileSerializer(serializers.ModelSerializer[Screenshot]):
     class Meta:
         model = Screenshot
         fields = ("image",)
-        extra_kwargs = {  # noqa: RUF012
-            "url": {"view_name": "api:screenshot-file"}
-        }
+        extra_kwargs = {"url": {"view_name": "api:screenshot-file"}}
 
 
 class ChangeSerializer(RemovableSerializer[Change]):
@@ -1550,9 +1491,7 @@ class ChangeSerializer(RemovableSerializer[Change]):
             "action_name",
             "url",
         )
-        extra_kwargs = {  # noqa: RUF012
-            "url": {"view_name": "api:change-detail"}
-        }
+        extra_kwargs = {"url": {"view_name": "api:change-detail"}}
 
 
 class AutoComponentListSerializer(serializers.ModelSerializer[AutoComponentList]):
@@ -1586,7 +1525,7 @@ class ComponentListSerializer(serializers.ModelSerializer[ComponentList]):
             "auto_assign",
             "url",
         )
-        extra_kwargs = {  # noqa: RUF012
+        extra_kwargs = {
             "url": {"view_name": "api:componentlist-detail", "lookup_field": "slug"}
         }
 
@@ -1615,9 +1554,7 @@ class AddonSerializer(serializers.ModelSerializer[Addon]):
             "configuration",
             "url",
         )
-        extra_kwargs = {  # noqa: RUF012
-            "url": {"view_name": "api:addon-detail"}
-        }
+        extra_kwargs = {"url": {"view_name": "api:addon-detail"}}
 
     @staticmethod
     def check_addon(name, queryset) -> None:
@@ -1684,10 +1621,6 @@ class AddonSerializer(serializers.ModelSerializer[Addon]):
                     {"configuration": list(get_form_errors(form))}
                 )
         return attrs
-
-    def create(self, validated_data):
-        validated_data["acting_user"] = self.context["request"].user
-        return super().create(validated_data)
 
     def save(self, **kwargs):
         result = super().save(**kwargs)

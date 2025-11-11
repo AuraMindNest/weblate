@@ -4,10 +4,7 @@
 
 """Test for management views."""
 
-from __future__ import annotations
-
 import os.path
-from typing import ClassVar
 
 from django.core import mail
 from django.urls import reverse
@@ -207,10 +204,7 @@ class RenameTest(ViewTestCase):
 
 
 class AnnouncementPermissionTestCase(ViewTestCase):
-    data: ClassVar[dict[str, str]] = {
-        "message": "Announcement testing",
-        "severity": "warning",
-    }
+    data = {"message": "Announcement testing", "severity": "warning"}
     outbox = 0
 
     def set_user_permissions(self) -> None:
@@ -283,9 +277,5 @@ class AnnouncementTest(AnnouncementPermissionTestCase):
 
 
 class AnnouncementNotifyTest(AnnouncementTest):
-    data: ClassVar[dict[str, str]] = {
-        "message": "Announcement testing",
-        "severity": "warning",
-        "notify": "1",
-    }
+    data = {"message": "Announcement testing", "severity": "warning", "notify": "1"}
     outbox = 1

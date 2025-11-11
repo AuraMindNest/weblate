@@ -8,8 +8,7 @@ import re
 from collections import Counter, defaultdict
 from functools import cache, lru_cache
 from itertools import chain
-from types import SimpleNamespace
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
@@ -27,14 +26,12 @@ from docutils.nodes import (
     problematic,
     reference,
     strong,
-    substitution_reference,
+    system_message,
 )
-from docutils.parsers.rst import Parser, languages
-from docutils.parsers.rst.states import Inliner
-from docutils.readers.standalone import Reader
-from docutils.writers.null import Writer
+from docutils.parsers.rst import languages
+from docutils.parsers.rst.states import Inliner, Struct
 
-from weblate.checks.base import TargetCheck
+from weblate.checks.base import MissingExtraDict, TargetCheck
 from weblate.utils.html import (
     MD_BROKEN_LINK,
     MD_LINK,
@@ -49,15 +46,10 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from django_stubs_ext import StrOrPromise
-    from docutils.nodes import (
-        system_message,
-    )
     from lxml.etree import _Element
 
-    from weblate.checks.base import MissingExtraDict
     from weblate.trans.models import Unit
 
-    from .base import FixupType
     from .models import Check
 
 BBCODE_MATCH = re.compile(
@@ -330,9 +322,9 @@ class MarkdownLinkCheck(MarkdownBaseCheck):
         src_anchors = {x[2] for x in src_match if x[2] and x[2][0] in link_start}
         return tgt_anchors != src_anchors
 
-    def get_fixup(self, unit: Unit) -> Iterable[FixupType] | None:
+    def get_fixup(self, unit: Unit):
         if MD_BROKEN_LINK.findall(unit.target):
-            return [("regex", MD_BROKEN_LINK.pattern, "](", "u")]
+            return [(MD_BROKEN_LINK.pattern, "](")]
         return None
 
 
@@ -416,9 +408,10 @@ class RSTBaseCheck(TargetCheck):
 
 @lru_cache(maxsize=512)
 def extract_rst_references(text: str) -> tuple[dict[str, str], Counter, list[str]]:
-    memo = SimpleNamespace()
+    memo = Struct()
     publisher = get_rst_publisher()
-    document = utils.new_document("", publisher.settings)
+    document = utils.new_document(None, publisher.settings)
+    document.reporter.stream = None
     memo.reporter = document.reporter
     memo.document = document
     memo.language = languages.get_language(
@@ -454,7 +447,7 @@ def extract_rst_references(text: str) -> tuple[dict[str, str], Counter, list[str
 
                     result.append((name, node.rawsource))
                     break
-        elif isinstance(node, (footnote_reference, substitution_reference)):
+        elif isinstance(node, footnote_reference):
             result.append((node.rawsource, node.rawsource))
             alltags.append(node.rawsource)
         elif isinstance(node, reference):
@@ -523,7 +516,7 @@ class RSTReferencesCheck(RSTBaseCheck):
         unit = check_obj.unit
 
         errors: list[StrOrPromise] = []
-        results: MissingExtraDict = cast("MissingExtraDict", defaultdict(list))
+        results: MissingExtraDict = defaultdict(list)
 
         # Merge plurals
         for result in self.check_target_generator(
@@ -555,15 +548,11 @@ class RSTReferencesCheck(RSTBaseCheck):
 
 @cache
 def get_rst_publisher() -> Publisher:
-    parser = Parser()
-    reader: Reader = Reader(parser)
-    writer = Writer()
-    publisher = Publisher(settings=None, reader=reader, parser=parser, writer=writer)
+    publisher = Publisher(settings=None)
+    publisher.set_components("standalone", "restructuredtext", "null")
     publisher.get_settings(
         # Never halt parsing with an exception
         halt_level=5,
-        # Disable warnings
-        warning_stream=False,
         # Do not allow file insertion
         file_insertion_enabled=False,
         # Following are needed in case django.contrib.admindocs is imported
@@ -579,7 +568,8 @@ def validate_rst_snippet(
     snippet: str, source_tags: tuple[str] | None = None
 ) -> tuple[list[str], list[str]]:
     publisher = get_rst_publisher()
-    document = utils.new_document("", publisher.settings)
+    document = utils.new_document(None, publisher.settings)
+    document.reporter.stream = None
 
     errors: list[str] = []
     roles: list[str] = []
@@ -598,8 +588,6 @@ def validate_rst_snippet(
                 "Too many autonumbered footnote",
                 # Can not work on snippets
                 "Enumerated list start value not ordinal",
-                # Substitutions are typically defined at the document level
-                "Undefined substitution referenced",
             )
         ):
             return
@@ -613,13 +601,15 @@ def validate_rst_snippet(
         errors.append(message)
 
     document.reporter.attach_observer(error_collector)
-    cast("Parser", publisher.reader.parser).parse(snippet, document)
+    publisher.reader.parser.parse(snippet, document)
     transformer = document.transformer
     transformer.populate_from_components(
         (
+            publisher.source,
             publisher.reader,
-            cast("Parser", publisher.reader.parser),
+            publisher.reader.parser,
             publisher.writer,
+            publisher.destination,
         )
     )
     while transformer.transforms:
@@ -627,7 +617,7 @@ def validate_rst_snippet(
             # Unsorted initially, and whenever a transform is added.
             transformer.transforms.sort()
             transformer.transforms.reverse()
-            transformer.sorted = True
+            transformer.sorted = 1
         priority, transform_class, pending, kwargs = transformer.transforms.pop()
         transform = transform_class(transformer.document, startnode=pending)
         transform.apply(**kwargs)
@@ -654,7 +644,7 @@ class RSTSyntaxCheck(RSTBaseCheck):
         unit = check_obj.unit
 
         errors: list[StrOrPromise] = []
-        results: MissingExtraDict = cast("MissingExtraDict", defaultdict(list))
+        results: MissingExtraDict = defaultdict(list)
 
         # Merge plurals
         for result in self.check_target_generator(

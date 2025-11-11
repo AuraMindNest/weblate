@@ -4,9 +4,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 msgid ""
 msgstr ""
-"Project-Id-Version: Weblate 5.14.1\n"
+"Project-Id-Version: Weblate 5.13.1\n"
 "Report-Msgid-Bugs-To: https://github.com/WeblateOrg/weblate/issues\n"
-"POT-Creation-Date: 2025-10-27 07:36+0000\n"
+"POT-Creation-Date: 2025-09-03 12:08+0000\n"
 "PO-Revision-Date: 2023-02-28 08:40+0000\n"
 "Last-Translator: Anonymous <noreply@weblate.org>\n"
 "Language-Team: Azerbaijani <https://hosted.weblate.org/projects/weblate/"
@@ -65,29 +65,29 @@ msgstr "Cmd+M, sonra %s"
 msgid "Ctrl+M then %s"
 msgstr "Ctrl + M sonra %s"
 
-#: weblate/static/editor/full.js:457
+#: weblate/static/editor/full.js:451
 #, javascript-format
 msgid "Press Cmd+I then %s to dismiss this."
 msgstr "Bunu rədd etmək üçün Cmd+I, sonra %s düyməsinə basın."
 
-#: weblate/static/editor/full.js:462
+#: weblate/static/editor/full.js:456
 #, javascript-format
 msgid "Press Ctrl+I then %s to dismiss this."
 msgstr "Bunu rədd etmək üçün Ctrl + I sonra %s basın."
 
-#: weblate/static/editor/full.js:604
+#: weblate/static/editor/full.js:598
 msgid "Clone to translation"
 msgstr ""
 
-#: weblate/static/editor/full.js:606
+#: weblate/static/editor/full.js:600
 msgid "Accept"
 msgstr "Qəbul et"
 
-#: weblate/static/editor/full.js:615
+#: weblate/static/editor/full.js:609
 msgid "Accept and approve"
 msgstr ""
 
-#: weblate/static/editor/full.js:627
+#: weblate/static/editor/full.js:621
 msgid "Delete entry"
 msgstr "Qeydi silin"
 
@@ -132,50 +132,47 @@ msgid "Sort this column"
 msgstr "Bu sütunu sırala"
 
 #: weblate/static/loader-bootstrap.js:579
-#: weblate/static/loader-bootstrap.js:608
 msgid "Error while loading page:"
 msgstr "Səhifə yüklənirkən xəta baş verdi:"
 
-#: weblate/static/loader-bootstrap.js:904
-#: weblate/static/loader-bootstrap.js:922
+#: weblate/static/loader-bootstrap.js:867
 msgid "Text copied to clipboard."
 msgstr "Mətn buferə kopyalandı."
 
-#: weblate/static/loader-bootstrap.js:908
-#: weblate/static/loader-bootstrap.js:927
+#: weblate/static/loader-bootstrap.js:871
 msgid "Please press Ctrl+C to copy."
 msgstr "Kopyalamaq üçün Ctrl+C düymələrinə basın."
 
-#: weblate/static/loader-bootstrap.js:954
+#: weblate/static/loader-bootstrap.js:894
 msgid "Search…"
 msgstr "Axtarış …"
 
-#: weblate/static/loader-bootstrap.js:955
+#: weblate/static/loader-bootstrap.js:895
 msgid "Available:"
 msgstr "İstifadə olunabilər:"
 
-#: weblate/static/loader-bootstrap.js:956
+#: weblate/static/loader-bootstrap.js:896
 msgid "Chosen:"
 msgstr "Seçilmiş:"
 
-#: weblate/static/loader-bootstrap.js:1292
+#: weblate/static/loader-bootstrap.js:1232
 msgid "Weblate is now scanning the repository, please be patient."
 msgstr "Weblate indi deponu skan edir, səbirli olun."
 
-#: weblate/static/loader-bootstrap.js:1408
+#: weblate/static/loader-bootstrap.js:1348
 msgid ""
 "Notification settings removed, please do not forget to save the changes."
 msgstr ""
 
-#: weblate/static/loader-bootstrap.js:1569
+#: weblate/static/loader-bootstrap.js:1507
 msgid "Custom range"
 msgstr ""
 
-#: weblate/static/loader-bootstrap.js:1570
+#: weblate/static/loader-bootstrap.js:1508
 msgid "Clear"
 msgstr "Təmizlə"
 
-#: weblate/static/loader-bootstrap.js:1572
+#: weblate/static/loader-bootstrap.js:1510
 #, fuzzy
 #| msgctxt "Minimal (for example two letter) name of day in week"
 #| msgid "Su"
@@ -183,7 +180,7 @@ msgctxt "Short name of day"
 msgid "Su"
 msgstr "Ba"
 
-#: weblate/static/loader-bootstrap.js:1573
+#: weblate/static/loader-bootstrap.js:1511
 #, fuzzy
 #| msgctxt "Minimal (for example two letter) name of day in week"
 #| msgid "Mo"
@@ -191,7 +188,7 @@ msgctxt "Short name of day"
 msgid "Mo"
 msgstr "Be"
 
-#: weblate/static/loader-bootstrap.js:1574
+#: weblate/static/loader-bootstrap.js:1512
 #, fuzzy
 #| msgctxt "Minimal (for example two letter) name of day in week"
 #| msgid "Tu"
@@ -199,7 +196,7 @@ msgctxt "Short name of day"
 msgid "Tu"
 msgstr "Ça"
 
-#: weblate/static/loader-bootstrap.js:1575
+#: weblate/static/loader-bootstrap.js:1513
 #, fuzzy
 #| msgctxt "Minimal (for example two letter) name of day in week"
 #| msgid "We"
@@ -207,7 +204,7 @@ msgctxt "Short name of day"
 msgid "We"
 msgstr "Ç"
 
-#: weblate/static/loader-bootstrap.js:1576
+#: weblate/static/loader-bootstrap.js:1514
 #, fuzzy
 #| msgctxt "Minimal (for example two letter) name of day in week"
 #| msgid "Th"
@@ -215,7 +212,7 @@ msgctxt "Short name of day"
 msgid "Th"
 msgstr "Ca"
 
-#: weblate/static/loader-bootstrap.js:1577
+#: weblate/static/loader-bootstrap.js:1515
 #, fuzzy
 #| msgctxt "Minimal (for example two letter) name of day in week"
 #| msgid "Fr"
@@ -223,7 +220,7 @@ msgctxt "Short name of day"
 msgid "Fr"
 msgstr "C"
 
-#: weblate/static/loader-bootstrap.js:1578
+#: weblate/static/loader-bootstrap.js:1516
 #, fuzzy
 #| msgctxt "Minimal (for example two letter) name of day in week"
 #| msgid "Sa"
@@ -231,104 +228,104 @@ msgctxt "Short name of day"
 msgid "Sa"
 msgstr "Ş"
 
-#: weblate/static/loader-bootstrap.js:1581
+#: weblate/static/loader-bootstrap.js:1519
 msgctxt "Short name of month"
 msgid "Jan"
 msgstr "Yan"
 
-#: weblate/static/loader-bootstrap.js:1582
+#: weblate/static/loader-bootstrap.js:1520
 msgctxt "Short name of month"
 msgid "Feb"
 msgstr "Fev"
 
-#: weblate/static/loader-bootstrap.js:1583
+#: weblate/static/loader-bootstrap.js:1521
 msgctxt "Short name of month"
 msgid "Mar"
 msgstr "Mar"
 
-#: weblate/static/loader-bootstrap.js:1584
+#: weblate/static/loader-bootstrap.js:1522
 msgctxt "Short name of month"
 msgid "Apr"
 msgstr "Apr"
 
-#: weblate/static/loader-bootstrap.js:1585
+#: weblate/static/loader-bootstrap.js:1523
 msgctxt "Short name of month"
 msgid "May"
 msgstr "May"
 
-#: weblate/static/loader-bootstrap.js:1586
+#: weblate/static/loader-bootstrap.js:1524
 msgctxt "Short name of month"
 msgid "Jun"
 msgstr "İyn"
 
-#: weblate/static/loader-bootstrap.js:1587
+#: weblate/static/loader-bootstrap.js:1525
 msgctxt "Short name of month"
 msgid "Jul"
 msgstr "İyl"
 
-#: weblate/static/loader-bootstrap.js:1588
+#: weblate/static/loader-bootstrap.js:1526
 msgctxt "Short name of month"
 msgid "Aug"
 msgstr "Avq"
 
-#: weblate/static/loader-bootstrap.js:1589
+#: weblate/static/loader-bootstrap.js:1527
 msgctxt "Short name of month"
 msgid "Sep"
 msgstr "Sen"
 
-#: weblate/static/loader-bootstrap.js:1590
+#: weblate/static/loader-bootstrap.js:1528
 msgctxt "Short name of month"
 msgid "Oct"
 msgstr "Okt"
 
-#: weblate/static/loader-bootstrap.js:1591
+#: weblate/static/loader-bootstrap.js:1529
 msgctxt "Short name of month"
 msgid "Nov"
 msgstr "Noy"
 
-#: weblate/static/loader-bootstrap.js:1592
+#: weblate/static/loader-bootstrap.js:1530
 msgctxt "Short name of month"
 msgid "Dec"
 msgstr "Dek"
 
-#: weblate/static/loader-bootstrap.js:1596
+#: weblate/static/loader-bootstrap.js:1534
 msgid "Today"
 msgstr "Bügun"
 
-#: weblate/static/loader-bootstrap.js:1597
+#: weblate/static/loader-bootstrap.js:1535
 msgid "Yesterday"
 msgstr ""
 
-#: weblate/static/loader-bootstrap.js:1601
+#: weblate/static/loader-bootstrap.js:1539
 msgid "Last 7 days"
 msgstr ""
 
-#: weblate/static/loader-bootstrap.js:1602
+#: weblate/static/loader-bootstrap.js:1540
 msgid "Last 30 days"
 msgstr ""
 
-#: weblate/static/loader-bootstrap.js:1603
+#: weblate/static/loader-bootstrap.js:1541
 msgid "This month"
 msgstr ""
 
-#: weblate/static/loader-bootstrap.js:1607
+#: weblate/static/loader-bootstrap.js:1545
 msgid "Last month"
 msgstr ""
 
-#: weblate/static/loader-bootstrap.js:1611
+#: weblate/static/loader-bootstrap.js:1549
 msgid "This year"
 msgstr ""
 
-#: weblate/static/loader-bootstrap.js:1615
+#: weblate/static/loader-bootstrap.js:1553
 msgid "Last year"
 msgstr ""
 
-#: weblate/static/loader-bootstrap.js:1719
+#: weblate/static/loader-bootstrap.js:1649
 msgctxt "Alert to user when opening browser developer console"
 msgid "Stop!"
 msgstr "Dayandır!"
 
-#: weblate/static/loader-bootstrap.js:1725
+#: weblate/static/loader-bootstrap.js:1655
 msgid ""
 "This is a browser feature intended for developers. If someone told you to "
 "copy-paste something here, they are likely trying to compromise your Weblate "
@@ -338,7 +335,7 @@ msgstr ""
 "sizə burada nəyisə kopyalayıb yapışdırmağı söyləyibsə, çox güman ki, Weblate "
 "hesabınızı pozmağa çalışır."
 
-#: weblate/static/loader-bootstrap.js:1731
+#: weblate/static/loader-bootstrap.js:1661
 msgid "See https://en.wikipedia.org/wiki/Self-XSS for more information."
 msgstr "Ətraflı məlumat üçün https://en.wikipedia.org/wiki/Self-XSS-ə baxın."
 

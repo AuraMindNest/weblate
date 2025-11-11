@@ -524,7 +524,6 @@ Groups
     :>json array components: link to associated components; see :http:get:`/api/components/(string:project)/(string:component)/`
     :>json array componentlists: link to associated componentlist; see :http:get:`/api/component-lists/(str:slug)/`
     :>json str defining_project: link to the defining project, used for :ref:`manage-acl`; see :http:get:`/api/projects/(string:project)/`
-    :>json array admins: link to associated administrators; see :http:get:`/api/users/(str:username)/`
 
     **Example JSON data:**
 
@@ -551,9 +550,6 @@ Groups
             "componentlist": "http://example.com/api/component-lists/new/",
             "components": [
                 "http://example.com/api/components/demo/weblate/"
-            ],
-            "admins": [
-                "http://example.com/api/users/exampleusername/"
             ]
         }
 
@@ -1104,10 +1100,6 @@ Projects
             --data-binary '{
                 "branch": "main",
                 "file_format": "po",
-                "file_format_params": {
-                    "po_line_wrap": 65535,
-                    "po_no_location": true
-                },
                 "filemask": "po/*.po",
                 "name": "Weblate",
                 "slug": "weblate",
@@ -1134,10 +1126,6 @@ Projects
         {
             "branch": "main",
             "file_format": "po",
-            "file_format_params": {
-                "po_line_wrap": 65535,
-                "po_no_location": true
-            },
             "filemask": "po/*.po",
             "name": "Weblate",
             "slug": "weblate",
@@ -1185,10 +1173,6 @@ Projects
         {
             "branch": "main",
             "file_format": "po",
-            "file_format_params": {
-                "po_line_wrap": 65535,
-                "po_no_location": true
-            },
             "filemask": "po/*.po",
             "git_export": "",
             "license": "",
@@ -1277,17 +1261,6 @@ Projects
     :<json string name: name of the label
     :<json string color: color of the label
 
-.. http:delete:: /api/projects/(string:project)/labels/(int:label_id)/
-
-   .. versionadded:: 5.14
-
-    Deletes a label from a project.
-
-    :param project: Project URL slug
-    :type project: string
-    :param label_id: ID of the label to delete
-    :type label_id: integer
-
 .. http:get:: /api/projects/(string:project)/credits/
 
     Returns contributor credits for a project.
@@ -1369,7 +1342,6 @@ Components
     :>json string intermediate: :ref:`component-intermediate`
     :>json string new_base: :ref:`component-new_base`
     :>json string file_format: :ref:`component-file_format`
-    :>json object file_format_params: :ref:`component-file_format_params`
     :>json string license: :ref:`component-license`
     :>json string agreement: :ref:`component-agreement`
     :>json string new_lang: :ref:`component-new_lang`
@@ -1414,10 +1386,6 @@ Components
         {
             "branch": "main",
             "file_format": "po",
-            "file_format_params": {
-                "po_line_wrap": 65535,
-                "po_no_location": true
-            },
             "filemask": "po/*.po",
             "git_export": "",
             "license": "",
@@ -1510,10 +1478,6 @@ Components
         {
             "branch": "main",
             "file_format": "po",
-            "file_format_params": {
-                "po_line_wrap": 65535,
-                "po_no_location": true
-            },
             "filemask": "po/*.po",
             "git_export": "",
             "license": "",
@@ -1553,7 +1517,6 @@ Components
     :type component: string
     :<json string branch: VCS repository branch
     :<json string file_format: file format of translations
-    :<json object file_format_params: parameters related to the file
     :<json string filemask: mask of translation files in the repository
     :<json string name: name of component
     :<json string slug: slug of component
@@ -1976,10 +1939,6 @@ Translations
             "component": {
                 "branch": "main",
                 "file_format": "po",
-                "file_format_params": {
-                    "po_line_wrap": 65535,
-                    "po_no_location": true
-                },
                 "filemask": "po/*.po",
                 "git_export": "",
                 "license": "",
@@ -2875,7 +2834,8 @@ update individual repositories; see
         Please use :http:post:`/api/components/(string:project)/(string:component)/repository/`
         instead which works properly with authentication for ACL limited projects.
 
-   .. versionremoved:: 5.14
+   Triggers update of a component (pulling from VCS and scanning for
+   translation changes).
 
 .. http:get:: /hooks/update/(string:project)/
 
@@ -2884,7 +2844,8 @@ update individual repositories; see
         Please use :http:post:`/api/projects/(string:project)/repository/`
         instead which works properly with authentication for ACL limited projects.
 
-   .. versionremoved:: 5.14
+   Triggers update of all components in a project (pulling from VCS and
+   scanning for translation changes).
 
 .. http:post:: /hooks/github/
 

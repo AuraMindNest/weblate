@@ -9,7 +9,7 @@ import os.path
 import re
 import shutil
 import tempfile
-from typing import TYPE_CHECKING, Any, ClassVar, NoReturn
+from typing import Any, NoReturn
 from unittest.mock import patch
 
 import responses
@@ -20,7 +20,7 @@ from responses import matchers
 
 from weblate.trans.models import Component, Project
 from weblate.trans.tests.utils import RepoTestMixin, TempDirMixin
-from weblate.vcs.base import RepositoryError
+from weblate.vcs.base import Repository, RepositoryError
 from weblate.vcs.git import (
     AzureDevOpsRepository,
     BitbucketCloudRepository,
@@ -36,9 +36,6 @@ from weblate.vcs.git import (
     SubversionRepository,
 )
 from weblate.vcs.mercurial import HgRepository
-
-if TYPE_CHECKING:
-    from weblate.vcs.base import Repository
 
 
 class AzureDevOpsFakeRepository(AzureDevOpsRepository):
@@ -126,7 +123,7 @@ class VCSGitTest(TestCase, RepoTestMixin, TempDirMixin):
     _class: type[Repository] = GitRepository
     _vcs = "git"
     _sets_push = True
-    _remote_branches: ClassVar[list[str]] = ["main", "translations"]
+    _remote_branches = ["main", "translations"]
     _remote_branch = "main"
 
     def setUp(self) -> None:
@@ -1784,7 +1781,7 @@ class VCSGerritTest(VCSGitUpstreamTest):
 class VCSSubversionTest(VCSGitTest):
     _class = SubversionRepository
     _vcs = "subversion"
-    _remote_branches: ClassVar[list[str]] = []
+    _remote_branches = []
     _remote_branch = "master"
 
     def test_clone(self) -> None:
@@ -1835,7 +1832,7 @@ class VCSHgTest(VCSGitTest):
 
     _class = HgRepository
     _vcs = "mercurial"
-    _remote_branches: ClassVar[list[str]] = []
+    _remote_branches = []
     _remote_branch = "default"
 
     def test_configure_remote(self) -> None:
@@ -1874,7 +1871,7 @@ class VCSLocalTest(VCSGitTest):
 
     _class = LocalRepository
     _vcs = "local"
-    _remote_branches: ClassVar[list[str]] = []
+    _remote_branches = []
     _remote_branch = "main"
 
     @classmethod
@@ -1931,10 +1928,8 @@ class VCSBitbucketServerTest(VCSGitUpstreamTest):
     _sets_push = False
 
     _bbhost = "https://api.selfhosted.com"
-    _bb_api_error_stub: ClassVar[dict] = {
-        "errors": [{"context": "<string>", "message": "<string>"}]
-    }
-    _bb_fork_stub: ClassVar[dict] = {
+    _bb_api_error_stub = {"errors": [{"context": "<string>", "message": "<string>"}]}
+    _bb_fork_stub = {
         "id": "222",
         "slug": "bb_fork",
         "project": {"key": "bb_fork_pk"},

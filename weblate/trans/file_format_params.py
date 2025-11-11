@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar, TypedDict, cast
+from typing import TYPE_CHECKING, cast
 
 from django import forms
 from django.utils.functional import classproperty
@@ -21,20 +21,14 @@ if TYPE_CHECKING:
     from translate.storage.yaml import YAMLFile
 
 
-class FieldKwargsDict(TypedDict, total=False):
-    min_value: int
-    max_value: int
-    min_length: int
-
-
 class BaseFileFormatParam:
     name: str = ""
     file_formats: Sequence[str] = []
     field_class: type[forms.Field] = forms.CharField
     label: StrOrPromise = ""
     default: str | int | bool
-    field_kwargs: ClassVar[FieldKwargsDict] = {}
-    choices: ClassVar[list[tuple[str | int, StrOrPromise]] | None] = None
+    field_kwargs: dict = {}
+    choices: list[tuple[str | int, StrOrPromise]] | None = None
     help_text: StrOrPromise | None = None
 
     @classmethod
@@ -59,7 +53,7 @@ class BaseFileFormatParam:
         }
 
     def get_field_kwargs(self) -> dict:
-        kwargs = cast("dict", self.field_kwargs.copy())
+        kwargs = self.field_kwargs.copy()
         kwargs.update({"required": False, "initial": self.default})
         if self.choices is not None:
             kwargs["choices"] = self.choices
@@ -102,14 +96,6 @@ def get_default_params_for_file_format(file_format: str) -> dict[str, str | int 
     return {param.name: param.default for param in params}
 
 
-def strip_unused_file_format_params(file_format: str, file_format_params: dict) -> dict:
-    """Clean file format parameters, removing those not applicable to the given file format."""
-    for param in FILE_FORMATS_PARAMS:
-        if file_format not in param.file_formats:
-            file_format_params.pop(param.name, None)
-    return file_format_params
-
-
 class JSONOutputCustomizationBaseParam(BaseFileFormatParam):
     file_formats = (
         "json",
@@ -144,7 +130,7 @@ class JSONOutputIndentation(JSONOutputCustomizationBaseParam):
     label = gettext_lazy("JSON indentation")
     field_class = forms.IntegerField
     default = 4
-    field_kwargs: ClassVar[FieldKwargsDict] = {"min_value": 0}
+    field_kwargs = {"min_value": 0}
 
 
 @register_file_format_param
@@ -152,7 +138,7 @@ class JSONOutputIndentStyle(JSONOutputCustomizationBaseParam):
     name = "json_indent_style"
     label = gettext_lazy("JSON indentation style")
     field_class = forms.ChoiceField
-    choices: ClassVar[list[tuple[str | int, StrOrPromise]] | None] = [
+    choices = [
         ("spaces", gettext_lazy("Spaces")),
         ("tabs", gettext_lazy("Tabs")),
     ]
@@ -192,7 +178,7 @@ class GettextPoLineWrap(BaseFileFormatParam):
     name = "po_line_wrap"
     label = gettext_lazy("Long lines wrapping")
     field_class = forms.ChoiceField
-    choices: ClassVar[list[tuple[str | int, StrOrPromise]] | None] = [
+    choices = [
         (
             77,
             gettext_lazy(
@@ -256,7 +242,7 @@ class YAMLOutputIndentation(BaseYAMLFormatParam):
     label = gettext_lazy("YAML indentation")
     field_class = forms.IntegerField
     default = 2
-    field_kwargs: ClassVar[FieldKwargsDict] = {"min_value": 1, "max_value": 10}
+    field_kwargs = {"min_value": 1, "max_value": 10}
 
     def setup_store(self, store: TranslationStore, **file_format_params) -> None:
         cast("YAMLFile", store).dump_args["indent"] = int(  # type: ignore[assignment]
@@ -270,7 +256,7 @@ class YAMLLineWrap(BaseYAMLFormatParam):
     label = gettext_lazy("Long lines wrapping")
     field_class = forms.ChoiceField
     default = 80
-    choices: ClassVar[list[tuple[str | int, StrOrPromise]] | None] = [
+    choices = [
         (80, gettext_lazy("Wrap lines at 80 chars")),
         (100, gettext_lazy("Wrap lines at 100 chars")),
         (120, gettext_lazy("Wrap lines at 120 chars")),
@@ -289,7 +275,7 @@ class YAMLLineBreak(BaseYAMLFormatParam):
     name = "yaml_line_break"
     label = gettext_lazy("Line breaks")
     field_class = forms.ChoiceField
-    choices: ClassVar[list[tuple[str | int, StrOrPromise]] | None] = [
+    choices = [
         ("dos", gettext_lazy("DOS (\\r\\n)")),
         ("unix", gettext_lazy("UNIX (\\n)")),
         ("mac", gettext_lazy("MAC (\\r)")),
@@ -336,7 +322,7 @@ class FlatXMLRootName(BaseFlatXMLFormatParam):
     label = gettext_lazy("FlatXML Root name")
     field_class = forms.CharField
     default = "root"
-    field_kwargs: ClassVar[FieldKwargsDict] = {"min_length": 1}
+    field_kwargs = {"min_length": 1}
 
 
 @register_file_format_param
@@ -345,7 +331,7 @@ class FlatXMLValueName(BaseFlatXMLFormatParam):
     label = gettext_lazy("FlatXML value name")
     field_class = forms.CharField
     default = "str"
-    field_kwargs: ClassVar[FieldKwargsDict] = {"min_length": 1}
+    field_kwargs = {"min_length": 1}
 
 
 @register_file_format_param
@@ -354,4 +340,4 @@ class FlatXMLKeyName(BaseFlatXMLFormatParam):
     label = gettext_lazy("FlatXML key name")
     field_class = forms.CharField
     default = "key"
-    field_kwargs: ClassVar[FieldKwargsDict] = {"min_length": 1}
+    field_kwargs = {"min_length": 1}

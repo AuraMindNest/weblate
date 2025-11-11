@@ -31,10 +31,6 @@ if TYPE_CHECKING:
     from .flags import Flags
     from .models import Check
 
-FixupType = (
-    tuple[Literal["regex"], str, str, str] | tuple[Literal["plurals"], list[str]]
-)
-
 
 class MissingExtraDict(TypedDict, total=False):
     missing: list[str]
@@ -59,7 +55,7 @@ class BaseCheck(ClassLoaderProtocol):
     always_display = False
     batch_project_wide = False
     skip_suggestions = False
-    extra_enable_strings: tuple[str, ...] = ()
+    extra_enable_strings: list[str] = []
 
     def get_identifier(self) -> str:
         return self.check_id
@@ -182,7 +178,7 @@ class BaseCheck(ClassLoaderProtocol):
     def get_description(self, check_obj: Check) -> StrOrPromise:
         return self.description
 
-    def get_fixup(self, unit: Unit) -> Iterable[FixupType] | None:
+    def get_fixup(self, unit: Unit) -> Iterable[tuple[str, str, str]] | None:
         return None
 
     def render(self, request: AuthenticatedHttpRequest, unit: Unit) -> StrOrPromise:

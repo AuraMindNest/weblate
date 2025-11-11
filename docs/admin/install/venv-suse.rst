@@ -30,8 +30,8 @@ Installing on SUSE and openSUSE
     # Web server option 2: Apache with ``mod_wsgi``
     zypper install apache2 apache2-mod_wsgi
 
-    # Caching backend: Valkey
-    zypper install valkey-server
+    # Caching backend: Redis
+    zypper install redis-server
 
     # Database server: PostgreSQL
     zypper install postgresql postgresql-contrib

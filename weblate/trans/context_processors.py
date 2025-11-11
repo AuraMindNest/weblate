@@ -26,8 +26,6 @@ SUPPORT_URL = "https://weblate.org/support/"
 
 CONTEXT_SETTINGS = [
     "SITE_TITLE",
-    "SITE_DOMAIN",
-    "ENABLE_HTTPS",
     "OFFER_HOSTING",
     "ENABLE_AVATARS",
     "ENABLE_SHARING",
@@ -162,7 +160,7 @@ def weblate_context(request: AuthenticatedHttpRequest):
         "site_url": get_site_url(),
         "site_domain": get_site_domain(),
         "login_redirect_url": login_redirect_url,
-        "has_antispam": False,  # Akismet integration removed
+        "has_antispam": bool(settings.AKISMET_API_KEY),
         "has_sentry": bool(settings.SENTRY_DSN),
         "watched_projects": watched_projects,
         "allow_index": False,

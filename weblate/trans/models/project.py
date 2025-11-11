@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from collections import UserDict
-from typing import TYPE_CHECKING, ClassVar, Self, cast
+from typing import TYPE_CHECKING, ClassVar, cast
 
 from django.conf import settings
 from django.core.cache import cache
@@ -24,6 +24,7 @@ from weblate.memory.tasks import import_memory
 from weblate.trans.actions import ActionEvents
 from weblate.trans.defines import PROJECT_NAME_LENGTH
 from weblate.trans.mixins import CacheKeyMixin, LockMixin, PathMixin
+from weblate.trans.models.pending import PendingUnitChange
 from weblate.trans.validators import validate_check_flags
 from weblate.utils.site import get_site_url
 from weblate.utils.stats import ProjectLanguage, ProjectStats, prefetch_stats
@@ -38,7 +39,7 @@ from weblate.utils.validators import (
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from weblate.auth.models import AuthenticatedHttpRequest, Group, User
+    from weblate.auth.models import Group, User
     from weblate.machinery.types import SettingsDict
     from weblate.trans.models.component import Component, ComponentQuerySet
     from weblate.trans.models.label import Label
@@ -90,15 +91,9 @@ class ProjectLanguageFactory(UserDict):
             instance.__dict__["workflow_settings"] = None
 
 
-class ProjectQuerySet(models.QuerySet["Project"]):
+class ProjectQuerySet(models.QuerySet):
     def order(self):
         return self.order_by("name")
-
-    def only(self, *fields: str) -> Self:
-        only_fields = set(fields)
-        # These are used in Project.__init__
-        only_fields.update(("access_control", "translation_review", "source_review"))
-        return super().only(*only_fields)
 
     def search(self, query: str):
         return self.filter(Q(name__icontains=query) | Q(slug__icontains=query))
@@ -323,8 +318,6 @@ class Project(models.Model, PathMixin, CacheKeyMixin, LockMixin):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.old_access_control = self.access_control
-        self.old_translation_review = self.translation_review
-        self.old_source_review = self.source_review
         self.stats = ProjectStats(self)
         self.acting_user: User | None = None
         self.project_languages = ProjectLanguageFactory(self)
@@ -466,11 +459,7 @@ class Project(models.Model, PathMixin, CacheKeyMixin, LockMixin):
     @property
     def count_pending_units(self):
         """Check whether there are any uncommitted changes."""
-        from weblate.trans.models import Unit
-
-        return Unit.objects.filter(
-            translation__component__project=self, pending_changes__isnull=False
-        ).count()
+        return PendingUnitChange.objects.for_project(self).count()
 
     def needs_commit(self):
         """Check whether there are some not committed changes."""
@@ -498,36 +487,27 @@ class Project(models.Model, PathMixin, CacheKeyMixin, LockMixin):
     def repo_needs_push(self):
         return self.on_repo_components(False, "repo_needs_push")
 
-    def do_update(
-        self, request: AuthenticatedHttpRequest | None = None, method: str | None = None
-    ):
+    def do_update(self, request=None, method=None):
         """Update all Git repos."""
         return self.on_repo_components(True, "do_update", request, method=method)
 
-    def do_push(self, request: AuthenticatedHttpRequest | None = None):
+    def do_push(self, request=None):
         """Push all Git repos."""
         return self.on_repo_components(True, "do_push", request)
 
-    def do_reset(
-        self,
-        request: AuthenticatedHttpRequest | None = None,
-        *,
-        keep_changes: bool = False,
-    ) -> bool:
+    def do_reset(self, request=None):
         """Push all Git repos."""
-        return self.on_repo_components(
-            True, "do_reset", request, keep_changes=keep_changes
-        )
+        return self.on_repo_components(True, "do_reset", request)
 
-    def do_cleanup(self, request: AuthenticatedHttpRequest | None = None):
+    def do_cleanup(self, request=None):
         """Push all Git repos."""
         return self.on_repo_components(True, "do_cleanup", request)
 
-    def do_file_sync(self, request: AuthenticatedHttpRequest | None = None):
+    def do_file_sync(self, request=None):
         """Force updating of all files."""
         return self.on_repo_components(True, "do_file_sync", request)
 
-    def do_file_scan(self, request: AuthenticatedHttpRequest | None = None):
+    def do_file_scan(self, request=None):
         """Rescanls all VCS repos."""
         return self.on_repo_components(True, "do_file_scan", request)
 
@@ -806,20 +786,3 @@ class Project(models.Model, PathMixin, CacheKeyMixin, LockMixin):
             return qs.exclude(filter_)
 
         return self.get_child_components_access(user, filter_callback)
-
-    def needs_license(self, access_control: int | None = None) -> bool:
-        """
-        Whether the project components need a license.
-
-        License is needed on publicly accessible projects when
-        enforced by configuration and any licenses are available.
-        """
-        if access_control is None:
-            access_control = self.access_control
-
-        return (
-            access_control in {Project.ACCESS_PUBLIC, Project.ACCESS_PROTECTED}
-            and settings.LICENSE_REQUIRED
-            and not settings.LOGIN_REQUIRED_URLS
-            and (settings.LICENSE_FILTER is None or settings.LICENSE_FILTER)
-        )

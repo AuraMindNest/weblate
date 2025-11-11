@@ -6,12 +6,8 @@ from __future__ import annotations
 
 import re
 import threading
-from typing import TYPE_CHECKING
 
-from pyparsing import Optional, QuotedString, Regex, ZeroOrMore
-
-if TYPE_CHECKING:
-    from pyparsing import ParserElement
+from pyparsing import Optional, ParserElement, QuotedString, Regex, ZeroOrMore
 
 
 def single_value_flag(func, validation=None):

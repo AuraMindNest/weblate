@@ -3,41 +3,23 @@
 # Copyright © Michal Čihař <michal@weblate.org>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
-from __future__ import annotations
 
 import argparse
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
-from git import Repo
+from git import Commit, Repo
+from git.diff import Diff
 
 import weblate.utils.version
-
-if TYPE_CHECKING:
-    from git import Commit
-    from git.diff import Diff
 
 VERSION = weblate.utils.version.VERSION_BASE
 ROOT_DIR = Path(__file__).parent.parent
 
 CategoryType = Literal["code", "translations", "docs"]
 
-# Ignore known bots
-IGNORE_AUTHORS: set[str] = {
-    "GitHub",
-    "Anonymous",
-    "Hosted Weblate",
-    "Copilot",
-}
-
-# GitHub sometimes uses username instead of full name
-MAP_AUTHORS: dict[str, str] = {
-    "nijel": "Michal Čihař",
-    "gersona": "Gersona",
-    "gers": "Gersona",
-    "KarenKonou": "Karen Konou",
-}
+IGNORE_AUTHORS: set[str] = {"GitHub", "Anonymous", "Hosted Weblate"}
 
 CATEGORIES: dict[CategoryType, str] = {
     "code": "Code contributions",
@@ -89,9 +71,7 @@ def get_commit_authors(commit: Commit) -> set[str]:
         for line in str(commit.message).splitlines()
         if line.lower().startswith("co-authored-by:")
     )
-    return {
-        MAP_AUTHORS.get(author, author) for author in authors if is_valid_author(author)
-    }
+    return {author for author in authors if is_valid_author(author)}
 
 
 def get_contributors() -> dict[CategoryType, list[str]]:

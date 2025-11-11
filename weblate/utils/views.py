@@ -17,7 +17,9 @@ from django.core.paginator import EmptyPage, Paginator
 from django.http import (
     FileResponse,
     Http404,
+    HttpRequest,
     HttpResponse,
+    HttpResponseBase,
     HttpResponseRedirect,
 )
 from django.shortcuts import get_object_or_404
@@ -34,6 +36,7 @@ from weblate.trans.models import Category, Component, Project, Translation, Unit
 from weblate.utils import messages
 from weblate.utils.errors import report_error
 from weblate.utils.stats import (
+    BaseStats,
     CategoryLanguage,
     ProjectLanguage,
     prefetch_stats,
@@ -41,19 +44,10 @@ from weblate.utils.stats import (
 from weblate.vcs.git import LocalRepository
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
-
     from django.db.models import Model
-    from django.http import (
-        HttpRequest,
-        HttpResponseBase,
-    )
 
     from weblate.auth.models import AuthenticatedHttpRequest
     from weblate.trans.mixins import BaseURLMixin
-    from weblate.utils.stats import (
-        BaseStats,
-    )
 
 
 class UnsupportedPathObjectError(Http404):
@@ -228,7 +222,7 @@ SORT_LOOKUP = {key.replace("-", ""): value for key, value in SORT_CHOICES.items(
 
 def get_sort_name(request: AuthenticatedHttpRequest, obj=None):
     """Get sort name."""
-    if isinstance(obj, (Project, Category)):
+    if isinstance(obj, Project | Category):
         default = "component,-priority"
     elif hasattr(obj, "component") and obj.component.is_glossary:
         default = "source"
@@ -498,7 +492,7 @@ def import_message(
         messages.success(request, message)
 
 
-def iter_files(filenames: list[str]) -> Generator[str]:
+def iter_files(filenames):
     for filename in filenames:
         if os.path.isdir(filename):
             for root, _unused, files in os.walk(filename):
@@ -514,7 +508,7 @@ def zip_download(
     filenames: list[str],
     name: str = "translations",
     extra: dict[str, bytes | str] | None = None,
-) -> HttpResponse:
+):
     response = HttpResponse(content_type="application/zip")
     with ZipFile(cast("BinaryIO", response), "w", strict_timestamps=False) as zipfile:
         for filename in iter_files(filenames):

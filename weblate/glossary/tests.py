@@ -9,7 +9,6 @@ from __future__ import annotations
 import csv
 import json
 from io import StringIO
-from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.urls import reverse
@@ -20,15 +19,12 @@ from weblate.glossary.tasks import (
     sync_terminology,
 )
 from weblate.lang.models import Language
-from weblate.trans.models import Unit
+from weblate.trans.models import Translation, Unit
 from weblate.trans.tests.test_views import ViewTestCase
 from weblate.trans.tests.utils import get_test_file
 from weblate.utils.db import TransactionsTestMixin
 from weblate.utils.hash import calculate_hash
 from weblate.utils.state import STATE_READONLY, STATE_TRANSLATED
-
-if TYPE_CHECKING:
-    from weblate.trans.models import Translation
 
 TEST_TBX = get_test_file("terms.tbx")
 TEST_CSV = get_test_file("terms.csv")
@@ -371,17 +367,6 @@ class GlossaryTest(TransactionsTestMixin, ViewTestCase):
         # Should be added to the source and translation only
         self.assertEqual(Unit.objects.count(), start + 2)
 
-    def test_add_existing(self) -> None:
-        """Test for adding term from translate page while there is existing one."""
-        glossary = self.glossary_component.translation_set.get(
-            language=self.translation.language
-        )
-        glossary.add_unit(None, "", "Thank", "Díky", author=self.user)
-        start = Unit.objects.count()
-        self.do_add_unit()
-        # Should be added to the source and translation only
-        self.assertEqual(Unit.objects.count(), start + 2)
-
     def test_add_terminology(self) -> None:
         start = Unit.objects.count()
         self.do_add_unit(expected_status=403, terminology=1)
@@ -575,46 +560,22 @@ class GlossaryTest(TransactionsTestMixin, ViewTestCase):
         )
         self.assertNotContains(response, "Prohibited initial character")
 
-    def removal_test(
-        self,
-        translation: Translation,
-        *,
-        commit: bool = False,
-        expected_source: int = 0,
-        **kwargs,
-    ) -> None:
-        self.make_manager()
+    def removal_test(self, translation: Translation, *, commit: bool = False) -> None:
         self.assertEqual(translation.unit_set.count(), 0)
-        self.do_add_unit(**kwargs)
+        self.add_term("hello", "ahoj")
         if commit:
             self.glossary_component.commit_pending("test", None)
         self.assertEqual(translation.unit_set.count(), 1)
-        unit = translation.unit_set.get(source="source")
+        unit = translation.unit_set.get(source="hello")
         translation.delete_unit(None, unit)
         self.assertEqual(translation.unit_set.count(), 0)
-        self.assertEqual(
-            self.glossary_component.source_translation.unit_set.count(), expected_source
-        )
-
-        # Verify that reparsing will not bring the unit back
-        self.glossary_component.create_translations_immediate(force=True)
-        # For terminology strings, the string will reappear here
-        self.assertEqual(translation.unit_set.count(), expected_source)
-        self.assertEqual(
-            self.glossary_component.source_translation.unit_set.count(), expected_source
-        )
+        self.assertEqual(self.glossary_component.source_translation.unit_set.count(), 0)
 
     def test_string_removal(self) -> None:
         self.removal_test(self.glossary)
 
     def test_source_string_removal(self) -> None:
         self.removal_test(self.glossary_component.source_translation)
-
-    def test_string_removal_terminology(self) -> None:
-        self.removal_test(self.glossary, terminology=1, expected_source=1)
-
-    def test_source_string_removal_terminology(self) -> None:
-        self.removal_test(self.glossary_component.source_translation, terminology=1)
 
     def test_string_removal_commit(self) -> None:
         self.removal_test(self.glossary, commit=True)

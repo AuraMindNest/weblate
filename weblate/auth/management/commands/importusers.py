@@ -1,25 +1,18 @@
 # Copyright © Michal Čihař <michal@weblate.org>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
-from __future__ import annotations
 
+import argparse
 import json
-from pathlib import Path
-from typing import TYPE_CHECKING
-
-from django.core.management.base import CommandError
 
 from weblate.auth.models import User
 from weblate.utils.management.base import BaseCommand
-
-if TYPE_CHECKING:
-    from django.core.management.base import CommandParser
 
 
 class Command(BaseCommand):
     help = "imports users from JSON dump of database"
 
-    def add_arguments(self, parser: CommandParser) -> None:
+    def add_arguments(self, parser) -> None:
         parser.add_argument(
             "--check",
             action="store_true",
@@ -27,17 +20,13 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "json-file",
-            type=Path,
+            type=argparse.FileType("r"),
             help="JSON file containing user dump to import",
         )
 
     def handle(self, *args, **options) -> None:
-        try:
-            with options["json-file"].open("r") as handle:
-                data = json.load(handle)
-        except OSError as error:
-            msg = f"Could not open file: {error}"
-            raise CommandError(msg) from error
+        data = json.load(options["json-file"])
+        options["json-file"].close()
 
         for line in data:
             if "fields" in line:

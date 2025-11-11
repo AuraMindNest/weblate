@@ -28,7 +28,7 @@ apt-get install -y \
     git-svn \
     gnupg \
     subversion \
-    postgresql-client-18 \
+    postgresql-client-17 \
     pkg-config \
     libxml2-dev \
     libacl1-dev \

@@ -106,12 +106,6 @@ LICENSES = (
         False,
     ),
     (
-        "Advanced-Cryptics-Dictionary",
-        "Advanced Cryptics Dictionary License",
-        "https://spdx.org/licenses/Advanced-Cryptics-Dictionary.html",
-        False,
-    ),
-    (
         "AGPL-1.0-only",
         "Affero General Public License v1.0 only",
         "https://spdx.org/licenses/AGPL-1.0-only.html",
@@ -487,18 +481,12 @@ LICENSES = (
         "BSD-3-Clause-Open-MPI",
         "BSD 3-Clause Open MPI variant",
         "https://spdx.org/licenses/BSD-3-Clause-Open-MPI.html",
-        True,
+        False,
     ),
     (
         "BSD-3-Clause-Sun",
         "BSD 3-Clause Sun Microsystems",
         "https://spdx.org/licenses/BSD-3-Clause-Sun.html",
-        False,
-    ),
-    (
-        "BSD-3-Clause-Tso",
-        "BSD 3-Clause Tso variant",
-        "https://spdx.org/licenses/BSD-3-Clause-Tso.html",
         False,
     ),
     (
@@ -529,12 +517,6 @@ LICENSES = (
         "BSD-Advertising-Acknowledgement",
         "BSD Advertising Acknowledgement License",
         "https://spdx.org/licenses/BSD-Advertising-Acknowledgement.html",
-        False,
-    ),
-    (
-        "BSD-Mark-Modifications",
-        "BSD Mark Modifications License",
-        "https://spdx.org/licenses/BSD-Mark-Modifications.html",
         False,
     ),
     (
@@ -1300,12 +1282,6 @@ LICENSES = (
         False,
     ),
     (
-        "WTFNMFPL",
-        "Do What The F*ck You Want To But It's Not My Fault Public License",
-        "https://spdx.org/licenses/WTFNMFPL.html",
-        False,
-    ),
-    (
         "WTFPL",
         "Do What The F*ck You Want To Public License",
         "https://spdx.org/licenses/WTFPL.html",
@@ -1448,24 +1424,6 @@ LICENSES = (
         "EU DataGrid Software License",
         "https://spdx.org/licenses/EUDatagrid.html",
         True,
-    ),
-    (
-        "ESA-PL-strong-copyleft-2.4",
-        "European Space Agency Public License (ESA-PL) - V2.4 - Strong Copyleft (Type 1)",
-        "https://spdx.org/licenses/ESA-PL-strong-copyleft-2.4.html",
-        False,
-    ),
-    (
-        "ESA-PL-permissive-2.4",
-        "European Space Agency Public License – v2.4 – Permissive (Type 3)",
-        "https://spdx.org/licenses/ESA-PL-permissive-2.4.html",
-        False,
-    ),
-    (
-        "ESA-PL-weak-copyleft-2.4",
-        "European Space Agency Public License – v2.4 – Weak Copyleft (Type 2)",
-        "https://spdx.org/licenses/ESA-PL-weak-copyleft-2.4.html",
-        False,
     ),
     (
         "EUPL-1.0",
@@ -2014,12 +1972,6 @@ LICENSES = (
         False,
     ),
     (
-        "HPND-SMC",
-        "Historical Permission Notice and Disclaimer - SMC variant",
-        "https://spdx.org/licenses/HPND-SMC.html",
-        False,
-    ),
-    (
         "HPND-UC",
         "Historical Permission Notice and Disclaimer - University of California variant",
         "https://spdx.org/licenses/HPND-UC.html",
@@ -2077,12 +2029,6 @@ LICENSES = (
         "HTMLTIDY",
         "HTML Tidy License",
         "https://spdx.org/licenses/HTMLTIDY.html",
-        False,
-    ),
-    (
-        "hyphen-bulgarian",
-        "hyphen-bulgarian License",
-        "https://spdx.org/licenses/hyphen-bulgarian.html",
         False,
     ),
     (
@@ -2758,12 +2704,6 @@ LICENSES = (
         False,
     ),
     (
-        "NIST-PD-TNT",
-        "NIST    Public Domain Notice TNT variant",
-        "https://spdx.org/licenses/NIST-PD-TNT.html",
-        False,
-    ),
-    (
         "NIST-PD",
         "NIST Public Domain Notice",
         "https://spdx.org/licenses/NIST-PD.html",
@@ -3112,12 +3052,6 @@ LICENSES = (
         True,
     ),
     (
-        "OSSP",
-        "OSSP License",
-        "https://spdx.org/licenses/OSSP.html",
-        False,
-    ),
-    (
         "PADL",
         "PADL License",
         "https://spdx.org/licenses/PADL.html",
@@ -3397,12 +3331,6 @@ LICENSES = (
         "SGI-OpenGL",
         "SGI OpenGL License",
         "https://spdx.org/licenses/SGI-OpenGL.html",
-        False,
-    ),
-    (
-        "SGMLUG-PM",
-        "SGMLUG Parser Materials License",
-        "https://spdx.org/licenses/SGMLUG-PM.html",
         False,
     ),
     (

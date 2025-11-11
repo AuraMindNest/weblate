@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os.path
 from io import StringIO
-from typing import TYPE_CHECKING, ClassVar, Literal, TypedDict
+from typing import TYPE_CHECKING
 
 import cairo
 import gi
@@ -33,6 +33,7 @@ from weblate.utils import messages
 from weblate.utils.icons import find_static_file
 from weblate.utils.site import get_site_url
 from weblate.utils.stats import (
+    BaseStats,
     GlobalStats,
     ProjectLanguage,
     ProjectLanguageStats,
@@ -44,10 +45,6 @@ from weblate.utils.views import get_percent_color
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
     from django_stubs_ext import StrOrPromise
-
-    from weblate.utils.stats import (
-        BaseStats,
-    )
 
 gi.require_version("PangoCairo", "1.0")
 gi.require_version("Pango", "1.0")
@@ -72,16 +69,6 @@ def register_widget(widget):
     return widget
 
 
-class ExtraParametersDict(TypedDict):
-    name: str
-    label: StrOrPromise
-    type: Literal["number"]
-    default: int
-    min: int
-    max: int
-    step: int
-
-
 class Widget:
     """Generic widget class."""
 
@@ -91,7 +78,7 @@ class Widget:
     extension = "png"
     content_type = "image/png"
     order = 100
-    extra_parameters: ClassVar[list[ExtraParametersDict]] = []
+    extra_parameters: list[dict] = []
 
     def __init__(self, obj, color=None, lang=None) -> None:
         """Create Widget object."""
@@ -461,12 +448,7 @@ class MultiLanguageWidget(SVGWidget):
     template_name = "svg/multi-language-badge.svg"
     verbose = pgettext_lazy("Status widget name", "Vertical language bar chart")
 
-    COLOR_MAP: ClassVar[dict[str, str | None]] = {
-        "red": "#fa3939",
-        "green": "#3fed48",
-        "blue": "#3f85ed",
-        "auto": None,
-    }
+    COLOR_MAP = {"red": "#fa3939", "green": "#3fed48", "blue": "#3f85ed", "auto": None}
 
     def render(self, request: HttpRequest, response: HttpResponse) -> None:
         translations = []
@@ -474,7 +456,7 @@ class MultiLanguageWidget(SVGWidget):
         color = self.COLOR_MAP[self.color]
         language_width = 190
         languages: list[BaseStats | ProjectLanguage]
-        if isinstance(self.stats, (ProjectLanguageStats, TranslationStats)):
+        if isinstance(self.stats, ProjectLanguageStats | TranslationStats):
             languages = [self.stats]
         elif isinstance(self.obj, ProjectLanguage):
             languages = [self.obj]
@@ -488,7 +470,7 @@ class MultiLanguageWidget(SVGWidget):
                 continue
             language = stats.language
             percent = stats.translated_percent
-            if self.color == "auto" or color is None:
+            if self.color == "auto":
                 color = get_percent_color(percent)
             language_name = str(language)
 
@@ -554,7 +536,7 @@ class LanguageBadgeWidget(BaseSVGBadgeWidget):
     order = 83
     # Translators: status widget name
     verbose = gettext_lazy("Language count badge")
-    extra_parameters: ClassVar[list[ExtraParametersDict]] = [
+    extra_parameters = [
         {
             "name": "threshold",
             "label": gettext("Threshold"),
@@ -581,7 +563,7 @@ class LanguageBadgeWidget(BaseSVGBadgeWidget):
             threshold = 0
 
         languages: list[BaseStats | ProjectLanguage]
-        if isinstance(self.stats, (ProjectLanguageStats, TranslationStats)):
+        if isinstance(self.stats, ProjectLanguageStats | TranslationStats):
             languages = [self.stats]
         elif isinstance(self.obj, ProjectLanguage):
             languages = [self.obj]

@@ -7,15 +7,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.apps import AppConfig
-from django.core.checks import Info, register
+from django.core.checks import CheckMessage, Info, register
 
 from weblate.utils.checks import weblate_check
 from weblate.wladmin.sites import patch_admin_site
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
-
-    from django.core.checks import CheckMessage
 
 patch_admin_site()
 
@@ -48,12 +46,11 @@ def check_backups(
     for service in BackupService.objects.filter(enabled=True):
         try:
             last_obj = service.last_logs[0]
-        except IndexError:
-            last_event = "error"
-            last_log = "backup was never triggered"
-        else:
             last_event = last_obj.event
             last_log = last_obj.log
+        except IndexError:
+            last_event = "error"
+            last_log = "missing"
         if last_event == "error":
             errors.append(
                 weblate_check(

@@ -36,10 +36,7 @@ TEMPLATES_RAISE = deepcopy(settings.TEMPLATES)
 TEMPLATES_RAISE[0]["OPTIONS"]["string_if_invalid"] = "TEMPLATE_BUG[%s]"
 
 
-@override_settings(
-    TEMPLATES=TEMPLATES_RAISE,
-    RATELIMIT_NOTIFICATION_LIMITS=[],
-)
+@override_settings(TEMPLATES=TEMPLATES_RAISE)
 class NotificationTest(ViewTestCase, RegistrationTestMixin):
     def setUp(self) -> None:
         super().setUp()

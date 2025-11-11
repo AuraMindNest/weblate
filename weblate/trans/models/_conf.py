@@ -3,9 +3,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # mypy: disable-error-code="var-annotated"
-from __future__ import annotations
-
-from typing import ClassVar
 
 from appconf import AppConf
 
@@ -16,6 +13,9 @@ class WeblateConf(AppConf):
 
     # Cache directory
     CACHE_DIR = None
+
+    # Akismet API key
+    AKISMET_API_KEY = None
 
     # Title of site to use
     SITE_TITLE = "Weblate"
@@ -159,14 +159,14 @@ Current translation status:
     AUTH_PASSWORD_DAYS = 180
 
     # Mail customization
-    ADMINS_CONTACT: ClassVar[list] = []
-    ADMINS_HOSTING: ClassVar[list] = []
-    ADMINS_BILLING: ClassVar[list] = []
+    ADMINS_CONTACT = []
+    ADMINS_HOSTING = []
+    ADMINS_BILLING = []
 
     # Special chars for visual keyboard
     SPECIAL_CHARS = ("\t", "\n", "\u00a0", "…")
 
-    DEFAULT_ADDONS: ClassVar[dict] = {}
+    DEFAULT_ADDONS = {}
 
     SUGGESTION_CLEANUP_DAYS = None
     COMMENT_CLEANUP_DAYS = None
@@ -175,7 +175,7 @@ Current translation status:
     BACKGROUND_TASKS = "monthly"
 
     SINGLE_PROJECT = False
-    LICENSE_EXTRA: ClassVar[list] = []
+    LICENSE_EXTRA = []
     LICENSE_FILTER = None
     LICENSE_REQUIRED = False
     WEBSITE_REQUIRED = True
@@ -185,7 +185,7 @@ Current translation status:
 
     EXTRA_HTML_HEAD = ""
 
-    IP_ADDRESSES: ClassVar[list] = []
+    IP_ADDRESSES = []
 
     class Meta:
         prefix = ""

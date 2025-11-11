@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from django.utils.translation import gettext_lazy
 
@@ -16,19 +16,17 @@ from weblate.trans.models import Unit
 from weblate.utils.state import STATE_FUZZY, STATE_TRANSLATED
 
 if TYPE_CHECKING:
-    from weblate.addons.base import CompatDict
     from weblate.auth.models import User
-    from weblate.trans.models import Component
 
 
 class FlagBase(BaseAddon):
-    events: ClassVar[set[AddonEvent]] = {
+    events: set[AddonEvent] = {
         AddonEvent.EVENT_UNIT_PRE_CREATE,
     }
     icon = "flag.svg"
 
     @classmethod
-    def can_install(cls, component: Component, user: User | None) -> bool:
+    def can_install(cls, component, user: User | None):
         # Following formats support fuzzy flag, so avoid messing up with them
         if component.file_format in {"ts", "po", "po-mono"}:
             return False
@@ -43,11 +41,11 @@ class SourceEditAddon(FlagBase):
         "flagged as needing editing in Weblate. This way you can easily "
         "filter and edit source strings written by the developers."
     )
-    compat: ClassVar[CompatDict] = {
+    compat = {
         "edit_template": {True},
     }
 
-    def unit_pre_create(self, unit: Unit, activity_log_id: int | None = None) -> None:
+    def unit_pre_create(self, unit) -> None:
         if (
             unit.translation.is_template
             and unit.state >= STATE_TRANSLATED
@@ -65,7 +63,7 @@ class TargetEditAddon(FlagBase):
         "filter and edit translations created by the developers."
     )
 
-    def unit_pre_create(self, unit: Unit, activity_log_id: int | None = None) -> None:
+    def unit_pre_create(self, unit) -> None:
         if (
             not unit.translation.is_template
             and unit.state >= STATE_TRANSLATED
@@ -83,7 +81,7 @@ class SameEditAddon(FlagBase):
         "useful for file formats that include source strings for untranslated strings."
     )
 
-    def unit_pre_create(self, unit: Unit, activity_log_id: int | None = None) -> None:
+    def unit_pre_create(self, unit) -> None:
         if (
             not unit.translation.is_template
             and unit.source == unit.target
@@ -95,7 +93,7 @@ class SameEditAddon(FlagBase):
 
 
 class BulkEditAddon(BaseAddon):
-    events: ClassVar[set[AddonEvent]] = {
+    events: set[AddonEvent] = {
         AddonEvent.EVENT_COMPONENT_UPDATE,
     }
     name = "weblate.flags.bulk"
@@ -104,9 +102,7 @@ class BulkEditAddon(BaseAddon):
     settings_form = BulkEditAddonForm
     multiple = True
 
-    def component_update(
-        self, component: Component, activity_log_id: int | None = None
-    ) -> None:
+    def component_update(self, component) -> None:
         label_set = component.project.label_set
         bulk_perform(
             None,
@@ -124,21 +120,3 @@ class BulkEditAddon(BaseAddon):
             ),
             project=component.project,
         )
-
-
-class TargetRepoUpdateAddon(BaseAddon):
-    events: ClassVar[set[AddonEvent]] = {AddonEvent.EVENT_UNIT_POST_SYNC}
-    icon = "flag.svg"
-    name = "weblate.flags.target_repo_update"
-    verbose = gettext_lazy(
-        'Flag updated translations from repository as "Needs editing"'
-    )
-    description = gettext_lazy(
-        "Whenever a string translation is changed from the VCS, "
-        "it is flagged as needing editing in Weblate. Especially useful if "
-        "translation files are often updated manually or by an external service."
-    )
-
-    def unit_post_sync(self, unit: Unit, changed_attr: str, **kwargs) -> None:
-        if changed_attr == "target":
-            unit.state = STATE_FUZZY

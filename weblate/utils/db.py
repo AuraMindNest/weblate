@@ -91,10 +91,6 @@ class PostgreSQLFallbackLookupMixin:
     def process_lhs(self, compiler, connection, lhs=None):
         if self._needs_fallback:  # type: ignore[attr-defined]
             lhs_sql, params = super().process_lhs(compiler, connection, lhs)  # type: ignore[misc]
-            if self.lookup_name in {"search", "substring"}:
-                # These are matched against UPPER, so convert them
-                return f"UPPER({lhs_sql})", params
-            # This concatenation will prevent using trigram index
             return f"{lhs_sql} || ''", params
         return super().process_lhs(compiler, connection, lhs)  # type: ignore[misc]
 
@@ -123,7 +119,7 @@ class PostgreSQLSearchLookup(PostgreSQLFallbackLookup):
 
     def get_rhs_op(self, connection, rhs):
         if self._needs_fallback:
-            return connection.operators["icontains"] % rhs
+            return connection.operators["contains"] % rhs
         return f"%% {rhs} = true"
 
 
@@ -149,7 +145,7 @@ class PostgreSQLSubstringLookup(PostgreSQLFallbackLookup):
 
     def get_rhs_op(self, connection, rhs):
         if self._needs_fallback:
-            return connection.operators["icontains"] % rhs
+            return connection.operators["contains"] % rhs
         return f"ILIKE {rhs}"
 
 

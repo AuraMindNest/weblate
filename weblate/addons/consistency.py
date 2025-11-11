@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from django.utils.translation import gettext_lazy
 
@@ -19,10 +19,7 @@ if TYPE_CHECKING:
 
 
 class LanguageConsistencyAddon(BaseAddon):
-    events: ClassVar[set[AddonEvent]] = {
-        AddonEvent.EVENT_DAILY,
-        AddonEvent.EVENT_POST_ADD,
-    }
+    events: set[AddonEvent] = {AddonEvent.EVENT_DAILY, AddonEvent.EVENT_POST_ADD}
     name = "weblate.consistency.languages"
     verbose = gettext_lazy("Add missing languages")
     description = gettext_lazy(
@@ -34,7 +31,7 @@ class LanguageConsistencyAddon(BaseAddon):
     user_name = "languages"
     user_verbose = "Languages add-on"
 
-    def daily(self, component: Component, activity_log_id: int | None = None) -> None:
+    def daily(self, component: Component) -> None:
         # The languages list is built here because we want to exclude shared
         # component's languages that are included in Project.languages
         language_consistency.delay_on_commit(
@@ -45,17 +42,13 @@ class LanguageConsistencyAddon(BaseAddon):
                 ).values_list("id", flat=True)
             ),
             component.project_id,
-            activity_log_id=activity_log_id,
         )
 
-    def post_add(
-        self, translation: Translation, activity_log_id: int | None = None, **kwargs
-    ) -> None:
+    def post_add(self, translation: Translation) -> None:
         language_consistency.delay_on_commit(
             self.instance.id,
             [translation.language_id],
             translation.component.project_id,
-            activity_log_id=activity_log_id,
         )
 
 

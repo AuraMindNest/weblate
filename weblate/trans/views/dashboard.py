@@ -9,7 +9,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
 from django.db.models import Count
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import translation
@@ -24,7 +24,7 @@ from weblate.trans.forms import ReportsForm, SearchForm
 from weblate.trans.models import Component, ComponentList, Project, Translation
 from weblate.trans.models.component import translation_prefetch_tasks
 from weblate.trans.models.project import prefetch_project_flags
-from weblate.trans.models.translation import GhostTranslation
+from weblate.trans.models.translation import GhostTranslation, TranslationQuerySet
 from weblate.trans.util import render
 from weblate.utils import messages
 from weblate.utils.stats import prefetch_stats
@@ -33,10 +33,7 @@ from weblate.utils.views import get_paginator
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from django.http import HttpResponse
-
     from weblate.auth.models import AuthenticatedHttpRequest, User
-    from weblate.trans.models.translation import TranslationQuerySet
 
 
 def get_untranslated(
@@ -312,7 +309,7 @@ def dashboard_user(request: AuthenticatedHttpRequest) -> HttpResponse:
         {
             "allow_index": True,
             "suggestions": suggestions,
-            "search_form": SearchForm(request=request, bootstrap_5=True),
+            "search_form": SearchForm(request=request),
             "usersubscriptions": usersubscriptions,
             "componentlists": componentlists,
             "all_componentlists": prefetch_stats(
@@ -326,7 +323,6 @@ def dashboard_user(request: AuthenticatedHttpRequest) -> HttpResponse:
             "reports_form": ReportsForm({}),
             "all_owned_projects": owned,
             "owned_projects": prefetch_project_flags(prefetch_stats(owned[:10])),
-            "bootstrap_5": True,
         },
     )
 
@@ -354,6 +350,5 @@ def dashboard_anonymous(request: AuthenticatedHttpRequest) -> HttpResponse:
             "all_projects": Metric.objects.get_current_metric(
                 None, Metric.SCOPE_GLOBAL, 0
             )["public_projects"],
-            "bootstrap_5": True,
         },
     )

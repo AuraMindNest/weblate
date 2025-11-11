@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from functools import reduce
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, Literal
 
 from django.db.models import Count, Prefetch, Q, Value
 from django.db.models.functions import MD5, Lower
@@ -14,7 +14,6 @@ from django.utils.translation import gettext, gettext_lazy, ngettext
 
 from weblate.checks.base import BatchCheckMixin, TargetCheck
 from weblate.trans.actions import ACTIONS_REVERTABLE, ActionEvents
-from weblate.trans.util import split_plural
 from weblate.utils.html import format_html_join_comma
 from weblate.utils.state import STATE_TRANSLATED
 
@@ -22,8 +21,6 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from weblate.trans.models import Change, Component, Unit
-
-    from .base import FixupType
 
 
 class PluralsCheck(TargetCheck):
@@ -263,12 +260,12 @@ class TranslatedCheck(TargetCheck, BatchCheckMixin):
     ignore_untranslated = False
     skip_suggestions = True
 
-    SOURCE_ACTIONS: ClassVar[set[ActionEvents]] = {
+    SOURCE_ACTIONS = {
         ActionEvents.SOURCE_CHANGE,
         ActionEvents.MARKED_EDIT,
     }
 
-    TRACK_ACTIONS: ClassVar[set[ActionEvents]] = ACTIONS_REVERTABLE | SOURCE_ACTIONS
+    TRACK_ACTIONS = ACTIONS_REVERTABLE | SOURCE_ACTIONS
 
     def get_description(self, check_obj):
         unit = check_obj.unit
@@ -320,13 +317,13 @@ class TranslatedCheck(TargetCheck, BatchCheckMixin):
         """Target strings are checked in check_target_unit."""
         return False
 
-    def get_fixup(self, unit: Unit) -> Iterable[FixupType] | None:
+    def get_fixup(self, unit: Unit):
         target = self.check_target_unit(
             unit.get_source_plurals(), unit.get_target_plurals(), unit
         )
         if not target:
             return None
-        return [("plurals", split_plural(target))]
+        return [(".*", target, "u")]
 
     def check_component(self, component: Component) -> Iterable[Unit]:
         from weblate.trans.models import Change, Unit

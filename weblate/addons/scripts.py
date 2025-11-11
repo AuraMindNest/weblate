@@ -52,29 +52,17 @@ class BaseScriptAddon(BaseAddon):
         self.execute_process(component, command, environment)
         self.trigger_alerts(component)
 
-    def post_push(self, component, activity_log_id: int | None = None) -> None:
+    def post_push(self, component) -> None:
         self.run_script(component)
 
-    def post_update(
-        self,
-        component,
-        previous_head: str,
-        skip_push: bool,
-        activity_log_id: int | None = None,
-    ) -> None:
+    def post_update(self, component, previous_head: str, skip_push: bool) -> None:
         self.run_script(component, env={"WL_PREVIOUS_HEAD": previous_head})
 
-    def post_commit(
-        self, component: Component, store_hash: bool, activity_log_id: int | None = None
-    ) -> None:
+    def post_commit(self, component: Component, store_hash: bool) -> None:
         self.run_script(component=component)
 
     def pre_commit(
-        self,
-        translation: Translation,
-        author: str,
-        store_hash: bool,
-        activity_log_id: int | None = None,
+        self, translation: Translation, author: str, store_hash: bool
     ) -> None:
         self.run_script(translation=translation)
 
@@ -85,5 +73,5 @@ class BaseScriptAddon(BaseAddon):
             )
             translation.addon_commit_files.append(filename)
 
-    def post_add(self, translation, activity_log_id: int | None = None) -> None:
+    def post_add(self, translation) -> None:
         self.run_script(translation=translation)

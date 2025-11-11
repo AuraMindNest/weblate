@@ -1,15 +1,9 @@
 # Copyright © Michal Čihař <michal@weblate.org>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
-from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from .base import ResponseStatusMachineTranslation
+from .base import DownloadTranslations, ResponseStatusMachineTranslation
 from .forms import MyMemoryMachineryForm
-
-if TYPE_CHECKING:
-    from .base import DownloadTranslations
 
 
 class MyMemoryTranslation(ResponseStatusMachineTranslation):

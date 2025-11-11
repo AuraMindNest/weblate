@@ -336,7 +336,7 @@ def announcement(request: AuthenticatedHttpRequest, path):
 def announcement_delete(request: AuthenticatedHttpRequest, pk):
     announcement = get_object_or_404(Announcement, pk=pk)
 
-    if request.user.has_perm("meta:announcement.delete", announcement):
+    if request.user.has_perm("announcement.delete", announcement):
         announcement.delete()
 
     return JsonResponse({"responseStatus": 200})
@@ -351,7 +351,7 @@ def show_progress(request: AuthenticatedHttpRequest, path):
     or one of its languages.
     """
     obj = parse_path(request, path, (Project, Category, Component, Translation))
-    if isinstance(obj, (Project, Category)):
+    if isinstance(obj, Project | Category):
         return multi_progress(request, obj)
 
     return component_progress(request, obj)

@@ -11,6 +11,7 @@ from django.utils.translation import gettext
 
 from weblate.lang.models import Language
 from weblate.trans.models import (
+    Announcement,
     Category,
     Component,
     ComponentList,
@@ -21,7 +22,7 @@ from weblate.trans.models import (
 )
 from weblate.utils.stats import CategoryLanguage, ProjectLanguage
 
-from .results import Allowed, Denied
+from .results import Allowed, Denied, PermissionResult
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -32,13 +33,7 @@ if TYPE_CHECKING:
     from weblate.billing.models import Billing
     from weblate.checks.models import Check
     from weblate.memory.models import Memory
-    from weblate.trans.models import (
-        Announcement,
-        Comment,
-        Suggestion,
-    )
-
-    from .results import PermissionResult
+    from weblate.trans.models import Comment, Suggestion
 
 SPECIALS: dict[str, Callable[[User, str, Model], bool | PermissionResult]] = {}
 
@@ -420,12 +415,10 @@ def check_translation_add(
     return check_permission(user, permission, obj)
 
 
-@register_perm("translation.auto", "unit.bulk_edit")
+@register_perm("translation.auto")
 def check_autotranslate(
-    user: User, permission: str, translation: Unit | Translation | Component | Project
+    user: User, permission: str, translation: Translation | Component | Project
 ) -> bool | PermissionResult:
-    if isinstance(translation, Unit):
-        translation = translation.translation
     if isinstance(translation, Translation) and (
         (translation.is_source and not translation.component.intermediate)
         or translation.is_readonly
@@ -553,18 +546,19 @@ def check_repository_status(
 def check_team_edit(user: User, permission: str, obj: Group) -> bool:
     from weblate.auth.models import Group
 
-    return (
-        check_global_permission(user, "group.edit")
-        or (
-            isinstance(obj, Group)
-            and obj.defining_project
+    if check_global_permission(user, "group.edit"):
+        return True
+
+    if isinstance(obj, Group):
+        return (
+            obj.defining_project
             and check_permission(user, "project.permissions", obj.defining_project)
-        )
-        or (
-            isinstance(obj, Project)
-            and check_permission(user, "project.permissions", obj)
-        )
-    )
+        ) or obj.admins.filter(pk=user.pk).exists()
+
+    if isinstance(obj, Project):
+        return check_permission(user, "project.permissions", obj)
+
+    return False
 
 
 @register_perm("meta:team.users")
@@ -607,7 +601,7 @@ def check_billing(user: User, permission: str, obj: Project) -> bool | Permissio
 
 
 # This does not exist for real
-@register_perm("meta:announcement.delete")
+@register_perm("announcement.delete")
 def check_announcement_delete(
     user: User, permission: str, obj: Announcement
 ) -> bool | PermissionResult:
@@ -621,7 +615,7 @@ def check_announcement_delete(
 
 
 # This does not exist for real
-@register_perm("meta:unit.flag")
+@register_perm("unit.flag")
 def check_unit_flag(
     user: User, permission: str, obj: Unit | Translation
 ) -> bool | PermissionResult:

@@ -9,7 +9,7 @@ import logging
 import re
 from datetime import timedelta
 from ipaddress import IPv6Network, ip_network
-from typing import TYPE_CHECKING, Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlparse
 
 from appconf import AppConf
@@ -43,10 +43,10 @@ from weblate.accounts.notifications import (
     NotificationScope,
 )
 from weblate.accounts.tasks import notify_auditlog
-from weblate.auth.models import User
+from weblate.auth.models import AuthenticatedHttpRequest, User
 from weblate.lang.models import Language
 from weblate.trans.defines import EMAIL_LENGTH
-from weblate.trans.models import Change, ComponentList, Translation
+from weblate.trans.models import Change, ComponentList, Translation, Unit
 from weblate.trans.models.translation import GhostTranslation
 from weblate.utils import messages
 from weblate.utils.decorators import disable_for_loaddata
@@ -73,8 +73,6 @@ if TYPE_CHECKING:
     from django_otp.models import Device
 
     from weblate.accounts.types import DeviceType
-    from weblate.auth.models import AuthenticatedHttpRequest
-    from weblate.trans.models import Unit
 
 LOGGER = logging.getLogger("weblate.audit")
 
@@ -96,7 +94,7 @@ class WeblateAccountsConf(AppConf):
     REGISTRATION_OPEN = True
 
     # Allow registration from certain backends
-    REGISTRATION_ALLOW_BACKENDS: ClassVar[list[str]] = []
+    REGISTRATION_ALLOW_BACKENDS = []
 
     # Allow rebinding to existing accounts
     REGISTRATION_REBIND = False
@@ -109,7 +107,7 @@ class WeblateAccountsConf(AppConf):
 
     ALTCHA_MAX_NUMBER = 1_000_000
 
-    REGISTRATION_HINTS: ClassVar[dict[str, str]] = {}
+    REGISTRATION_HINTS = {}
 
     # How long to keep auditlog entries
     AUDITLOG_EXPIRY = 180
@@ -134,7 +132,7 @@ class WeblateAccountsConf(AppConf):
     MAXIMAL_PASSWORD_LENGTH = 72
 
     # Login required URLs
-    LOGIN_REQUIRED_URLS: ClassVar[list[str]] = []
+    LOGIN_REQUIRED_URLS = []
     LOGIN_REQUIRED_URLS_EXCEPTIONS = (
         r"{URL_PREFIX}/accounts/(.*)$",  # Required for login
         r"{URL_PREFIX}/admin/login/(.*)$",  # Required for admin login
@@ -150,17 +148,6 @@ class WeblateAccountsConf(AppConf):
         r"{URL_PREFIX}/avatar/(.*)$",  # Optional for avatars
         r"{URL_PREFIX}/site.webmanifest$",  # The request for the manifest is made without credentials
     )
-
-    # Multi-level rate limiting for email notifications
-    # Each tuple contains (max_emails, time_window_seconds)
-    RATELIMIT_NOTIFICATION_LIMITS: ClassVar[list[tuple[int, int]]] = [
-        # Prevent burst sends - 3 emails per 2 minutes
-        (3, 120),
-        # Equalize to avoid getting blocked for too long - 10 emails per hour
-        (10, 3600),
-        # Daily limit: 50 emails per day
-        (50, 86400),
-    ]
 
     class Meta:
         prefix = ""
@@ -221,7 +208,7 @@ class Subscription(models.Model):
     class Meta:
         verbose_name = "Notification subscription"
         verbose_name_plural = "Notification subscriptions"
-        constraints = [  # noqa: RUF012
+        constraints = [
             models.UniqueConstraint(
                 name="accounts_subscription_notification_unique",
                 fields=("notification", "scope", "project", "component", "user"),
@@ -291,10 +278,6 @@ ACCOUNT_ACTIVITY = {
     "enabled": gettext_lazy("User was enabled by administrator."),
     # Translators: Audit log entry
     "disabled": gettext_lazy("User was disabled by administrator."),
-    # Translators: Audit log entry
-    "disabled-expiry": gettext_lazy(
-        "User was disabled because the access has expired."
-    ),
     # Translators: Audit log entry
     "donate": gettext_lazy("Semiannual support status review was displayed."),
     # Translators: Audit log entry
@@ -400,19 +383,10 @@ class AuditLogManager(models.Manager):
         return not logins.filter(Q(address=address) | Q(user_agent=user_agent)).exists()
 
     def create(  # type: ignore[override]
-        self, user: User, request: HttpRequest | None, activity: str, **params
+        self, user: User, request: HttpRequest | None, activity, **params
     ):
-        address: str | None = None
-        user_agent: str = ""
-        # Log only address for own actions (unauthenticated or when the request user matches audit user)
-        if request and (
-            not hasattr(request, "user")
-            or not request.user
-            or not request.user.is_authenticated
-            or request.user == user
-        ):
-            address = get_ip_address(request)
-            user_agent = get_user_agent(request)
+        address = get_ip_address(request)
+        user_agent = get_user_agent(request)
         if activity == "login" and self.is_new_login(user, address, user_agent):
             activity = "login-new"
         return super().create(
@@ -596,7 +570,7 @@ class VerifiedEmail(models.Model):
     class Meta:
         verbose_name = "Verified e-mail"
         verbose_name_plural = "Verified e-mails"
-        indexes = [  # noqa: RUF012
+        indexes = [
             models.Index(
                 Upper("email"),
                 name="accounts_verifiedemail_email",
@@ -744,7 +718,7 @@ class Profile(models.Model):
         (DASHBOARD_MANAGED, gettext_lazy("Managed projects")),
     )
 
-    DASHBOARD_SLUGS: ClassVar[dict[int, str]] = {
+    DASHBOARD_SLUGS = {
         DASHBOARD_WATCHED: "your-subscriptions",
         DASHBOARD_COMPONENT_LIST: "list",
         DASHBOARD_SUGGESTIONS: "suggestions",
@@ -1153,7 +1127,7 @@ class Profile(models.Model):
     @property
     def has_2fa(self) -> bool:
         return any(
-            isinstance(device, (TOTPDevice, WebAuthnCredential))
+            isinstance(device, TOTPDevice | WebAuthnCredential)
             for device in self.second_factors
         )
 

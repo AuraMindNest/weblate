@@ -31,8 +31,8 @@ Installing on RedHat, Fedora and CentOS
     # Web server option 2: Apache with ``mod_wsgi``
     dnf install httpd python3-mod_wsgi
 
-    # Caching backend: Valkey
-    dnf install valkey
+    # Caching backend: Redis
+    dnf install redis
 
     # Database server: PostgreSQL
     dnf install postgresql postgresql-contrib

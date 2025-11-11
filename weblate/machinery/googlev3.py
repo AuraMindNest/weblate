@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from django.utils.functional import cached_property
 from google.api_core.exceptions import AlreadyExists, NotFound
-from google.cloud import storage  # type: ignore[attr-defined]
+from google.cloud import storage
 from google.cloud.translate_v3 import (
     GcsSource,
     Glossary,
@@ -21,6 +21,7 @@ from google.cloud.translate_v3 import (
 from google.oauth2 import service_account
 
 from .base import (
+    DownloadTranslations,
     GlossaryAlreadyExistsError,
     GlossaryDoesNotExistError,
     GlossaryMachineTranslationMixin,
@@ -31,10 +32,6 @@ from .google import GoogleBaseTranslation
 
 if TYPE_CHECKING:
     from weblate.trans.models import Unit
-
-    from .base import (
-        DownloadTranslations,
-    )
 
 
 class GoogleV3Translation(

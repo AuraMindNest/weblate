@@ -7,7 +7,6 @@ from __future__ import annotations
 import base64
 import json
 import os
-import tempfile
 from datetime import timedelta
 from io import StringIO
 from typing import TYPE_CHECKING, ClassVar
@@ -38,12 +37,7 @@ from weblate.trans.models import (
     Vote,
 )
 from weblate.trans.tests.test_views import ViewTestCase
-from weblate.utils.state import (
-    STATE_EMPTY,
-    STATE_FUZZY,
-    STATE_READONLY,
-    STATE_TRANSLATED,
-)
+from weblate.utils.state import STATE_EMPTY, STATE_FUZZY, STATE_READONLY
 from weblate.utils.unittest import tempdir_setting
 
 from .autotranslate import AutoTranslateAddon
@@ -54,13 +48,7 @@ from .consistency import LanguageConsistencyAddon
 from .discovery import DiscoveryAddon
 from .example import ExampleAddon
 from .example_pre import ExamplePreAddon
-from .flags import (
-    BulkEditAddon,
-    SameEditAddon,
-    SourceEditAddon,
-    TargetEditAddon,
-    TargetRepoUpdateAddon,
-)
+from .flags import BulkEditAddon, SameEditAddon, SourceEditAddon, TargetEditAddon
 from .forms import BaseAddonForm
 from .generate import (
     FillReadOnlyAddon,
@@ -76,17 +64,15 @@ from .gettext import (
     UpdateLinguasAddon,
 )
 from .git import GitSquashAddon
-from .models import ADDONS, Addon, AddonActivityLog
+from .models import ADDONS, Addon
 from .properties import PropertiesSortAddon
 from .removal import RemoveComments, RemoveSuggestions
 from .resx import ResxUpdateAddon
-from .tasks import addon_change, cleanup_addon_activity_log, daily_addons
-from .webhooks import SlackWebhookAddon, WebhookAddon
+from .tasks import cleanup_addon_activity_log, daily_addons
+from .webhooks import JSONWebhookBaseAddon, SlackWebhookAddon, WebhookAddon
 
 if TYPE_CHECKING:
     from weblate.auth.models import User
-
-    from .webhooks import JSONWebhookBaseAddon
 
 
 class NoOpAddon(BaseAddon):
@@ -229,8 +215,7 @@ class IntegrationTest(TestAddonMixin, ViewTestCase):
         self.assertNotEqual(rev, self.component.repository.last_revision)
         rev = self.component.repository.last_revision
         self.component.trigger_post_update(
-            previous_head=self.component.repository.last_revision,
-            skip_push=False,
+            self.component.repository.last_revision, False
         )
         self.assertEqual(rev, self.component.repository.last_revision)
         commit = self.component.repository.show(self.component.repository.last_revision)
@@ -250,8 +235,7 @@ class IntegrationTest(TestAddonMixin, ViewTestCase):
 
         # The crash should be handled here and addon uninstalled
         self.component.trigger_post_update(
-            previous_head=self.component.repository.last_revision,
-            skip_push=False,
+            self.component.repository.last_revision, False
         )
 
         self.assertEqual([], self.component.addons_cache["__names__"])
@@ -693,8 +677,6 @@ class ViewTests(ViewTestCase):
             follow=True,
         )
         self.assertContains(response, "Installed 1 add-on")
-        change = self.component.change_set.get(action=ActionEvents.ADDON_CREATE)
-        self.assertEqual(change.user, self.user)
 
     def test_add_simple_project_addon(self) -> None:
         response = self.client.post(
@@ -762,8 +744,6 @@ class ViewTests(ViewTestCase):
             follow=True,
         )
         self.assertContains(response, "Installed 1 add-on")
-        change = self.component.change_set.get(action=ActionEvents.ADDON_CREATE)
-        self.assertEqual(change.user, self.user)
 
     def test_add_config_site_wide_addon(self) -> None:
         response = self.client.post(
@@ -1136,7 +1116,7 @@ class LanguageConsistencyTest(ViewTestCase):
         self.component.new_lang = "add"
         self.component.new_base = "po/hello.pot"
         self.component.save()
-        ts_component = self.create_ts(
+        self.create_ts(
             name="TS",
             new_lang="add",
             new_base="ts/cs.ts",
@@ -1147,21 +1127,6 @@ class LanguageConsistencyTest(ViewTestCase):
         # Installation should make languages consistent
         addon = LanguageConsistencyAddon.create(component=self.component)
         self.assertEqual(Translation.objects.count(), 12)
-
-        # check that activity is correctly logged
-        activity_logs = (
-            AddonActivityLog.objects.filter(addon__name=addon.name)
-            .order_by("created")
-            .first()
-        )
-        self.assertIn(
-            f"{ts_component.full_slug}: Added German for language consistency",
-            activity_logs.details["result"],
-        )
-        self.assertIn(
-            f"{ts_component.full_slug}: Added Italian for language consistency",
-            activity_logs.details["result"],
-        )
 
         # Add one language
         language = Language.objects.get(code="af")
@@ -1380,44 +1345,6 @@ class AutoTranslateAddonTest(ViewTestCase):
         )
         addon.component_update(self.component)
 
-    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-    def test_auto_change_event(self):
-        component_1 = self.create_po_new_base(name="Component 1", project=self.project)
-        component_1.allow_translation_propagation = False
-        component_1.save()
-        component_2 = self.create_po_new_base(name="Component 2", project=self.project)
-        component_2.allow_translation_propagation = False
-        component_2.save()
-        AutoTranslateAddon.create(
-            project=self.project,
-            configuration={
-                "component": None,
-                "q": "has:comment AND state:<translated",
-                "auto_source": "others",
-                "engines": ["weblate"],
-                "threshold": 80,
-                "mode": "translate",
-            },
-        )
-        for component in (component_1, component_2):
-            component.source_translation.add_unit(
-                None, context="", source="one", target=None, author=self.user
-            )
-
-        translation_1 = component_1.translation_set.get(language_code="cs")
-        unit_1 = translation_1.unit_set.get(source="one")
-        unit_1.translate(self.user, "jeden", STATE_TRANSLATED)
-
-        translation_2 = component_2.translation_set.get(language_code="cs")
-        unit_2 = translation_2.unit_set.get(source="one")
-        Comment.objects.create(unit=unit_2, comment="Foo")
-        change = unit_2.change_set.latest("timestamp")
-
-        addon_change.run([change.pk])
-
-        unit_2 = translation_2.unit_set.get(source="one")
-        self.assertEqual(unit_2.target, "jeden")
-
 
 class BulkEditAddonTest(ViewTestCase):
     def test_bulk(self) -> None:
@@ -1577,64 +1504,6 @@ class SiteWideAddonsTest(ViewTestCase):
         self.get_translation().commit_pending("test", None)
 
         self.assertNotEqual(rev, self.component.repository.last_revision)
-
-
-class TargetChangeAddonTest(ViewTestCase):
-    def create_component(self):
-        return self.create_json_mono(suffix="mono-sync")
-
-    def update_unit_from_repo(self) -> Unit:
-        unit = self.get_unit("Hello, world!\n")
-        unit.translate(self.user, ["Nazdar svete!"], STATE_TRANSLATED)
-
-        request = self.get_request()
-        self.component.do_push(request)
-
-        translation = self.get_translation("cs")
-        updated_json_content = """
-        {
-            "hello": "Nazdar svete! edit",
-            "orangutan": "",
-            "try": "",
-            "thanks": ""
-        }
-        """
-
-        # edit the translation on remote repo
-        with tempfile.TemporaryDirectory() as tempdir:
-            repo = self.component.repository.__class__.clone(
-                self.format_local_path(self.git_repo_path),
-                tempdir,
-                "main",
-                component=self.component,
-            )
-            translation_remote_file = os.path.join(tempdir, translation.filename)
-            with open(translation_remote_file, "w") as handle:
-                handle.write(updated_json_content)
-            with repo.lock:
-                repo.set_committer("Toast", "toast@example.net")
-                repo.commit(
-                    "Simulate commit directly into remote repo",
-                    "Toast <test@example.net>",
-                    files=[translation_remote_file],
-                )
-                repo.push("")
-
-        # pull changes from remote, check unit has been updated
-        translation.do_update(request)
-        unit.refresh_from_db()
-        self.assertEqual(unit.target, "Nazdar svete! edit")
-        return unit
-
-    def test_fuzzy_string_from_repo(self) -> None:
-        self.assertTrue(TargetRepoUpdateAddon.can_install(self.component, None))
-        TargetRepoUpdateAddon.create(component=self.component)
-        unit = self.update_unit_from_repo()
-        self.assertEqual(unit.state, STATE_FUZZY)
-
-    def test_non_fuzzy_string_from_repo(self) -> None:
-        unit = self.update_unit_from_repo()
-        self.assertEqual(unit.state, STATE_TRANSLATED)
 
 
 class TasksTest(TestCase):

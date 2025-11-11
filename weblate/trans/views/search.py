@@ -151,7 +151,6 @@ def search(request: AuthenticatedHttpRequest, path=None):
     search_form = SearchForm(request=request, data=request.GET, obj=obj)
     context["search_form"] = search_form
     context["back_url"] = obj.get_absolute_url() if obj is not None else None
-    context["bootstrap_5"] = True
 
     if not is_ratelimited and request.GET and search_form.is_valid():
         # This is ugly way to hide query builder when showing results
@@ -213,7 +212,7 @@ def bulk_edit(request: AuthenticatedHttpRequest, path):
         (Translation, Component, Project, ProjectLanguage, Category, CategoryLanguage),
     )
 
-    if not request.user.has_perm("unit.bulk_edit", obj) or not request.user.has_perm(
+    if not request.user.has_perm("translation.auto", obj) or not request.user.has_perm(
         "unit.edit", obj
     ):
         raise PermissionDenied

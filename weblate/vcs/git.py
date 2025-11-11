@@ -21,7 +21,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     BinaryIO,
-    ClassVar,
     NoReturn,
     NotRequired,
     Self,
@@ -56,8 +55,6 @@ if TYPE_CHECKING:
     from django_stubs_ext import StrOrPromise
     from requests.auth import AuthBase
 
-    from weblate.trans.models import Component
-
 
 class GitCredentials(TypedDict):
     url: str
@@ -76,8 +73,8 @@ class GitCredentials(TypedDict):
 class GitRepository(Repository):
     """Repository implementation for Git."""
 
-    _cmd: ClassVar[str] = "git"
-    _cmd_last_revision: ClassVar[list[str]] = [
+    _cmd = "git"
+    _cmd_last_revision = [
         "log",
         "-n",
         "1",
@@ -85,7 +82,7 @@ class GitRepository(Repository):
         "HEAD",
         "--",
     ]
-    _cmd_last_remote_revision: ClassVar[list[str]] = [
+    _cmd_last_remote_revision = [
         "log",
         "-n",
         "1",
@@ -93,18 +90,16 @@ class GitRepository(Repository):
         "@{upstream}",
         "--",
     ]
-    _cmd_list_changed_files: ClassVar[list[str]] = ["diff", "--name-status"]
-    _cmd_push: ClassVar[list[str]] = ["push"]
-    _cmd_status: ClassVar[list[str]] = ["--no-optional-locks", "status"]
+    _cmd_list_changed_files = ["diff", "--name-status"]
+    _cmd_push = ["push"]
+    _cmd_status = ["--no-optional-locks", "status"]
 
-    name: ClassVar[StrOrPromise] = "Git"
-    push_label: ClassVar[StrOrPromise] = gettext_lazy(
-        "This will push changes to the upstream Git repository."
-    )
-    req_version: ClassVar[str | None] = "2.28"
-    default_branch: ClassVar[str] = "master"
-    ref_to_remote: ClassVar[str] = "..{0}"
-    ref_from_remote: ClassVar[str] = "{0}.."
+    name: StrOrPromise = "Git"
+    push_label = gettext_lazy("This will push changes to the upstream Git repository.")
+    req_version: str | None = "2.28"
+    default_branch = "master"
+    ref_to_remote = "..{0}"
+    ref_from_remote = "{0}.."
 
     def is_valid(self):
         """Check whether this is a valid repository."""
@@ -618,14 +613,12 @@ class GitRepository(Repository):
 
 
 class GitWithGerritRepository(GitRepository):
-    name: ClassVar[StrOrPromise] = "Gerrit"
-    req_version: ClassVar[str] = "1.27.0"
-    push_label: ClassVar[StrOrPromise] = gettext_lazy(
-        "This will push changes to Gerrit for a review."
-    )
-    pushes_to_different_location: ClassVar[bool] = True
+    name = "Gerrit"
+    req_version = "1.27.0"
+    push_label = gettext_lazy("This will push changes to Gerrit for a review.")
+    pushes_to_different_location = True
 
-    _version: ClassVar[str | None] = None
+    _version = None
 
     @classmethod
     def _get_version(cls):
@@ -665,29 +658,15 @@ class GitWithGerritRepository(GitRepository):
 
 
 class SubversionRepository(GitRepository):
-    name: ClassVar[StrOrPromise] = "Subversion"
-    default_branch: ClassVar[str] = "master"
-    push_label: ClassVar[StrOrPromise] = gettext_lazy(
-        "This will commit changes to the Subversion repository."
-    )
+    name = "Subversion"
+    default_branch = "master"
+    push_label = gettext_lazy("This will commit changes to the Subversion repository.")
 
-    _version: ClassVar[str | None] = None
+    _version = None
 
-    needs_push_url: ClassVar[bool] = False
+    _fetch_revision = None
 
-    def __init__(
-        self,
-        path: str,
-        *,
-        branch: str | None = None,
-        component: Component | None = None,
-        local: bool = False,
-        skip_init: bool = False,
-    ) -> None:
-        super().__init__(
-            path, branch=branch, component=component, local=local, skip_init=skip_init
-        )
-        self._fetch_revision: str | None = None
+    needs_push_url = False
 
     @classmethod
     def global_setup(cls) -> None:
@@ -848,21 +827,21 @@ class SubversionRepository(GitRepository):
 
 
 class GitForcePushRepository(GitRepository):
-    name: ClassVar[StrOrPromise] = gettext_lazy("Git with force push")
-    _cmd_push: ClassVar[list[str]] = ["push", "--force"]
-    identifier: ClassVar[str] = "git-force-push"
-    push_label: ClassVar[StrOrPromise] = gettext_lazy(
+    name = gettext_lazy("Git with force push")
+    _cmd_push = ["push", "--force"]
+    identifier = "git-force-push"
+    push_label = gettext_lazy(
         "This will force push changes to the upstream repository."
     )
 
 
 class GitMergeRequestBase(GitForcePushRepository):
-    needs_push_url: ClassVar[bool] = False
-    pushes_to_different_location: ClassVar[bool] = True
-    identifier: ClassVar[str]
-    API_TEMPLATE: ClassVar[str]
-    REQUIRED_CONFIG: ClassVar[set[str]] = {"username", "token"}
-    OPTIONAL_CONFIG: ClassVar[set[str]] = {"scheme"}
+    needs_push_url = False
+    pushes_to_different_location = True
+    identifier: str
+    API_TEMPLATE: str
+    REQUIRED_CONFIG = {"username", "token"}
+    OPTIONAL_CONFIG = {"scheme"}
 
     def merge(
         self, abort: bool = False, message: str | None = None, no_ff: bool = False
@@ -1045,12 +1024,9 @@ class GitMergeRequestBase(GitForcePushRepository):
             (f'remote "{remote_name}"', "pushurl", push_url),
         )
 
-    def should_use_fork(self, branch: str | None = None) -> bool:
-        return not branch or branch == self.branch
-
     def get_remote_branch_name(self, branch: str | None = None) -> str:
         remote = "origin"
-        if branch is not None and self.should_use_fork(branch):
+        if branch is not None:
             credentials = self.get_credentials()
             remote = credentials["username"]
         return f"{remote}/{self.branch if branch is None else branch}"
@@ -1069,7 +1045,7 @@ class GitMergeRequestBase(GitForcePushRepository):
         original repository.
         """
         credentials = self.get_credentials()
-        if not self.should_use_fork(branch):
+        if branch and branch != self.branch:
             fork_remote = "origin"
             fork_branch = branch
             super().push(branch)
@@ -1312,18 +1288,14 @@ class GitMergeRequestBase(GitForcePushRepository):
 
 
 class AzureDevOpsRepository(GitMergeRequestBase):
-    name: ClassVar[StrOrPromise] = gettext_lazy("Azure DevOps pull request")
-    identifier: ClassVar[str] = "azure_devops"
-    _version: ClassVar[str | None] = None
-    API_TEMPLATE: ClassVar[str] = (
-        "{scheme}://{host}/{owner}/_apis/git/repositories/{slug}"
-    )
-    ORG_API_TEMPLATE: ClassVar[str] = (
-        "{scheme}://{host}/{org}/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1"
-    )
-    REQUIRED_CONFIG: ClassVar[set[str]] = {"username", "token", "organization"}
-    OPTIONAL_CONFIG: ClassVar[set[str]] = {"scheme", "workItemIds"}
-    push_label: ClassVar[StrOrPromise] = gettext_lazy(
+    name = gettext_lazy("Azure DevOps pull request")
+    identifier = "azure_devops"
+    _version = None
+    API_TEMPLATE = "{scheme}://{host}/{owner}/_apis/git/repositories/{slug}"
+    ORG_API_TEMPLATE = "{scheme}://{host}/{org}/_apis/Contribution/HierarchyQuery?api-version=5.0-preview.1"
+    REQUIRED_CONFIG = {"username", "token", "organization"}
+    OPTIONAL_CONFIG = {"scheme", "workItemIds"}
+    push_label = gettext_lazy(
         "This will push changes and create a Azure DevOps pull request."
     )
 
@@ -1571,11 +1543,11 @@ class AzureDevOpsRepository(GitMergeRequestBase):
 
 
 class GithubRepository(GitMergeRequestBase):
-    name: ClassVar[StrOrPromise] = gettext_lazy("GitHub pull request")
-    identifier: ClassVar[str] = "github"
-    _version: ClassVar[str | None] = None
-    API_TEMPLATE: ClassVar[str] = "{scheme}://{host}/{suffix}repos/{owner}/{slug}"
-    push_label: ClassVar[StrOrPromise] = gettext_lazy(
+    name = gettext_lazy("GitHub pull request")
+    identifier = "github"
+    _version = None
+    API_TEMPLATE = "{scheme}://{host}/{suffix}repos/{owner}/{slug}"
+    push_label = gettext_lazy(
         "This will push changes and create a GitHub pull request."
     )
 
@@ -1688,13 +1660,11 @@ class GithubRepository(GitMergeRequestBase):
 
 
 class GiteaRepository(GitMergeRequestBase):
-    name: ClassVar[StrOrPromise] = gettext_lazy("Gitea pull request")
-    identifier: ClassVar[str] = "gitea"
-    _version: ClassVar[str | None] = None
-    API_TEMPLATE: ClassVar[str] = "{scheme}://{host}/api/v1/repos/{owner}/{slug}"
-    push_label: ClassVar[StrOrPromise] = gettext_lazy(
-        "This will push changes and create a Gitea pull request."
-    )
+    name = gettext_lazy("Gitea pull request")
+    identifier = "gitea"
+    _version = None
+    API_TEMPLATE = "{scheme}://{host}/api/v1/repos/{owner}/{slug}"
+    push_label = gettext_lazy("This will push changes and create a Gitea pull request.")
 
     def create_fork(self, credentials: GitCredentials) -> None:
         fork_url = "{}/forks".format(credentials["url"])
@@ -1869,13 +1839,11 @@ class LocalRepository(GitRepository):
 
 
 class GitLabRepository(GitMergeRequestBase):
-    name: ClassVar[StrOrPromise] = gettext_lazy("GitLab merge request")
-    identifier: ClassVar[str] = "gitlab"
-    _version: ClassVar[str | None] = None
-    API_TEMPLATE: ClassVar[str] = (
-        "{scheme}://{host}/api/v4/projects/{owner_url}%2F{slug_url}"
-    )
-    push_label: ClassVar[StrOrPromise] = gettext_lazy(
+    name = gettext_lazy("GitLab merge request")
+    identifier = "gitlab"
+    _version = None
+    API_TEMPLATE = "{scheme}://{host}/api/v4/projects/{owner_url}%2F{slug_url}"
+    push_label = gettext_lazy(
         "This will push changes and create a GitLab merge request."
     )
 
@@ -2025,11 +1993,11 @@ class GitLabRepository(GitMergeRequestBase):
 
 
 class PagureRepository(GitMergeRequestBase):
-    name: ClassVar[StrOrPromise] = gettext_lazy("Pagure merge request")
-    identifier: ClassVar[str] = "pagure"
-    _version: ClassVar[str | None] = None
-    API_TEMPLATE: ClassVar[str] = "{scheme}://{host}/api/0"
-    push_label: ClassVar[StrOrPromise] = gettext_lazy(
+    name = gettext_lazy("Pagure merge request")
+    identifier = "pagure"
+    _version = None
+    API_TEMPLATE = "{scheme}://{host}/api/0"
+    push_label = gettext_lazy(
         "This will push changes and create a Pagure merge request."
     )
 
@@ -2129,29 +2097,14 @@ class PagureRepository(GitMergeRequestBase):
 
 class BitbucketServerRepository(GitMergeRequestBase):
     # Translators: Bitbucket Data Center is a product name, it differs from Bitbucked Cloud
-    name: ClassVar[StrOrPromise] = gettext_lazy("Bitbucket Data Center pull request")
-    identifier: ClassVar[str] = "bitbucketserver"
-    _version: ClassVar[str | None] = None
-    API_TEMPLATE: ClassVar[str] = (
-        "{scheme}://{host}/rest/api/1.0/projects/{owner}/repos/{slug}"
-    )
-    push_label: ClassVar[StrOrPromise] = gettext_lazy(
+    name = gettext_lazy("Bitbucket Data Center pull request")
+    identifier = "bitbucketserver"
+    _version = None
+    API_TEMPLATE = "{scheme}://{host}/rest/api/1.0/projects/{owner}/repos/{slug}"
+    bb_fork: dict = {}
+    push_label = gettext_lazy(
         "This will push changes and create a Bitbucket Data Center pull request."
     )
-
-    def __init__(
-        self,
-        path: str,
-        *,
-        branch: str | None = None,
-        component: Component | None = None,
-        local: bool = False,
-        skip_init: bool = False,
-    ) -> None:
-        super().__init__(
-            path, branch=branch, component=component, local=local, skip_init=skip_init
-        )
-        self.bb_fork: dict = {}
 
     def get_headers(self, credentials: GitCredentials) -> dict[str, str]:
         headers = super().get_headers(credentials)
@@ -2290,13 +2243,11 @@ class BitbucketServerRepository(GitMergeRequestBase):
 class BitbucketCloudRepository(GitMergeRequestBase):
     """Bitbucket Cloud repository implementation."""
 
-    name: ClassVar[StrOrPromise] = gettext_lazy("Bitbucket Cloud merge request")
-    identifier: ClassVar[str] = "bitbucketcloud"
-    _version: ClassVar[str | None] = None
-    API_TEMPLATE: ClassVar[str] = (
-        "{scheme}://api.{host}/2.0/repositories/{owner}/{slug}"
-    )
-    REQUIRED_CONFIG: ClassVar[set[str]] = {"username", "token", "workspace"}
+    name = gettext_lazy("Bitbucket Cloud merge request")
+    identifier = "bitbucketcloud"
+    _version = None
+    API_TEMPLATE = "{scheme}://api.{host}/2.0/repositories/{owner}/{slug}"
+    REQUIRED_CONFIG = {"username", "token", "workspace"}
 
     def get_credentials(self) -> GitCredentials:
         """Return credentials for Bitbucket Cloud."""

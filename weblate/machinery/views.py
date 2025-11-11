@@ -23,10 +23,12 @@ from django.views.generic.edit import FormView
 
 from weblate.configuration.models import Setting, SettingCategory
 from weblate.machinery.base import (
+    BatchMachineTranslation,
     MachineTranslationError,
+    SettingsDict,
 )
 from weblate.machinery.models import MACHINERY
-from weblate.trans.models import Project, Unit
+from weblate.trans.models import Project, Translation, Unit
 from weblate.trans.templatetags.translations import format_language_string
 from weblate.utils.diff import Differ
 from weblate.utils.errors import report_error
@@ -35,11 +37,6 @@ from weblate.wladmin.views import MENU as MANAGE_MENU
 
 if TYPE_CHECKING:
     from weblate.auth.models import AuthenticatedHttpRequest
-    from weblate.machinery.base import (
-        BatchMachineTranslation,
-        SettingsDict,
-    )
-    from weblate.trans.models import Translation
 
 
 class MachineryMixin:
@@ -129,7 +126,7 @@ class MachineryConfiguration:
 class ListMachineryView(TemplateView):
     template_name = "machinery/list.html"
 
-    def setup(self, request: AuthenticatedHttpRequest, *args, **kwargs) -> None:  # type: ignore[override]
+    def setup(self, request: AuthenticatedHttpRequest, *args, **kwargs) -> None:
         super().setup(request, *args, **kwargs)
         self.project = None
         self.post_setup(request, kwargs)
@@ -200,7 +197,7 @@ class ListMachineryProjectView(MachineryProjectMixin, ListMachineryView):
                     machinery, configuration, sitewide=True, project=self.project
                 )
 
-    def dispatch(self, request: AuthenticatedHttpRequest, *args, **kwargs):  # type: ignore[override]
+    def dispatch(self, request: AuthenticatedHttpRequest, *args, **kwargs):
         if not request.user.has_perm("project.edit", self.project):
             raise PermissionDenied
         return super().dispatch(request, *args, **kwargs)
@@ -216,7 +213,7 @@ class EditMachineryView(FormView):
 
     machinery: DeprecatedMachinery | BatchMachineTranslation
 
-    def setup(self, request: AuthenticatedHttpRequest, *args, **kwargs) -> None:  # type: ignore[override]
+    def setup(self, request: AuthenticatedHttpRequest, *args, **kwargs) -> None:
         super().setup(request, *args, **kwargs)
         self.machinery_id = kwargs["machinery"]
         try:
@@ -272,7 +269,7 @@ class EditMachineryView(FormView):
             return reverse("machinery-list", kwargs={"project": self.project.slug})
         return reverse("manage-machinery")
 
-    def post(self, request: AuthenticatedHttpRequest, *args, **kwargs):  # type: ignore[override]
+    def post(self, request: AuthenticatedHttpRequest, *args, **kwargs):
         if "delete" in request.POST:
             self.delete_service()
             return HttpResponseRedirect(self.get_success_url())
@@ -292,7 +289,7 @@ class EditMachineryView(FormView):
             return HttpResponseRedirect(self.get_success_url())
         return super().post(request, *args, **kwargs)
 
-    def get(self, request: AuthenticatedHttpRequest, *args, **kwargs):  # type: ignore[override]
+    def get(self, request: AuthenticatedHttpRequest, *args, **kwargs):
         if not self.machinery.is_available:
             msg = "Invalid service specified"
             raise Http404(msg)
@@ -320,7 +317,7 @@ class EditMachineryGlobalView(MachineryGlobalMixin, EditMachineryView):
         self.save_settings(form.cleaned_data)
         return super().form_valid(form)
 
-    def dispatch(self, request: AuthenticatedHttpRequest, *args, **kwargs):  # type: ignore[override]
+    def dispatch(self, request: AuthenticatedHttpRequest, *args, **kwargs):
         if not request.user.has_perm("machinery.edit"):
             raise PermissionDenied
         return super().dispatch(request, *args, **kwargs)
@@ -341,11 +338,11 @@ class EditMachineryProjectView(MachineryProjectMixin, EditMachineryView):
         del self.project.machinery_settings[self.machinery_id]
         self.project.save(update_fields=["machinery_settings"])
 
-    def setup(self, request: AuthenticatedHttpRequest, *args, **kwargs) -> None:  # type: ignore[override]
+    def setup(self, request: AuthenticatedHttpRequest, *args, **kwargs) -> None:
         super().setup(request, *args, **kwargs)
         self.project = parse_path(request, [kwargs["project"]], (Project,))
 
-    def dispatch(self, request: AuthenticatedHttpRequest, *args, **kwargs):  # type: ignore[override]
+    def dispatch(self, request: AuthenticatedHttpRequest, *args, **kwargs):
         if not request.user.has_perm("project.edit", self.project):
             raise PermissionDenied
         return super().dispatch(request, *args, **kwargs)

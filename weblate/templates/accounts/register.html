@@ -42,7 +42,8 @@
               {% if registration_email %}
 
                 <form action="{% url 'register' %}" method="post" accept-charset="utf-8">
-                  {% crispy form %}
+                  {% csrf_token %}
+                  {{ form|crispy }}
                   <input type="submit"
                          value="{% translate 'Register' %}"
                          class="btn btn-primary btn-full" />

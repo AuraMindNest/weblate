@@ -322,22 +322,11 @@ def validate_base64_encoded_string(value: str) -> None:
 class WeblateURLValidator(URLValidator):
     """Validator for http and https URLs only."""
 
-    schemes: list[str] = [  # noqa: RUF012
-        "http",
-        "https",
-    ]
+    schemes = ["http", "https"]
 
 
 class WeblateEditorURLValidator(URLValidator):
-    schemes: list[str] = [  # noqa: RUF012
-        "editor",
-        "netbeans",
-        "txmt",
-        "pycharm",
-        "phpstorm",
-        "idea",
-        "jetbrains",
-    ]
+    schemes = ["editor", "netbeans", "txmt", "pycharm", "phpstorm", "idea", "jetbrains"]
 
     regex = re.compile(
         r"^(?:[a-z0-9.+-]*)://"  # scheme is validated separately
