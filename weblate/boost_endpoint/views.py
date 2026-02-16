@@ -52,7 +52,7 @@ class AddOrUpdateView(APIView):
         data = serializer.validated_data
         organization = data["organization"]
         submodules = data["submodules"]
-        lang_code = data["lang_code"]
+        lang_code = data.get("lang_code")
         version = data["version"]
         extensions = data.get("extensions")
 

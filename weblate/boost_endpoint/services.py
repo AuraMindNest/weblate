@@ -83,7 +83,7 @@ class BoostComponentService:
     def __init__(
         self,
         organization: str,
-        lang_code: str,
+        lang_code: str | None,
         version: str,
         extensions: list[str] | None = None,
     ):
@@ -283,7 +283,10 @@ class BoostComponentService:
         slug = _submodule_slug(submodule)
         component_slug = f"boost-{slug}-documentation-{config['component_slug']}"
         # Match reference: push_branch keeps lang_code as-is (e.g. zh_Hans)
-        push_branch = f"boost-{slug}-{self.lang_code}-translation-{self.version}"
+        if self.lang_code is not None:
+            push_branch = f"boost-{slug}-{self.lang_code}-translation-{self.version}"
+        else:
+            push_branch = f"boost-{slug}-translation-{self.version}"
 
         # Component name: "Boost {Submodule} Documentation / Doc / Library Detail"
         submodule_title = submodule.replace("_", " ").title()
@@ -334,7 +337,7 @@ class BoostComponentService:
             "suggestion_voting": False,
             "suggestion_autoaccept": 0,
             "check_flags": "",
-            "language_regex": f"^{self.lang_code}$",
+            "language_regex": f"^{self.lang_code}$" if self.lang_code else "a^",
         }
 
         try:
@@ -374,8 +377,9 @@ class BoostComponentService:
 
                     # Trigger git pull only for repo owner; linked components share the same lock.
                     self._sync_component_for_translation(component, request, created=False)
-                # Add language: ensure template/translations are loaded (sync) so add_new_language can succeed.
-                self.add_language_to_component(component, request)
+                # Add language when lang_code is set; skip when None.
+                if self.lang_code is not None:
+                    self.add_language_to_component(component, request)
 
             return component, created
 
@@ -438,7 +442,10 @@ class BoostComponentService:
         """Add language to component if not already added.
 
         Logic matches API view ComponentViewSet.translations (POST).
+        Skipped when lang_code is None.
         """
+        if self.lang_code is None:
+            return True
         if request is None:
             LOGGER.error("add_language_to_component requires request for permissions")
             return False
