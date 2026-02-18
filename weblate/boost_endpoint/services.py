@@ -282,11 +282,8 @@ class BoostComponentService:
 
         slug = _submodule_slug(submodule)
         component_slug = f"boost-{slug}-documentation-{config['component_slug']}"
-        # Match reference: push_branch keeps lang_code as-is (e.g. zh_Hans)
-        if self.lang_code is not None:
-            push_branch = f"boost-{slug}-{self.lang_code}-translation-{self.version}"
-        else:
-            push_branch = f"boost-{slug}-translation-{self.version}"
+        # Push branch name: boost-{slug}-translation-{version}
+        push_branch = f"boost-{slug}-translation-{self.version}"
 
         # Component name: "Boost {Submodule} Documentation / Doc / Library Detail"
         submodule_title = submodule.replace("_", " ").title()
@@ -578,6 +575,7 @@ class BoostComponentService:
                     )
                     LOGGER.info("Committed deletion of translation files for: %s", name)
                     if push_url and push_branch:
+                        # Push current branch to remote push_branch
                         subprocess.run(
                             [
                                 "git",
@@ -585,7 +583,7 @@ class BoostComponentService:
                                 base_path,
                                 "push",
                                 "origin",
-                                push_branch,
+                                f"HEAD:{push_branch}",
                             ],
                             check=True,
                             capture_output=True,

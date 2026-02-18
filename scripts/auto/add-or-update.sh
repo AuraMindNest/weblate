@@ -24,10 +24,18 @@ fi
 # Request parameters
 ORGANIZATION="CppDigest"
 SUBMODULES='["json"]'  # Can add more: '["json", "unordered", "container"]'
+# Optional: language to add (e.g. zh_Hans). Leave empty to create/update components only (no language).
 LANG_CODE="zh_Hans"
 VERSION="boost-1.90.0"
 # Optional: limit scan to these extensions (Weblate-supported). Use empty [] for no filter.
 EXTENSIONS='[]'  # e.g. '[".adoc", ".md"]' or '[]' for all supported
+
+# Build lang_code field: omit or null when empty so server skips add_language_to_component
+if [[ -n "${LANG_CODE}" ]]; then
+  LANG_CODE_JSON="\"lang_code\": \"${LANG_CODE}\""
+else
+  LANG_CODE_JSON="\"lang_code\": null"
+fi
 
 # Trigger API and exit quickly to save CI minutes. Request is sent; we do not wait
 # for the long-running response. Server continues add-or-update after we disconnect.
@@ -38,7 +46,7 @@ curl -X POST "${WEBLATE_URL}/boost-endpoint/add-or-update/" \
   -d "{
     \"organization\": \"${ORGANIZATION}\",
     \"submodules\": ${SUBMODULES},
-    \"lang_code\": \"${LANG_CODE}\",
+    ${LANG_CODE_JSON},
     \"version\": \"${VERSION}\",
     \"extensions\": ${EXTENSIONS}
   }" \
