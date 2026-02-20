@@ -1,4 +1,4 @@
-# Copyright © Michal Čihař <michal@weblate.org>
+# Copyright © Boost Organization <boost@boost.org>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -38,14 +38,20 @@ from weblate.logger import LOGGER
 from weblate.trans.models import Component, Project
 from weblate.utils.errors import report_error
 
-# Weblate API limit for component name
+# Weblate API limit for component name and slug (Component.name / Component.slug max_length)
 MAX_COMPONENT_NAME_LENGTH = 100
+MAX_COMPONENT_SLUG_LENGTH = 100
 # When over limit: first 64 + " ... " + last 25 (94 chars) to keep names unique
 TRUNCATE_NAME_HEAD = 64
 TRUNCATE_NAME_TAIL = 25
 TRUNCATE_NAME_SEP = " ... "
+# Slug truncation: head + "-" + tail (100 chars max) to reduce collision risk for long paths
+TRUNCATE_SLUG_HEAD = 64
+TRUNCATE_SLUG_TAIL = 35
+TRUNCATE_SLUG_SEP = "-"
 # Seconds to wait after sync so VCS lock can release / repo state can settle
 SYNC_SETTLE_SECONDS = 60
+ADD_TRANSLATION_SECONDS = 150
 
 
 def _submodule_slug(name: str) -> str:
@@ -58,6 +64,13 @@ def truncate_component_name(name: str, max_len: int = MAX_COMPONENT_NAME_LENGTH)
     if len(name) <= max_len:
         return name
     return name[:TRUNCATE_NAME_HEAD] + TRUNCATE_NAME_SEP + name[-TRUNCATE_NAME_TAIL:]
+
+
+def truncate_component_slug(slug: str, max_len: int = MAX_COMPONENT_SLUG_LENGTH) -> str:
+    """Truncate component slug to max_len. If over limit: first 64 + '-' + last 35."""
+    if len(slug) <= max_len:
+        return slug
+    return slug[:TRUNCATE_SLUG_HEAD] + TRUNCATE_SLUG_SEP + slug[-TRUNCATE_SLUG_TAIL:]
 
 
 def _build_extension_to_format() -> dict[str, str]:
@@ -281,7 +294,9 @@ class BoostComponentService:
             return None, False
 
         slug = _submodule_slug(submodule)
-        component_slug = f"boost-{slug}-documentation-{config['component_slug']}"
+        component_slug = truncate_component_slug(
+            f"boost-{slug}-documentation-{config['component_slug']}"
+        )
         # Push branch name: boost-{slug}-translation-{version}
         push_branch = f"boost-{slug}-translation-{self.version}"
 
@@ -363,9 +378,6 @@ class BoostComponentService:
                     # Ensure branch is "local" (avoid "fatal: no such branch: 'master'"
                     # when remote has no master/main)
                     update_fields = []
-                    if component.branch != "local":
-                        component.branch = "local"
-                        update_fields.append("branch")
                     if component.push_branch != push_branch:
                         component.push_branch = push_branch
                         update_fields.append("push_branch")
@@ -375,8 +387,8 @@ class BoostComponentService:
                     # Trigger git pull only for repo owner; linked components share the same lock.
                     self._sync_component_for_translation(component, request, created=False)
                 # Add language when lang_code is set; skip when None.
-                if self.lang_code is not None:
-                    self.add_language_to_component(component, request)
+            if self.lang_code is not None:
+                self.add_language_to_component(component, request)
 
             return component, created
 
@@ -431,7 +443,7 @@ class BoostComponentService:
                     e,
                 )
 
-        time.sleep(SYNC_SETTLE_SECONDS)
+        # time.sleep(SYNC_SETTLE_SECONDS)
 
     def add_language_to_component(
         self, component: Component, request=None
@@ -459,32 +471,39 @@ class BoostComponentService:
             )
             return True
 
-        # Guarantee synchronization: ensure template/base is on disk before can_add_new_language.
-        # When CELERY_TASK_ALWAYS_EAGER is False, do_update/create_translations only schedule a task.
-        try:
-            component.create_translations_immediate(request=request, force=True)
-        except Exception as e:
-            LOGGER.warning("create_translations_immediate before add language: %s", e)
-
+        # Check order: (1) permission, (2) language in allowed set, (3) sync, (4) policy/validity, (5) add.
+        # (1) has_perm("translation.add"): permission only, no I/O; fail fast.
         if not request.user.has_perm("translation.add", component):
             LOGGER.warning("Can not create translation: no translation.add on %s", component.name)
             return False
 
+        # (2) get_all_available_languages() + add_more filter: DB only. Ensure lang_code is in the
+        # allowed set (not already in component; if user lacks add_more, restrict to basic/project
+        # languages). Fail fast before any I/O so we do not sync when language is not addable.
+        base_languages = component.get_all_available_languages()
+        if not request.user.has_perm("translation.add_more", component):
+            base_languages = base_languages.filter_for_add(component.project)
+        if not base_languages.filter(pk=language.pk).exists():
+            LOGGER.error("Could not add %r to %s (language not available)", self.lang_code, component.name)
+            return False
+
+        # (3) create_translations_immediate: loads translations and ensures template/new_base
+        # are on disk. Required before (4) because can_add_new_language checks file existence
+        # and template validity.
+        try:
+            component.create_translations_immediate(request=request, force=True)
+        except Exception as e:
+            LOGGER.warning("create_translations_immediate before add language: %s", e)
+            return False
+
+        # (4) can_add_new_language: checks new_lang config, template/new_base existence and
+        # validity, is_valid_base_for_new. Depends on (3) so files exist.
         if not component.can_add_new_language(request.user):
             reason = getattr(component, "new_lang_error_message", None) or "Can not add new language"
             LOGGER.warning("Could not add language %s to %s: %s", self.lang_code, component.name, reason)
             return False
 
-        base_languages = component.get_all_available_languages()
-        if not request.user.has_perm("translation.add_more", component):
-            base_languages = base_languages.filter_for_add(component.project)
-
-        try:
-            language = base_languages.get(code=self.lang_code)
-        except Language.DoesNotExist:
-            LOGGER.error("Could not add %r to %s (language not available)", self.lang_code, component.name)
-            return False
-
+        # (5) add_new_language: creates translation file and DB record. Depends on (3) and (4).
         try:
             translation = component.add_new_language(language, request)
         except Exception as e:
@@ -500,6 +519,8 @@ class BoostComponentService:
             )
             LOGGER.warning("Could not add language %s to %s: %s", self.lang_code, component.name, message)
             return False
+
+        time.sleep(ADD_TRANSLATION_SECONDS)
 
         LOGGER.info("Added language %s to %s", self.lang_code, component.name)
         return True
@@ -661,7 +682,9 @@ class BoostComponentService:
         # Delete components that are not in configs (no longer in repo scan).
         # Never delete glossary components (is_glossary); they are managed by Weblate.
         prefix = f"boost-{_submodule_slug(submodule)}-documentation-"
-        wanted_slugs = {f"{prefix}{c['component_slug']}" for c in configs}
+        wanted_slugs = {
+            truncate_component_slug(f"{prefix}{c['component_slug']}") for c in configs
+        }
         for component in project.component_set.all():
             if component.slug not in wanted_slugs and not component.is_glossary:
                 try:

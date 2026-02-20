@@ -1,4 +1,4 @@
-# Copyright © Michal Čihař <michal@weblate.org>
+# Copyright © Boost Organization <boost@boost.org>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -15,6 +15,7 @@ class AddOrUpdateRequestSerializer(serializers.Serializer):
     submodules = serializers.ListField(
         child=serializers.CharField(),
         required=True,
+        allow_empty=False,
         help_text="List of submodule names (e.g., ['json', 'unordered'])"
     )
     lang_code = serializers.CharField(
