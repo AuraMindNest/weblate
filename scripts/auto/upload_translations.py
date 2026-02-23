@@ -479,9 +479,11 @@ def main() -> int:
             if args.component in matches:
                 matches = {args.component: matches[args.component]}
             else:
-                avail = ", ".join(sorted(matches.keys())[:5])
+                all_keys = sorted(matches.keys())
+                avail = ", ".join(all_keys[:5])
+                suffix = "..." if len(all_keys) > 5 else ""
                 print(
-                    f"Component '{args.component}' not found. Available: {avail}...",
+                    f"Component '{args.component}' not found. Available: {avail}{suffix}",
                     flush=True,
                 )
                 matches = {}

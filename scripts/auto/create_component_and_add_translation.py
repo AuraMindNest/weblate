@@ -51,14 +51,14 @@ except ImportError as e:
     print("[INFO] Make sure create_component.py and add_translation.py are present", flush=True)
     sys.exit(1)
 
-# Default path for Weblate-supported formats (file_format, extensions)
+# Default path for Weblate-supported formats (file_format, file_extensions)
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_FORMATS_CONFIG = os.path.join(_SCRIPT_DIR, "weblate_supported_formats.json")
 
 
 def load_supported_formats(config_path: str) -> set:
     """Load set of supported Weblate file_format ids from JSON config.
-    Config is a list of {"file_format": "...", "extensions": [".ext", ...]}.
+    Config is a list of {"file_format": "...", "file_extensions": [".ext", ...]}.
     Returns set of file_format strings. On missing/invalid file, returns default set.
     """
     default_formats = {
@@ -77,7 +77,8 @@ def load_supported_formats(config_path: str) -> set:
         return default_formats
     if not isinstance(data, list):
         return default_formats
-    return {item.get("file_format") for item in data if item.get("file_format")}
+    return {item["file_format"].strip().lower() for item in data
+            if isinstance(item.get("file_format"), str) and item["file_format"].strip()}
 
 
 def is_format_supported(config: Dict[str, Any], supported_formats: set) -> bool:

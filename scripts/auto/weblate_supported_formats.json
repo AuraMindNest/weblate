@@ -1,8 +1,8 @@
 [
   {"file_format": "asciidoc", "file_extensions": [".adoc"]},
   {"file_format": "po", "file_extensions": [".po", ".pot"]},
-  {"file_format": "json", "file_extensions": [".json"]},
-  {"file_format": "yaml", "file_extensions": [".yaml", ".yml"]},
+  {"file_format": "json", "file_extensions": [".json"], "note": ".json shared with webextension; use component file_format to disambiguate."},
+  {"file_format": "yaml", "file_extensions": [".yaml", ".yml"], "note": ".yml shared with ruby-yaml; use component file_format to disambiguate."},
   {"file_format": "xliff", "file_extensions": [".xliff", ".xlf"]},
   {"file_format": "markdown", "file_extensions": [".md"]},
   {"file_format": "txt", "file_extensions": [".txt"]},
@@ -12,7 +12,7 @@
   {"file_format": "idml", "file_extensions": [".idml"]},
   {"file_format": "ini", "file_extensions": [".ini"]},
   {"file_format": "php", "file_extensions": [".php"]},
-  {"file_format": "properties", "file_extensions": [".properties"]},
+  {"file_format": "properties", "file_extensions": [".properties"], "note": ".properties shared with gwt; use component file_format to disambiguate."},
   {"file_format": "resx", "file_extensions": [".resx", ".resw"]},
   {"file_format": "ts", "file_extensions": [".ts"]},
   {"file_format": "dtd", "file_extensions": [".dtd"]},
@@ -21,10 +21,10 @@
   {"file_format": "stringsdict", "file_extensions": [".stringsdict"]},
   {"file_format": "tbx", "file_extensions": [".tbx"]},
   {"file_format": "xlsx", "file_extensions": [".xlsx"]},
-  {"file_format": "ruby-yaml", "file_extensions": [".yml"]},
-  {"file_format": "webextension", "file_extensions": [".json"]},
+  {"file_format": "ruby-yaml", "file_extensions": [".yml"], "note": ".yml shared with yaml; use component file_format to disambiguate."},
+  {"file_format": "webextension", "file_extensions": [".json"], "note": ".json shared with json; use component file_format to disambiguate."},
   {"file_format": "arb", "file_extensions": [".arb"]},
-  {"file_format": "gwt", "file_extensions": [".properties"]},
+  {"file_format": "gwt", "file_extensions": [".properties"], "note": ".properties shared with properties; use component file_format to disambiguate."},
   {"file_format": "winrc", "file_extensions": [".rc"]},
   {"file_format": "subtitle", "file_extensions": [".srt", ".sub", ".vtt", ".ass"]}
 ]

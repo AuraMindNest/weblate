@@ -48,7 +48,7 @@ def clone_repository(repo_url: str, branch: str, target_dir: str) -> bool:
         # Use repo URL as-is so SSH keys work when repo_url is git@github.com:...
         clone_url = repo_url
         cmd = ["git", "clone", "-b", branch, "--depth", "1", clone_url, target_dir]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
 
         if result.returncode != 0:
             print(f"[ERROR] Failed to clone repository: {result.stderr}")
@@ -57,6 +57,9 @@ def clone_repository(repo_url: str, branch: str, target_dir: str) -> bool:
         print(f"[SUCCESS] Repository cloned to: {target_dir}")
         return True
 
+    except subprocess.TimeoutExpired:
+        print(f"[ERROR] Clone timed out after 300s: {repo_url}")
+        return False
     except Exception as e:
         print(f"[ERROR] Exception during clone: {e}")
         return False

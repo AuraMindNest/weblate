@@ -235,7 +235,7 @@ class BoostComponentService:
         slug = _submodule_slug(submodule)
         project_name = f"Boost {submodule.replace('_', ' ').title()} Documentation"
         project_slug = f"boost-{slug}-documentation"
-        project_web = f"https://www.boost.org/doc/libs/master/libs/{slug}/doc/html/"
+        project_web = f"https://www.boost.org/doc/libs/master/libs/{submodule}/doc/html/"
 
         with transaction.atomic():
             project, created = Project.objects.get_or_create(
