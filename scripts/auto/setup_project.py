@@ -190,12 +190,17 @@ def generate_push_branch(component_slug: str, prefix: str = "weblate") -> str:
     return f"{prefix}-{component_slug}"
 
 
-# Weblate API limit for component name
+# Weblate API limit for component name and slug
 MAX_COMPONENT_NAME_LENGTH = 100
+MAX_COMPONENT_SLUG_LENGTH = 100
 # When over limit: first 64 + " ... " + last 25 (94 chars) to keep names unique
 TRUNCATE_NAME_HEAD = 64
 TRUNCATE_NAME_TAIL = 25
 TRUNCATE_NAME_SEP = " ... "
+# Slug truncation: first 64 + '-' + last 35
+TRUNCATE_SLUG_HEAD = 64
+TRUNCATE_SLUG_TAIL = 35
+TRUNCATE_SLUG_SEP = "-"
 
 
 def truncate_component_name(name: str, max_len: int = MAX_COMPONENT_NAME_LENGTH) -> str:
@@ -203,6 +208,13 @@ def truncate_component_name(name: str, max_len: int = MAX_COMPONENT_NAME_LENGTH)
     if len(name) <= max_len:
         return name
     return name[:TRUNCATE_NAME_HEAD] + TRUNCATE_NAME_SEP + name[-TRUNCATE_NAME_TAIL:]
+
+
+def truncate_component_slug(slug: str, max_len: int = MAX_COMPONENT_SLUG_LENGTH) -> str:
+    """Truncate component slug to max_len. If over limit: first 64 + '-' + last 35."""
+    if len(slug) <= max_len:
+        return slug
+    return slug[:TRUNCATE_SLUG_HEAD] + TRUNCATE_SLUG_SEP + slug[-TRUNCATE_SLUG_TAIL:]
 
 
 def generate_component_config(
@@ -225,6 +237,7 @@ def generate_component_config(
     project_slug = (project_config.get('slug') or '').strip()
     if project_slug:
         component_slug = f"{project_slug}-{component_slug}"
+    component_slug = truncate_component_slug(component_slug)
     filemask = generate_filemask(file_path)
 
     # Use push_branch from component_defaults if specified, otherwise auto-generate

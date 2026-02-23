@@ -136,7 +136,11 @@ def build_config(
     """Build a setup_project-style config dict for one library."""
     if doc_extensions is None:
         doc_extensions = [".adoc"]
-    repo = https_to_git_ssh(repo_url).replace("boostorg", "CppDigest")
+    repo = re.sub(
+        r"(git@github\.com:)boostorg/",
+        r"\1CppDigest/",
+        https_to_git_ssh(repo_url),
+    )
     name = slug_to_project_name(slug)
     project_slug = slug_to_project_slug(slug)
     url_path = slug_to_doc_url_path(slug)

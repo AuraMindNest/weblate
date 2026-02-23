@@ -25,6 +25,7 @@ import json
 import os
 import re
 import sys
+import time
 from collections import defaultdict
 from typing import Dict, List, Optional, Set, Tuple
 from urllib.error import HTTPError, URLError
@@ -73,7 +74,7 @@ def load_dotenv_script_dir() -> None:
                 value = value[1:-1].replace('""', '"')
             elif value.startswith("'") and value.endswith("'"):
                 value = value[1:-1]
-            if key and value:
+            if key:
                 os.environ.setdefault(key, value)
             continue
         # JSON-like: "github_token": "value" -> set GITHUB_TOKEN
@@ -98,8 +99,27 @@ def fetch_url(url: str, token: Optional[str] = None) -> str:
     if token:
         headers["Authorization"] = f"Bearer {token}"
     req = Request(url, headers=headers)
-    with urlopen(req, timeout=30) as r:
-        return r.read().decode("utf-8")
+    last_error = None
+    for attempt in range(5):
+        try:
+            with urlopen(req, timeout=30) as r:
+                return r.read().decode("utf-8")
+        except HTTPError as e:
+            last_error = e
+            if e.code not in (429, 403) or attempt == 4:
+                raise
+            retry_after = None
+            if e.headers.get("Retry-After"):
+                try:
+                    retry_after = int(e.headers.get("Retry-After"))
+                except (ValueError, TypeError):
+                    pass
+            if retry_after is None:
+                retry_after = min(60, 2 ** attempt)
+            time.sleep(retry_after)
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("fetch_url: unexpected state")
 
 
 def fetch_json(url: str, token: Optional[str] = None) -> dict:

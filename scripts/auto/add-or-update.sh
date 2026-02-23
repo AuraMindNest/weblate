@@ -30,12 +30,14 @@ VERSION="boost-1.90.0"
 # Optional: limit scan to these extensions (Weblate-supported). Use empty [] for no filter.
 EXTENSIONS='[]'  # e.g. '[".adoc", ".md"]' or '[]' for all supported
 
-# Build lang_code field: omit or null when empty so server skips add_language_to_component
-if [[ -n "${LANG_CODE}" ]]; then
-  LANG_CODE_JSON="\"lang_code\": \"${LANG_CODE}\""
-else
-  LANG_CODE_JSON="\"lang_code\": null"
-fi
+# Build JSON payload with jq to avoid corruption from special chars in ORGANIZATION/VERSION/LANG_CODE
+PAYLOAD="$(jq -n \
+  --arg org  "${ORGANIZATION}" \
+  --arg lang "${LANG_CODE}" \
+  --arg ver  "${VERSION}" \
+  --argjson sub "${SUBMODULES}" \
+  --argjson ext "${EXTENSIONS}" \
+  '{organization:$org, submodules:$sub, lang_code:(if $lang != "" then $lang else null end), version:$ver, extensions:$ext}')"
 
 # Trigger API and exit quickly to save CI minutes. Request is sent; we do not wait
 # for the long-running response. Server continues add-or-update after we disconnect.
@@ -43,13 +45,7 @@ fi
 curl -X POST "${WEBLATE_URL}/boost-endpoint/add-or-update/" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"organization\": \"${ORGANIZATION}\",
-    \"submodules\": ${SUBMODULES},
-    ${LANG_CODE_JSON},
-    \"version\": \"${VERSION}\",
-    \"extensions\": ${EXTENSIONS}
-  }" \
+  -d "${PAYLOAD}" \
   --max-time 5 \
   || true
 
