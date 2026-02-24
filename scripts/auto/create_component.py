@@ -531,7 +531,7 @@ def _gather_component_config() -> Dict[str, Any]:
         "file_format": _prompt("File format", required=True),
     }
 
-    monolingual_formats = ["json", "html", "markdown", "asciidoc"]
+    monolingual_formats = ["json", "html", "markdown", "asciidoc", "txt"]
     if config["file_format"] in monolingual_formats:
         template = _prompt("Template file path (for monolingual format)")
         if template:

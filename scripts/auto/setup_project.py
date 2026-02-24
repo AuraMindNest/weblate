@@ -727,6 +727,7 @@ def run_one_config(args: argparse.Namespace, config_path: str, skip_on_clone_fai
                 while component_slug in seen_slugs:
                     component_slug = f"{original_slug}-{counter}"
                     counter += 1
+                component_slug = truncate_component_slug(component_slug)
                 print(f"  Using unique slug: {component_slug}")
                 component_config['component']['slug'] = component_slug
 

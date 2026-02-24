@@ -77,9 +77,7 @@ def _build_extension_to_format() -> dict[str, str]:
     """Build extension -> format_id from Weblate FILE_FORMATS (internal API)."""
     result = {}
     for format_cls in FILE_FORMATS.data.values():
-        format_id = getattr(format_cls, "format_id", None) or getattr(
-            format_cls, "name", ""
-        )
+        format_id = getattr(format_cls, "format_id", None)
         if not format_id or not getattr(format_cls, "autoload", ()):
             continue
         for pattern in format_cls.autoload:
@@ -211,8 +209,9 @@ class BoostComponentService:
             for part in component_name_parts
         )
 
-        # Generate slug
+        # Generate slug (include extension so doc/intro.adoc vs doc/intro.md differ)
         slug_parts = [part.lower().replace("_", "-") for part in component_name_parts]
+        slug_parts.append(extension.lstrip(".").lower())
         component_slug = "-".join(slug_parts)
 
         # File mask for translations (e.g., "doc/intro_*.adoc" for "doc/intro.adoc")
@@ -545,12 +544,12 @@ class BoostComponentService:
         ]
         component.delete()
 
-        removed_any = False
+        actually_removed = []
         for file_path in translation_files:
             if os.path.isfile(file_path):
                 try:
                     os.remove(file_path)
-                    removed_any = True
+                    actually_removed.append(file_path)
                     LOGGER.info("Removed translation file: %s", file_path)
                 except OSError as e:
                     LOGGER.warning(
@@ -560,10 +559,14 @@ class BoostComponentService:
                     )
                     result["errors"].append(f"Failed to remove {file_path}: {e}")
 
-        if removed_any and os.path.isdir(os.path.join(base_path, ".git")):
+        if actually_removed and os.path.isdir(os.path.join(base_path, ".git")):
             try:
+                # Stage only the removed files (not all tracked changes)
+                rel_paths = [
+                    os.path.relpath(p, base_path) for p in actually_removed
+                ]
                 subprocess.run(
-                    ["git", "-C", base_path, "add", "-u"],
+                    ["git", "-C", base_path, "add", "--"] + rel_paths,
                     check=True,
                     capture_output=True,
                     timeout=60,
@@ -655,17 +658,23 @@ class BoostComponentService:
 
         LOGGER.info("Found %s documentation files in %s", len(configs), submodule)
 
+        # Check permissions before creating so no Project is committed when denied
+        project_slug = f"boost-{_submodule_slug(submodule)}-documentation"
+        existing_project = Project.objects.filter(slug=project_slug).first()
+        if existing_project is not None and request is not None and user is not None:
+            result["errors"].append("Can not create components (missing project.edit)")
+            return result
+        elif existing_project is None and request is not None and user is not None:
+            if not user.has_perm("project.add"):
+                result["errors"].append("Can not create project (missing project.add)")
+                return result
+
         # Get or create project
         try:
             project = self.get_or_create_project(submodule, user)
         except Exception as e:
             result["errors"].append(f"Failed to create project: {e}")
             report_error(cause="Project creation")
-            return result
-
-        # Match API: ProjectViewSet.components (POST) requires project.edit on the project
-        if request is not None and user is not None and not user.has_perm("project.edit", project):
-            result["errors"].append("Can not create components (missing project.edit)")
             return result
 
         # Create or update components
