@@ -19,13 +19,8 @@ class AddOrUpdateRequestSerializer(serializers.Serializer):
         help_text="List of submodule names (e.g., ['json', 'unordered'])"
     )
     lang_code = serializers.CharField(
-        required=False,
-        allow_null=True,
-        default=None,
-        help_text=(
-            "Language code to add (e.g., 'zh_Hans'). If null or omitted, "
-            "components are created/updated but no language is added."
-        ),
+        required=True,
+        help_text="Language code to add (e.g., 'zh_Hans').",
     )
     version = serializers.CharField(
         required=True,

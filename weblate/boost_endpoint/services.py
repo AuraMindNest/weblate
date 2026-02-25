@@ -94,7 +94,7 @@ class BoostComponentService:
     def __init__(
         self,
         organization: str,
-        lang_code: str | None,
+        lang_code: str,
         version: str,
         extensions: list[str] | None = None,
     ):
@@ -232,8 +232,9 @@ class BoostComponentService:
     def get_or_create_project(self, submodule: str, user=None) -> Project:
         """Get or create a Weblate project for the submodule."""
         slug = _submodule_slug(submodule)
-        project_name = f"Boost {submodule.replace('_', ' ').title()} Documentation"
-        project_slug = f"boost-{slug}-documentation"
+        submodule_title = submodule.replace("_", " ").title()
+        project_name = f"Boost {submodule_title} Translation ({self.lang_code})"
+        project_slug = f"boost-{slug}-documentation-{self.lang_code}"
         project_web = f"https://www.boost.org/doc/libs/master/libs/{submodule}/doc/html/"
 
         with transaction.atomic():
@@ -297,7 +298,7 @@ class BoostComponentService:
             f"boost-{slug}-documentation-{config['component_slug']}"
         )
         # Push branch name: boost-{slug}-translation-{version}
-        push_branch = f"boost-{slug}-translation-{self.version}"
+        push_branch = f"boost-{slug}-translation-{self.version}-{self.lang_code}"
 
         # Component name: "Boost {Submodule} Documentation / Doc / Library Detail"
         submodule_title = submodule.replace("_", " ").title()
@@ -348,7 +349,7 @@ class BoostComponentService:
             "suggestion_voting": False,
             "suggestion_autoaccept": 0,
             "check_flags": "",
-            "language_regex": f"^{self.lang_code}$" if self.lang_code else "a^",
+            "language_regex": f"^{self.lang_code}$",
         }
 
         try:
@@ -385,8 +386,6 @@ class BoostComponentService:
 
                     # Trigger git pull only for repo owner; linked components share the same lock.
                     self._sync_component_for_translation(component, request, created=False)
-                # Add language when lang_code is set; skip when None.
-            if self.lang_code is not None:
                 self.add_language_to_component(component, request)
 
             return component, created
@@ -450,10 +449,7 @@ class BoostComponentService:
         """Add language to component if not already added.
 
         Logic matches API view ComponentViewSet.translations (POST).
-        Skipped when lang_code is None.
         """
-        if self.lang_code is None:
-            return True
         if request is None:
             LOGGER.error("add_language_to_component requires request for permissions")
             return False

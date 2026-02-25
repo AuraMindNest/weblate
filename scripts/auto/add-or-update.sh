@@ -25,8 +25,8 @@ fi
 ORGANIZATION="CppDigest"
 SUBMODULES='["json"]'  # Can add more: '["json", "unordered", "container"]'
 # Optional: language to add (e.g. zh_Hans). Leave empty to create/update components only (no language).
-LANG_CODE="zh_Hans"
-VERSION="boost-1.90.0"
+LANG_CODE="ja"
+VERSION="boost-1.89.0"
 # Optional: limit scan to these extensions (Weblate-supported). Use empty [] for no filter.
 EXTENSIONS='[]'  # e.g. '[".adoc", ".md"]' or '[]' for all supported
 
