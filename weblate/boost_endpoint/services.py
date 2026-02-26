@@ -177,6 +177,10 @@ class BoostComponentService:
                 if ext not in supported_exts:
                     continue
 
+                # Exclude translation files: filename like *_{lang_code} (e.g. intro_zh_Hans.adoc)
+                if file_path.stem.endswith("_" + self.lang_code):
+                    continue
+
                 relative_path = file_path.relative_to(repo_dir)
                 # Skip files in repo root (only include files in subfolders)
                 if len(relative_path.parts) <= 1:
