@@ -23,21 +23,20 @@ fi
 
 # Request parameters
 ORGANIZATION="CppDigest"
-SUBMODULES='["json"]'  # Can add more: '["json", "unordered", "container"]'
-# Optional: language to add (e.g. zh_Hans). Leave empty to create/update components only (no language).
-LANG_CODE="ja"
+# add_or_update: map lang_code -> array of submodules. Each lang runs with its own submodule list.
+# Example: zh_Hans runs for ["json"], ja runs for ["json", "unordered"].
+ADD_OR_UPDATE='{"zh_Hans":["json", "unordered"],"ja":["json"]}'
 VERSION="boost-1.89.0"
 # Optional: limit scan to these extensions (Weblate-supported). Use empty [] for no filter.
 EXTENSIONS='[]'  # e.g. '[".adoc", ".md"]' or '[]' for all supported
 
-# Build JSON payload with jq to avoid corruption from special chars in ORGANIZATION/VERSION/LANG_CODE
+# Build JSON payload with jq to avoid corruption from special chars in ORGANIZATION/VERSION
 PAYLOAD="$(jq -n \
   --arg org  "${ORGANIZATION}" \
-  --arg lang "${LANG_CODE}" \
   --arg ver  "${VERSION}" \
-  --argjson sub "${SUBMODULES}" \
+  --argjson add "${ADD_OR_UPDATE}" \
   --argjson ext "${EXTENSIONS}" \
-  '{organization:$org, submodules:$sub, lang_code:(if $lang != "" then $lang else null end), version:$ver, extensions:$ext}')"
+  '{organization:$org, add_or_update:$add, version:$ver, extensions:$ext}')"
 
 # Trigger API and exit quickly to save CI minutes. Request is sent; we do not wait
 # for the long-running response. Server continues add-or-update after we disconnect.

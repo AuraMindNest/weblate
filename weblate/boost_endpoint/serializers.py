@@ -12,15 +12,15 @@ class AddOrUpdateRequestSerializer(serializers.Serializer):
         required=True,
         help_text="GitHub organization name (e.g., 'CppDigest')"
     )
-    submodules = serializers.ListField(
-        child=serializers.CharField(),
+    add_or_update = serializers.DictField(
+        child=serializers.ListField(child=serializers.CharField()),
         required=True,
         allow_empty=False,
-        help_text="List of submodule names (e.g., ['json', 'unordered'])"
-    )
-    lang_code = serializers.CharField(
-        required=True,
-        help_text="Language code to add (e.g., 'zh_Hans').",
+        help_text=(
+            "Map language code -> list of submodule names. "
+            "E.g. {\"zh_Hans\": [\"json\", \"unordered\"], \"ja\": [\"json\"]}. "
+            "Service runs for each lang_code with its submodule array."
+        ),
     )
     version = serializers.CharField(
         required=True,

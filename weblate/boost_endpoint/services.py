@@ -37,6 +37,7 @@ from weblate.lang.models import Language
 from weblate.logger import LOGGER
 from weblate.trans.models import Component, Project
 from weblate.utils.errors import report_error
+from weblate.vcs.base import RepositoryError
 
 # Weblate API limit for component name and slug (Component.name / Component.slug max_length)
 MAX_COMPONENT_NAME_LENGTH = 100
@@ -129,7 +130,7 @@ class BoostComponentService:
                 allowed.add(e)
         return supported & allowed
 
-    def clone_repository(self, submodule: str, target_dir: str, branch: str = "local") -> bool:
+    def clone_repository(self, submodule: str, target_dir: str, branch: str) -> bool:
         """Clone a git repository to target directory."""
         repo_url = f"https://github.com/{self.organization}/{submodule}.git"
 
@@ -297,8 +298,8 @@ class BoostComponentService:
         component_slug = truncate_component_slug(
             f"boost-{slug}-documentation-{config['component_slug']}"
         )
-        # Push branch name: boost-{slug}-translation-{version}
-        push_branch = f"boost-{slug}-translation-{self.version}-{self.lang_code}"
+        # Push branch name: translation-{self.lang_code}-{self.version}
+        push_branch = f"translation-{self.lang_code}-{self.version}"
 
         # Component name: "Boost {Submodule} Documentation / Doc / Library Detail"
         submodule_title = submodule.replace("_", " ").title()
@@ -335,7 +336,7 @@ class BoostComponentService:
             "vcs": "github",
             "repo": repo_url,
             "push": push_url,
-            "branch": "local",
+            "branch": f"local-{self.lang_code}",
             "push_branch": push_branch,
             "filemask": config["filemask"],
             "template": config["template"],
@@ -375,7 +376,7 @@ class BoostComponentService:
                     self._sync_component_for_translation(component, request, created=True)
                 else:
                     LOGGER.info("Component exists: %s", component.name)
-                    # Ensure branch is "local" (avoid "fatal: no such branch: 'master'"
+                    # Ensure branch is "local-{lang_code}" (avoid "fatal: no such branch: 'master'"
                     # when remote has no master/main)
                     update_fields = []
                     if component.push_branch != push_branch:
@@ -399,20 +400,66 @@ class BoostComponentService:
             report_error(cause="Component creation/update")
             return None, False
 
+    def _do_update_git_only(self, component: Component, request) -> bool:
+        """Perform only the git update (fetch, merge/rebase). Does not call create_translations.
+        Mirrors Component.do_update lock block + push_if_needed; caller must call
+        create_translations_immediate after.
+        """
+        component.translations_progress = 0
+        component.translations_count = 0
+        with component.repository.lock:
+            component.store_background_task()
+            component.progress_step(0)
+            component.configure_repo(pull=False)
+            if not component.update_remote_branch():
+                return False
+            component.configure_branch()
+            try:
+                needs_merge = component.repo_needs_merge()
+            except RepositoryError:
+                needs_merge = True
+            if not needs_merge:
+                component.delete_alert("MergeFailure")
+                component.delete_alert("RepositoryOutdated")
+                component.progress_step(100)
+                component.translations_count = None
+                return True
+            if component.needs_commit_upstream():
+                component.commit_pending(
+                    "update", request.user if request else None, skip_push=True
+                )
+            try:
+                result = component.update_branch(request, method=None, skip_push=True)
+            except RepositoryError:
+                result = False
+        if result:
+            component.push_if_needed(do_update=False)
+        if not component.repo_needs_push():
+            component.delete_alert("RepositoryChanges")
+        component.progress_step(100)
+        component.translations_count = None
+        return bool(result)
+
     def _sync_component_for_translation(
         self, component: Component, request, *, created: bool
     ) -> None:
         """Ensure repo/translations are ready before add_language_to_component. Idempotent."""
         if not component.is_repo_link:
             try:
-                component.do_update(request)
-                LOGGER.info(
-                    "%s for %s",
-                    "Initial clone/update for new component"
-                    if created
-                    else "Updated component repository",
-                    component.name,
-                )
+                # Git work only (same as do_update but without create_translations).
+                # We then call create_translations_immediate so sync is guaranteed
+                # regardless of CELERY_TASK_ALWAYS_EAGER.
+                result = self._do_update_git_only(component, request)
+                if result:
+                    LOGGER.info(
+                        "%s for %s",
+                        "Initial clone/update for new component"
+                        if created
+                        else "Updated component repository",
+                        component.name,
+                    )
+                else:
+                    LOGGER.warning("Git update did not succeed for %s", component.name)
             except Exception as e:
                 LOGGER.warning(
                     "Failed to %s %s: %s",
@@ -421,27 +468,23 @@ class BoostComponentService:
                     e,
                 )
                 report_error(cause="Component creation" if created else "Component update")
-        else:
-            if not created:
-                LOGGER.info("Skipping do_update for repo link: %s", component.name)
-            try:
-                component.create_translations_immediate(request=request, force=True)
-                LOGGER.info(
-                    "%s: %s",
-                    "Loaded translations for new repo link"
-                    if created
-                    else "Refreshed translations for repo link",
-                    component.name,
-                )
-            except Exception as e:
-                LOGGER.warning(
-                    "Failed to %s %s: %s",
-                    "load translations for new link" if created else "refresh translations for",
-                    component.name,
-                    e,
-                )
+        try:
+            component.create_translations_immediate(request=request, force=True)
+            LOGGER.info(
+                "%s: %s",
+                "Loaded translations for new repo link"
+                if created
+                else "Refreshed translations for repo link",
+                component.name,
+            )
+        except Exception as e:
+            LOGGER.warning(
+                "Failed to %s %s: %s",
+                "load translations for new link" if created else "refresh translations for",
+                component.name,
+                e,
+            )
 
-        # time.sleep(SYNC_SETTLE_SECONDS)
 
     def add_language_to_component(
         self, component: Component, request=None
@@ -642,7 +685,7 @@ class BoostComponentService:
         os.makedirs(temp_submodule_dir, exist_ok=True)
 
         # Clone repository
-        if not self.clone_repository(submodule, temp_submodule_dir, "master"):
+        if not self.clone_repository(submodule, temp_submodule_dir, f"local-{self.lang_code}"):
             result["errors"].append(f"Failed to clone repository for {submodule}")
             return result
 

@@ -35,12 +35,9 @@ class AddOrUpdateView(APIView):
         """
         Create or update Boost documentation components.
 
-        For each submodule:
-        1. Clone the repository
-        2. Scan for supported documentation files
-        3. Create or update project
-        4. Create or update components
-        5. Add language translations
+        add_or_update is a map: lang_code -> [submodule names]. For each lang_code
+        the service runs with that language and its submodule list (clone, scan,
+        create/update project and components, add language).
         """
         serializer = AddOrUpdateRequestSerializer(data=request.data)
         if not serializer.is_valid():
@@ -51,22 +48,20 @@ class AddOrUpdateView(APIView):
 
         data = serializer.validated_data
         organization = data["organization"]
-        submodules = data["submodules"]
-        lang_code = data["lang_code"]
+        add_or_update = data["add_or_update"]
         version = data["version"]
         extensions = data.get("extensions")
 
-        # Create service instance
-        service = BoostComponentService(
-            organization=organization,
-            lang_code=lang_code,
-            version=version,
-            extensions=extensions,
-        )
-
-        # Process all submodules (pass request so do_update and add_new_language work)
-        results = service.process_all(
-            submodules, user=request.user, request=request
-        )
+        results = {}
+        for lang_code, submodules in add_or_update.items():
+            service = BoostComponentService(
+                organization=organization,
+                lang_code=lang_code,
+                version=version,
+                extensions=extensions,
+            )
+            results[lang_code] = service.process_all(
+                submodules, user=request.user, request=request
+            )
 
         return Response(results, status=status.HTTP_200_OK)
