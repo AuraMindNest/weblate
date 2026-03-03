@@ -31,4 +31,3 @@ Run any script with `--help` for options.
    Keep it private (gitignored).
 3. Create component/project JSON config. See `quickbook-test-component-configs/setup.json` or `boost-submodule-component-configs/` for examples.
 
-> These scripts are for **testing and development only**. Do not use in production.
