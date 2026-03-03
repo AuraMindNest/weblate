@@ -12,6 +12,8 @@ Usage:
     python generate_boost_project_configs.py --list list.txt --output-dir project-configs
 """
 
+from __future__ import annotations
+
 import argparse
 import csv
 import json

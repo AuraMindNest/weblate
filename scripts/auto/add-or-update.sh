@@ -25,7 +25,7 @@ fi
 ORGANIZATION="CppDigest"
 # add_or_update: map lang_code -> array of submodules. Each lang runs with its own submodule list.
 # Example: zh_Hans runs for ["json"], ja runs for ["json", "unordered"].
-ADD_OR_UPDATE='{"zh_Hans":["json", "unordered"],"ja":["json"]}'
+ADD_OR_UPDATE='{"zh_Hans":["beast", "unordered"],"ja":["json"]}'
 VERSION="boost-1.89.0"
 # Optional: limit scan to these extensions (Weblate-supported). Use empty [] for no filter.
 EXTENSIONS='[]'  # e.g. '[".adoc", ".md"]' or '[]' for all supported
@@ -42,7 +42,7 @@ PAYLOAD="$(jq -n \
 # for the long-running response. Server continues add-or-update after we disconnect.
 # --max-time: stop after this many seconds (curl exits 28 on timeout; || true avoids failing the job).
 curl -X POST "${WEBLATE_URL}/boost-endpoint/add-or-update/" \
-  -H "Authorization: Bearer ${TOKEN}" \
+  -H "Authorization: Token ${TOKEN}" \
   -H "Content-Type: application/json" \
   -d "${PAYLOAD}" \
   --max-time 5 \

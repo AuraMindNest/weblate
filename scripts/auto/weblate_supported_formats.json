@@ -26,5 +26,6 @@
   {"file_format": "arb", "file_extensions": [".arb"]},
   {"file_format": "gwt", "file_extensions": [".properties"], "note": ".properties shared with properties; use component file_format to disambiguate."},
   {"file_format": "winrc", "file_extensions": [".rc"]},
-  {"file_format": "subtitle", "file_extensions": [".srt", ".sub", ".vtt", ".ass"]}
+  {"file_format": "subtitle", "file_extensions": [".srt", ".sub", ".vtt", ".ass"]},
+  {"file_format": "quickbook", "file_extensions": [".qbk"]}
 ]

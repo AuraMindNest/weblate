@@ -51,7 +51,7 @@ class WeblateProjectCreator:
     def __init__(self, base_url: str, api_token: str):
         """Initialize the creator with API credentials."""
         self.base_url = base_url.rstrip("/")
-        self.api_url = urljoin(self.base_url, "/api/")
+        self.api_url = f"{self.base_url}/api/"
         self.session = requests.Session()
         self.session.headers.update({
             "Authorization": f"Token {api_token}",

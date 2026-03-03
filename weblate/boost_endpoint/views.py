@@ -52,16 +52,22 @@ class AddOrUpdateView(APIView):
         version = data["version"]
         extensions = data.get("extensions")
 
-        results = {}
-        for lang_code, submodules in add_or_update.items():
-            service = BoostComponentService(
-                organization=organization,
-                lang_code=lang_code,
-                version=version,
-                extensions=extensions,
-            )
-            results[lang_code] = service.process_all(
-                submodules, user=request.user, request=request
+        try:
+            results = {}
+            for lang_code, submodules in add_or_update.items():
+                service = BoostComponentService(
+                    organization=organization,
+                    lang_code=lang_code,
+                    version=version,
+                    extensions=extensions,
+                )
+                results[lang_code] = service.process_all(
+                    submodules, user=request.user, request=request
+                )
+        except Exception as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         return Response(results, status=status.HTTP_200_OK)

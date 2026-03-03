@@ -139,17 +139,18 @@ def generate_component_name(file_path: str, remove_extension: bool = True) -> st
     return name
 
 
-def generate_component_slug(file_path: str, remove_extension: bool = True) -> str:
+def generate_component_slug(file_path: str, remove_extension: bool = False) -> str:
     """Generate a component slug from file path.
 
-    Includes directory path to ensure uniqueness when files with the same
-    name exist in different directories.
+    Includes directory path and extension to ensure uniqueness when files with
+    the same base name but different extensions exist (e.g. doc/intro.adoc vs
+    doc/intro.md).
     """
     # Get directory and filename
     directory = os.path.dirname(file_path)
     filename = os.path.basename(file_path)
 
-    # Remove extension if requested
+    # Remove extension if requested (legacy behavior)
     if remove_extension:
         filename = os.path.splitext(filename)[0]
 
@@ -165,8 +166,9 @@ def generate_component_slug(file_path: str, remove_extension: bool = True) -> st
     else:
         full_name = filename
 
-    # Convert to lowercase and replace spaces/underscores with hyphens
+    # Convert to lowercase; replace extension dot with hyphen (intro.adoc -> intro-adoc)
     slug = full_name.lower()
+    slug = slug.replace('.', '-')
     slug = re.sub(r'[_\s]+', '-', slug)
     slug = re.sub(r'[^a-z0-9-]', '', slug)
 
@@ -806,7 +808,7 @@ def main() -> int:
             config_path_str = str(config_path)
             print(f"\n{'#'*60}\n[INFO] [{i}/{len(config_files)}] Config: {config_path_str}\n{'#'*60}")
             result = run_one_config(args, config_path_str, skip_on_clone_failure=True)
-            if result != 0:
+            if result == 1:
                 exit_code = 1
         return exit_code
     else:

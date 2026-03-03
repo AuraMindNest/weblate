@@ -204,15 +204,17 @@ class BoostComponentService:
         filename_base = path_obj.stem
         dir_path = path_obj.parent
 
-        # Generate component name from path
+        # Generate component name from path (include extension so doc/intro.adoc vs doc/intro.md differ)
         component_name_parts = []
         if str(dir_path) != ".":
             component_name_parts.extend(dir_path.parts)
         component_name_parts.append(filename_base)
+        ext_display = extension.lstrip(".").lower()
         component_name = " / ".join(
             part.replace("_", " ").replace("-", " ").title()
             for part in component_name_parts
         )
+        component_name = f"{component_name} ({ext_display})"
 
         # Generate slug (include extension so doc/intro.adoc vs doc/intro.md differ)
         slug_parts = [part.lower().replace("_", "-") for part in component_name_parts]
@@ -686,6 +688,13 @@ class BoostComponentService:
 
         # Create temp directory for this submodule
         temp_submodule_dir = os.path.join(self.temp_dir, submodule)
+        resolved = Path(temp_submodule_dir).resolve()
+        temp_dir_resolved = Path(self.temp_dir).resolve()
+        try:
+            resolved.relative_to(temp_dir_resolved)
+        except ValueError:
+            result["errors"].append(f"Invalid submodule name: {submodule}")
+            return result
         os.makedirs(temp_submodule_dir, exist_ok=True)
 
         # Clone repository
@@ -704,13 +713,15 @@ class BoostComponentService:
         # Check permissions before creating so no Project is committed when denied
         project_slug = f"boost-{_submodule_slug(submodule)}-documentation"
         existing_project = Project.objects.filter(slug=project_slug).first()
-        if existing_project is not None and request is not None and user is not None:
-            result["errors"].append("Can not create components (missing project.edit)")
-            return result
-        elif existing_project is None and request is not None and user is not None:
-            if not user.has_perm("project.add"):
-                result["errors"].append("Can not create project (missing project.add)")
-                return result
+        if request is not None and user is not None:
+            if existing_project is not None:
+                if not user.has_perm("project.edit", existing_project):
+                    result["errors"].append("Can not create components (missing project.edit)")
+                    return result
+            else:
+                if not user.has_perm("project.add"):
+                    result["errors"].append("Can not create project (missing project.add)")
+                    return result
 
         # Get or create project
         try:
