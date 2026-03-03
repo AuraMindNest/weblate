@@ -920,6 +920,12 @@ real_patterns = [
     ),
 ]
 
+# Boost documentation translation endpoint
+if "weblate.boost_endpoint" in settings.INSTALLED_APPS:
+    real_patterns += [
+        path("boost-endpoint/", include("weblate.boost_endpoint.urls")),
+    ]
+
 # Billing integration
 if "weblate.billing" in settings.INSTALLED_APPS:
     import weblate.billing.views
