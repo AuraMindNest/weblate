@@ -677,6 +677,10 @@ class BoostComponentService:
         self, submodule: str, user=None, request=None
     ) -> dict[str, Any]:
         """Process a single submodule: clone, scan, create/update components."""
+        if self.temp_dir is None:
+            raise TypeError(
+                "process_submodule requires temp_dir; call process_all() instead"
+            )
         result = {
             "submodule": submodule,
             "success": False,
