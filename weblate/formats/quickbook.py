@@ -13,6 +13,7 @@ in :mod:`weblate.utils.quickbook`.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING, BinaryIO
 
 from django.utils.translation import gettext_lazy
 
@@ -21,6 +22,11 @@ from translate.storage.pypo import pofile
 from weblate.formats.convert import ConvertFormat
 from weblate.utils.errors import report_error
 from weblate.utils.quickbook import po_to_qbk, qbk_to_po
+
+if TYPE_CHECKING:
+    from translate.storage.base import TranslationStore
+
+    from weblate.formats.base import TranslationFormat
 
 
 class QuickBookFormat(ConvertFormat):
@@ -39,7 +45,11 @@ class QuickBookFormat(ConvertFormat):
     format_id = "quickbook"
     monolingual = True
 
-    def convertfile(self, storefile, template_store):
+    def convertfile(
+        self,
+        storefile: str | BinaryIO,
+        template_store: TranslationFormat | None,
+    ) -> TranslationStore:
         """Extract translatable strings from a .qbk file, returning a ``pofile``."""
         # Resolve the template (source-language) .qbk file path.
         template_path: str | None = None
@@ -87,11 +97,25 @@ class QuickBookFormat(ConvertFormat):
 
         return store
 
-    def save_content(self, handle) -> None:
+    def save_content(self, handle: BinaryIO) -> None:
         """Write the translated .qbk by applying PO translations to the template."""
-        template_path = self.template_store.storefile
-        if hasattr(template_path, "name"):
-            template_path = template_path.name
+        template_store = getattr(self, "template_store", None)
+        if template_store is None:
+            msg = "QuickBook: cannot save: no template store"
+            report_error(msg)
+            raise RuntimeError(msg)
+
+        storefile = getattr(template_store, "storefile", None)
+        if storefile is None:
+            msg = "QuickBook: cannot save: template store has no storefile"
+            report_error(msg)
+            raise RuntimeError(msg)
+
+        template_path = storefile.name if hasattr(storefile, "name") else storefile if isinstance(storefile, str) else None
+        if not template_path:
+            msg = "QuickBook: cannot save: cannot determine template file path"
+            report_error(msg)
+            raise RuntimeError(msg)
 
         try:
             template_content = Path(template_path).read_text(encoding="utf-8")
@@ -105,7 +129,7 @@ class QuickBookFormat(ConvertFormat):
         handle.write(translated.encode("utf-8"))
 
     @staticmethod
-    def needs_target_sync(template_store) -> bool:
+    def needs_target_sync(template_store: TranslationFormat | None) -> bool:
         """Copy source into target when loading the source-language template file."""
         return template_store is None
 
