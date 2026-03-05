@@ -11,12 +11,14 @@ from typing import TYPE_CHECKING
 import sentry_sdk
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.http import JsonResponse
+from django.http import FileResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.utils.translation import gettext
 from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView
+from PIL import Image
+from tesserocr import OEM, PSM, RIL, PyTessBaseAPI, iterate_level
 
 from weblate.logger import LOGGER
 from weblate.screenshots.forms import ScreenshotEditForm, ScreenshotForm, SearchForm
@@ -26,12 +28,15 @@ from weblate.trans.models import Component, Unit
 from weblate.utils import messages
 from weblate.utils.data import data_dir
 from weblate.utils.lock import WeblateLock
-from weblate.utils.requests import request
+from weblate.utils.requests import http_request
 from weblate.utils.search import parse_query
+from weblate.utils.validators import PIL_FORMATS
 from weblate.utils.views import PathViewMixin
 
 if TYPE_CHECKING:
-    from tesserocr import PyTessBaseAPI
+    from collections.abc import Generator
+
+    from django.http import HttpResponse
 
     from weblate.auth.models import AuthenticatedHttpRequest
     from weblate.lang.models import Language
@@ -178,7 +183,7 @@ def ensure_tesseract_language(lang: str) -> None:
             LOGGER.debug("downloading tesseract data %s", url)
 
             with sentry_sdk.start_span(op="ocr.download", name=url):
-                response = request("GET", url, allow_redirects=True)
+                response = http_request("GET", url, allow_redirects=True)
 
             with open(full_name, "xb") as handle:
                 handle.write(response.content)
@@ -193,11 +198,11 @@ def try_add_source(request: AuthenticatedHttpRequest, obj) -> bool:
     except (Unit.DoesNotExist, ValueError):
         return False
 
-    obj.units.add(source)
+    obj.add_unit(source, user=request.user)
     return True
 
 
-class ScreenshotList(PathViewMixin, ListView):
+class ScreenshotList(PathViewMixin, ListView):  # type: ignore[misc]
     paginate_by = 25
     model = Screenshot
     supported_path_types = (Component,)
@@ -231,7 +236,7 @@ class ScreenshotList(PathViewMixin, ListView):
             )
             request.user.profile.increase_count("uploaded")
             obj.change_set.create(
-                action=ActionEvents.SCREENSHOT_ADDED,
+                action=ActionEvents.SCREENSHOT_UPLOADED,
                 user=request.user,
                 target=obj.name,
             )
@@ -251,15 +256,29 @@ class ScreenshotList(PathViewMixin, ListView):
         return self.get(request, **kwargs)
 
 
-class ScreenshotDetail(DetailView):
+class ScreenshotBaseView(DetailView):
     model = Screenshot
-    _edit_form = None
     request: AuthenticatedHttpRequest
 
     def get_object(self, *args, **kwargs):
         obj = super().get_object(*args, **kwargs)
         self.request.user.check_access_component(obj.translation.component)
         return obj
+
+
+class ScreenshotView(ScreenshotBaseView):
+    def get(self, request: AuthenticatedHttpRequest, *args, **kwargs) -> FileResponse:  # type: ignore[override]
+        obj = self.get_object()
+        # Django will automatically set Content-Type based on the filename
+        return FileResponse(
+            obj.image.open(),
+            as_attachment=False,
+            filename=os.path.basename(obj.image.name),
+        )
+
+
+class ScreenshotDetail(ScreenshotBaseView):
+    _edit_form = None
 
     def get_context_data(self, **kwargs):
         result = super().get_context_data(**kwargs)
@@ -274,7 +293,7 @@ class ScreenshotDetail(DetailView):
         result["search_query"] = ""
         return result
 
-    def post(self, request: AuthenticatedHttpRequest, **kwargs):
+    def post(self, request: AuthenticatedHttpRequest, *args, **kwargs) -> HttpResponse:
         obj = self.get_object()
         if request.user.has_perm("screenshot.edit", obj.translation):
             self._edit_form = ScreenshotEditForm(
@@ -291,7 +310,7 @@ class ScreenshotDetail(DetailView):
                     )
                 self._edit_form.save()
             else:
-                return self.get(request, **kwargs)
+                return self.get(request, *args, **kwargs)
         return redirect(obj)
 
 
@@ -322,7 +341,13 @@ def get_screenshot(request: AuthenticatedHttpRequest, pk):
 def remove_source(request: AuthenticatedHttpRequest, pk):
     obj = get_screenshot(request, pk)
 
-    obj.units.remove(request.POST["source"])
+    try:
+        unit = obj.translation.unit_set.get(pk=int(request.POST["source"]))
+    except (Unit.DoesNotExist, ValueError):
+        messages.error(request, gettext("Invalid unit."))
+        return redirect(obj)
+
+    obj.remove_unit(unit, user=request.user)
 
     messages.success(request, gettext("Source has been removed."))
 
@@ -375,24 +400,23 @@ def search_source(request: AuthenticatedHttpRequest, pk):
     )
 
 
-def ocr_get_strings(api, image: str, resolution: int = 72):
-    from tesserocr import RIL, iterate_level
+def ocr_get_strings(api, *, image: Image.Image, filename: str, resolution: int = 72):
 
     try:
-        api.SetImageFile(image)
+        api.SetImage(image)
     except RuntimeError:
         pass
     else:
         api.SetSourceResolution(resolution)
 
-        with sentry_sdk.start_span(op="ocr.recognize", name=image):
+        with sentry_sdk.start_span(op="ocr.recognize", name=filename):
             api.Recognize()
 
-        with sentry_sdk.start_span(op="ocr.iterate", name=image):
+        with sentry_sdk.start_span(op="ocr.iterate", name=filename):
             iterator = api.GetIterator()
             level = RIL.TEXTLINE
             for r in iterate_level(iterator, level):
-                with sentry_sdk.start_span(op="ocr.text", name=image):
+                with sentry_sdk.start_span(op="ocr.text", name=filename):
                     try:
                         yield r.GetUTF8Text(level)
                     except RuntimeError:
@@ -401,17 +425,25 @@ def ocr_get_strings(api, image: str, resolution: int = 72):
         api.Clear()
 
 
-def ocr_extract(api, image: str, strings, resolution: int):
+def ocr_extract(
+    api,
+    *,
+    image: Image.Image,
+    filename: str,
+    strings: tuple[str, ...],
+    resolution: int,
+):
     """Extract closes matches from an image."""
-    for ocr_result in ocr_get_strings(api, image, resolution):
+    for ocr_result in ocr_get_strings(
+        api, image=image, filename=filename, resolution=resolution
+    ):
         parts = [ocr_result, *ocr_result.split("|"), *ocr_result.split()]
         for part in parts:
             yield from difflib.get_close_matches(part, strings, cutoff=0.9)
 
 
 @contextmanager
-def get_tesseract(language: Language) -> PyTessBaseAPI:
-    from tesserocr import OEM, PSM, PyTessBaseAPI
+def get_tesseract(language: Language) -> Generator[PyTessBaseAPI]:
 
     # Get matching language
     try:
@@ -425,7 +457,7 @@ def get_tesseract(language: Language) -> PyTessBaseAPI:
     ensure_tesseract_language(tess_language)
 
     with PyTessBaseAPI(
-        path=data_dir("cache", "tesseract") + "/",
+        path=f"{data_dir('cache', 'tesseract')}/",
         psm=PSM.SPARSE_TEXT_OSD,
         oem=OEM.LSTM_ONLY,
         lang=tess_language,
@@ -436,7 +468,6 @@ def get_tesseract(language: Language) -> PyTessBaseAPI:
 @login_required
 @require_POST
 def ocr_search(request: AuthenticatedHttpRequest, pk):
-    from PIL import Image
 
     obj = get_screenshot(request, pk)
     translation = obj.translation
@@ -446,11 +477,20 @@ def ocr_search(request: AuthenticatedHttpRequest, pk):
     strings = tuple(sources.keys())
 
     # Extract and match strings
-    with Image.open(obj.image.path), get_tesseract(translation.language) as api:
+    with (
+        Image.open(obj.image.path, formats=PIL_FORMATS) as image,
+        get_tesseract(translation.language) as api,
+    ):
         results = {
             sources[match]
             for resolution in (72, 300)
-            for match in ocr_extract(api, obj.image.path, strings, resolution)
+            for match in ocr_extract(
+                api,
+                image=image,
+                filename=obj.image.path,
+                strings=strings,
+                resolution=resolution,
+            )
         }
 
     return search_results(

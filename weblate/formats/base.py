@@ -10,11 +10,12 @@ import os
 import tempfile
 from copy import copy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, TypeAlias
+from typing import IO, TYPE_CHECKING, Any, ClassVar, cast, overload
 
 from django.http import HttpResponse
 from django.utils.functional import cached_property
 from django.utils.translation import gettext
+from pyparsing import ParseException
 from translate.misc.multistring import multistring
 from translate.storage.base import TranslationStore as TranslateToolkitStore
 from translate.storage.base import TranslationUnit as TranslateToolkitUnit
@@ -28,11 +29,14 @@ from weblate.utils.site import get_site_url
 from weblate.utils.state import STATE_EMPTY, STATE_TRANSLATED
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator, Sequence
+    from collections.abc import Callable, Generator, Iterator, Sequence
 
     from django_stubs_ext import StrOrPromise
+    from lxml import etree
 
-    from weblate.trans.models import Unit
+    from weblate.lang.models import Language, Plural
+    from weblate.trans.file_format_params import FileFormatParams
+    from weblate.trans.models import Component, Translation, Unit
 
 
 EXPAND_LANGS = {code[:2]: f"{code[:2]}_{code[3:].upper()}" for code in DEFAULT_LANGS}
@@ -47,6 +51,15 @@ LEGACY_CODES = {
     "zh_Hant": "zh_TW",
     "zh_Hans_SG": "zh_SG",
     "zh_Hant_HK": "zh_HK",
+}
+LINUX_CODES = {
+    "sr_Latn": "sr",
+    "sr_Cyrl": "sr@cyrillic",
+    "ar_Latn": "ar@latin",
+    "kk_Latn": "kk@latin",
+    "be_Latn": "be@latin",
+    "uz_Cyrl": "uz@cyrillic",
+    "uz_Latn": "uz@latin",
 }
 APPSTORE_CODES = {
     "ar": "ar-SA",
@@ -110,7 +123,8 @@ class UnitNotFoundError(Exception):
         args = list(self.args)
         if "" in args:
             args.remove("")
-        return "Unit not found: {}".format(", ".join(args))
+        args_str = ", ".join(args)
+        return f"Unit not found: {args_str}"
 
 
 class UpdateError(Exception):
@@ -128,14 +142,14 @@ class BaseItem:
     pass
 
 
-InnerUnit: TypeAlias = TranslateToolkitUnit | BaseItem
+type InnerUnit = TranslateToolkitUnit | BaseItem
 
 
 class BaseStore:
     units: Sequence[InnerUnit]
 
 
-InnerStore: TypeAlias = TranslateToolkitStore | BaseStore
+type InnerStore = TranslateToolkitStore | BaseStore
 
 
 class TranslationUnit:
@@ -151,13 +165,24 @@ class TranslationUnit:
     parent: TranslationFormat
     mainunit: InnerUnit
     empty_unit_ok: ClassVar[bool] = False
+    remove_flags: ClassVar[list[str]] = []
+    add_flags: ClassVar[list[str]] = []
 
+    @overload
     def __init__(
         self,
         parent: TranslationFormat,
         unit: InnerUnit | None,
+        template: InnerUnit,
+    ) -> None: ...
+    @overload
+    def __init__(
+        self,
+        parent: TranslationFormat,
+        unit: InnerUnit,
         template: InnerUnit | None = None,
-    ) -> None:
+    ) -> None: ...
+    def __init__(self, parent, unit, template=None) -> None:
         """Create wrapper object."""
         self.unit = unit
         self.template = template
@@ -197,17 +222,30 @@ class TranslationUnit:
         """Return comma separated list of locations."""
         return ""
 
-    @cached_property
-    def flags(self) -> Flags:
-        """Return flags or typecomments from units."""
-        flags = Flags()
+    def get_extra_flags(self) -> Generator[str | etree._Element | Flags]:
         # add default flags based location extensions
         for location in self.locations.split(","):
             _, extension = os.path.splitext(location.split(":")[0].strip())
             if extension == ".rst":
-                flags.merge("rst-text")
+                yield "rst-text"
             elif extension in {".md", ".markdown"}:
-                flags.merge("md-text")
+                yield "md-text"
+        yield from self.add_flags
+
+    @cached_property
+    def flags(self) -> Flags:
+        """Return flags or typecomments from units."""
+        flags = Flags()
+        for extra in self.get_extra_flags():
+            try:
+                flags.merge(extra)
+            except (ParseException, ValueError) as error:
+                msg = f"Could not parse flags: {extra}: {error}"
+                raise ValueError(msg) from error
+
+        for remove in self.remove_flags:
+            flags.remove(remove)
+
         return flags
 
     @cached_property
@@ -292,6 +330,10 @@ class TranslationUnit:
         """Check whether unit is read-only."""
         return False
 
+    def is_automatically_translated(self, fallback: bool = False) -> bool:
+        """Check whether unit is automatically translated."""
+        return fallback
+
     def set_target(self, target: str | list[str]) -> None:
         """Set translation unit target."""
         raise NotImplementedError
@@ -305,6 +347,9 @@ class TranslationUnit:
     def set_state(self, state) -> None:
         """Set fuzzy /approved flag on translated unit."""
         raise NotImplementedError
+
+    def set_automatically_translated(self, value: bool) -> None:
+        return
 
     def has_unit(self) -> bool:
         return self.unit is not None
@@ -333,8 +378,8 @@ class TranslationFormat:
     can_delete_unit: bool = True
     language_format: str = "posix"
     simple_filename: bool = True
-    new_translation: str | bytes | None = None
-    autoaddon: dict[str, dict[str, str]] = {}
+    empty_file_template: str | bytes | None = None
+    autoaddon: ClassVar[dict[str, dict[str, Any]]] = {}
     create_empty_bilingual: bool = False
     bilingual_class: type[TranslationFormat] | None = None
     create_style = "create"
@@ -352,19 +397,19 @@ class TranslationFormat:
 
     def __init__(
         self,
-        storefile: Path | str | BinaryIO,
+        storefile: Path | str | IO[bytes],
         template_store: TranslationFormat | None = None,
         language_code: str | None = None,
         source_language: str | None = None,
         is_template: bool = False,
         existing_units: list[Unit] | None = None,
-        file_format_params: dict[str, Any] | None = None,
+        file_format_params: FileFormatParams | None = None,
     ) -> None:
         """Create file format object, wrapping up translate-toolkit's store."""
         if isinstance(storefile, Path):
             storefile = str(storefile.as_posix())
         if not isinstance(storefile, str) and not hasattr(storefile, "mode"):
-            # This is BinaryIO like but without a mode
+            # This is IO like but without a mode
             storefile.mode = "r"  # type: ignore[misc]
 
         self.storefile = storefile
@@ -379,10 +424,9 @@ class TranslationFormat:
         self.file_format_params = file_format_params or {}
         self.store = self.load(storefile, template_store)
 
+        filename = getattr(storefile, "filename", storefile)
         self.add_breadcrumb(
-            "Loaded translation file {}".format(
-                getattr(storefile, "filename", storefile)
-            ),
+            f"Loaded translation file {filename}",
             template_store=str(template_store),
             is_template=is_template,
         )
@@ -409,26 +453,28 @@ class TranslationFormat:
 
     def load(
         self,
-        storefile: str | BinaryIO,
+        storefile: str | IO[bytes],
         template_store: TranslationFormat | None,
     ) -> InnerStore:
         raise NotImplementedError
 
     @classmethod
-    def get_plural(cls, language, store=None):  # noqa: ARG003
-        """Return matching plural object."""
+    def get_plural_by_preference(cls, language: Language) -> Plural:
+        """Return matching plural object based on preference."""
         if cls.plural_preference is not None:
-            # Fetch all matching plurals
-            plurals = language.plural_set.filter(source__in=cls.plural_preference)
-
-            # Use first matching in the order of preference
-            for source in cls.plural_preference:
-                for plural in plurals:
-                    if plural.source == source:
-                        return plural
+            # Fetch matching plural
+            plural = language.plural_set.get_by_preference(
+                language, cls.plural_preference
+            )
+            if plural is not None:
+                return plural
 
         # Fall back to default one
         return language.plural
+
+    def get_plural(self, language: Language) -> Plural:
+        """Return matching plural object."""
+        return self.get_plural_by_preference(language)
 
     @cached_property
     def has_template(self):
@@ -512,7 +558,7 @@ class TranslationFormat:
         return
 
     @staticmethod
-    def save_atomic(filename, callback) -> None:
+    def save_atomic(filename: str, callback: Callable[[IO[bytes]], None]) -> None:
         dirname, basename = os.path.split(filename)
         if dirname and not os.path.exists(dirname):
             os.makedirs(dirname)
@@ -546,7 +592,7 @@ class TranslationFormat:
         return self.unit_class(
             self,
             self.find_unit_template(unit.context, unit.source, unit.id_hash),
-            unit.template,
+            cast("InnerUnit", unit.template),
         )
 
     def _get_all_monolingual_units(self) -> list[TranslationUnit]:
@@ -582,6 +628,7 @@ class TranslationFormat:
         """Check whether store seems to be valid."""
         for unit in self.content_units:
             # Just ensure that id_hash can be calculated
+            # pylint: disable-next=pointless-statement
             unit.id_hash  # noqa: B018
         return True
 
@@ -592,7 +639,7 @@ class TranslationFormat:
         monolingual: bool,
         errors: list[Exception] | None = None,
         fast: bool = False,
-        file_format_params: dict[str, Any] | None = None,
+        file_format_params: FileFormatParams | None = None,
     ) -> bool:
         """Check whether base is valid."""
         raise NotImplementedError
@@ -629,9 +676,14 @@ class TranslationFormat:
         return EXPAND_LANGS.get(code, cls.get_language_posix(code)).lower()
 
     @classmethod
-    def get_language_linux(cls, code: str) -> str:
+    def get_language_legacy(cls, code: str) -> str:
         """Linux doesn't use Hans/Hant, but rather TW/CN variants."""
         return LEGACY_CODES.get(code, cls.get_language_posix(code))
+
+    @classmethod
+    def get_language_linux(cls, code: str) -> str:
+        """Linux doesn't use Hans/Hant, but rather TW/CN variants."""
+        return LINUX_CODES.get(code, cls.get_language_legacy(code))
 
     @classmethod
     def get_language_linux_lowercase(cls, code: str) -> str:
@@ -642,6 +694,10 @@ class TranslationFormat:
         return cls.get_language_bcp(cls.get_language_posix_long(code))
 
     @classmethod
+    def get_language_bcp_long_lower(cls, code: str) -> str:
+        return cls.get_language_bcp_long(code).lower()
+
+    @classmethod
     def get_language_android(cls, code: str) -> str:
         """Android doesn't use Hans/Hant, but rather TW/CN variants."""
         # Exceptions
@@ -649,11 +705,12 @@ class TranslationFormat:
             return ANDROID_CODES[code]
 
         # Base on Java
-        sanitized = cls.get_language_linux(code)
+        sanitized = cls.get_language_legacy(code)
 
         # Handle variants
         if "_" in sanitized and len(sanitized.split("_")[1]) > 2:
-            return "b+{}".format(sanitized.replace("_", "+"))
+            variant_code = sanitized.replace("_", "+")
+            return f"b+{variant_code}"
 
         # Handle countries
         return sanitized.replace("_", "-r")
@@ -661,7 +718,7 @@ class TranslationFormat:
     @classmethod
     def get_language_bcp_legacy(cls, code: str) -> str:
         """BCP, but doesn't use Hans/Hant, but rather TW/CN variants."""
-        return cls.get_language_bcp(cls.get_language_linux(code))
+        return cls.get_language_bcp(cls.get_language_legacy(code))
 
     @classmethod
     def get_language_appstore(cls, code: str) -> str:
@@ -689,7 +746,7 @@ class TranslationFormat:
         language: str,
         base: str,
         callback: Callable | None = None,
-        file_format_params: dict[str, Any] | None = None,
+        file_format_params: FileFormatParams | None = None,
     ) -> None:
         """Add new language file."""
         # Create directory for a translation
@@ -704,8 +761,12 @@ class TranslationFormat:
         )
 
     @classmethod
-    def get_new_file_content(cls) -> bytes:
+    def get_new_file_content(cls, encoding: str | None = None) -> bytes:  # noqa: ARG003
         return b""
+
+    @classmethod
+    def get_new_translation(cls, encoding: str | None = None) -> str | bytes | None:  # noqa: ARG003
+        return cls.empty_file_template
 
     @classmethod
     def create_new_file(
@@ -714,7 +775,7 @@ class TranslationFormat:
         language: str,
         base: str,
         callback: Callable | None = None,
-        file_format_params: dict[str, Any] | None = None,
+        file_format_params: FileFormatParams | None = None,
     ) -> None:
         """Handle creation of new translation file."""
         raise NotImplementedError
@@ -890,6 +951,7 @@ class EmptyFormat(TranslationFormat):
     """For testing purposes."""
 
     @classmethod
+    # pylint: disable-next=arguments-differ
     def load(cls, storefile, template_store):  # noqa: ARG003
         return type("", (object,), {"units": []})()
 
@@ -919,26 +981,20 @@ class BilingualUpdateMixin:
                 os.unlink(temp.name)
 
     @classmethod
-    def get_msgmerge_args(cls, component) -> list[str]:
+    def get_msgmerge_args(cls, component: Component) -> list[str]:
         """
         Return list of arguments for update command.
 
         This is used to pass additional arguments to update command.
         """
-        from weblate.addons.gettext import MsgmergeAddon
-
         params = component.file_format_params
         args: list[str] = []
-        if component.get_addon(MsgmergeAddon.name):
-            if not params.get("po_fuzzy_matching", True):
-                args.append("--no-fuzzy-matching")
-            if params.get("po_keep_previous", True):
-                args.append("--previous")
-            if params.get("po_no_location", False):
-                args.append("--no-location")
-        else:
+        if not params.get("po_fuzzy_matching", True):
+            args.append("--no-fuzzy-matching")
+        if params.get("po_keep_previous", True):
             args.append("--previous")
-
+        if params.get("po_no_location", False):
+            args.append("--no-location")
         if int(params.get("po_line_wrap", 77)) != 77:
             args.append("--no-wrap")
         return args
@@ -977,7 +1033,7 @@ class BaseExporter:
         self.fieldnames = fieldnames
 
     @staticmethod
-    def supports(translation) -> bool:  # noqa: ARG004
+    def supports(translation: Translation) -> bool:  # noqa: ARG004
         return True
 
     @cached_property
@@ -1057,13 +1113,10 @@ class BaseExporter:
             )
         # Suggestions
         for suggestion in unit.suggestions:
+            suggestions_str = ", ".join(split_plural(suggestion.target))
             self.add_note(
                 output,
-                self.string_filter(
-                    "Suggested in Weblate: {}".format(
-                        ", ".join(split_plural(suggestion.target))
-                    )
-                ),
+                self.string_filter(f"Suggested in Weblate: {suggestions_str}"),
                 origin="translator",
             )
 

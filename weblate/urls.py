@@ -9,11 +9,15 @@ import django.views.i18n
 import django.views.static
 from django.conf import settings
 from django.contrib import admin
+from django.contrib.auth.decorators import login_not_required
 from django.urls import include, path, re_path
 from django.views.decorators.cache import cache_control, cache_page
 from django.views.decorators.vary import vary_on_cookie
 from django.views.generic import RedirectView, TemplateView
-from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+)
 
 import weblate.accounts.urls
 import weblate.accounts.views
@@ -38,7 +42,6 @@ import weblate.trans.views.edit
 import weblate.trans.views.error
 import weblate.trans.views.files
 import weblate.trans.views.git
-import weblate.trans.views.hooks
 import weblate.trans.views.js
 import weblate.trans.views.labels
 import weblate.trans.views.lock
@@ -52,7 +55,9 @@ from weblate.auth.decorators import management_access
 from weblate.configuration.views import CustomCSSView
 from weblate.sitemaps import SITEMAPS
 from weblate.trans.feeds import ChangesFeed, LanguageChangesFeed, TranslationChangesFeed
+from weblate.trans.views.bulk_suggestions import bulk_accept_user_suggestions
 from weblate.trans.views.changes import ChangesCSVView, ChangesView, show_change
+from weblate.trans.views.hooks import ServiceHookView
 from weblate.utils.version import VERSION
 
 handler400 = weblate.trans.views.error.bad_request
@@ -64,11 +69,17 @@ widget_pattern = "<word:widget>-<word:color>.<extension:extension>"
 
 URL_PREFIX = settings.URL_PREFIX
 if URL_PREFIX:
-    URL_PREFIX = URL_PREFIX.strip("/") + "/"
+    URL_PREFIX = f"{URL_PREFIX.strip('/')}/"
 
 real_patterns = [
     path("", weblate.trans.views.dashboard.home, name="home"),
     path("projects/", weblate.trans.views.basic.list_projects, name="projects"),
+    # Bulk accept all suggestions from a specific user
+    path(
+        "js/bulk-accept-suggestions/<object_path:path>/",
+        bulk_accept_user_suggestions,
+        name="bulk-accept-user-suggestions",
+    ),
     # Object display
     path(
         "projects/<object_path:path>/",
@@ -450,6 +461,11 @@ real_patterns = [
         name="screenshot",
     ),
     path(
+        "screenshot/<int:pk>/view/",
+        weblate.screenshots.views.ScreenshotView.as_view(),
+        name="screenshot-view",
+    ),
+    path(
         "screenshot/<int:pk>/delete/",
         weblate.screenshots.views.delete_screenshot,
         name="screenshot-delete",
@@ -631,19 +647,14 @@ real_patterns = [
     path("changes/render/<int:pk>/", show_change, name="show_change"),
     # Notification hooks
     path(
-        "hooks/update/<object_path:path>",
-        weblate.trans.views.hooks.update,
-        name="update-hook",
-    ),
-    path(
         "hooks/<slug:service>/",
-        weblate.trans.views.hooks.vcs_service_hook,
+        ServiceHookView.as_view(),
         name="webhook",
     ),
     # Compatibility URL with no trailing slash
     path(
         "hooks/<slug:service>",
-        weblate.trans.views.hooks.vcs_service_hook,
+        ServiceHookView.as_view(),
     ),
     # RSS exports
     path("exports/rss/", ChangesFeed(), name="rss"),
@@ -718,8 +729,10 @@ real_patterns = [
     path(
         "js/i18n/",
         cache_page(3600, key_prefix=VERSION)(
-            vary_on_cookie(
-                django.views.i18n.JavaScriptCatalog.as_view(packages=["weblate"])
+            login_not_required(
+                vary_on_cookie(
+                    django.views.i18n.JavaScriptCatalog.as_view(packages=["weblate"])
+                )
             )
         ),
         name="js-catalog",
@@ -729,6 +742,11 @@ real_patterns = [
         "js/translate/<name:service>/<int:unit_id>/",
         weblate.machinery.views.translate,
         name="js-translate",
+    ),
+    path(
+        "js/dismiss-automatically-translated/<int:unit_id>/",
+        weblate.trans.views.js.dismiss_automatically_translated,
+        name="js-dismiss-automatically-translated",
     ),
     path(
         "js/memory/<int:unit_id>/",
@@ -873,21 +891,21 @@ real_patterns = [
     re_path(
         r"^(android-chrome|favicon)-(?P<size>192|512)x(?P=size)\.png$",
         RedirectView.as_view(
-            url=settings.STATIC_URL + "weblate-%(size)s.png",
+            url=f"{settings.STATIC_URL}weblate-%(size)s.png",
             permanent=True,
         ),
     ),
     path(
         "apple-touch-icon.png",
         RedirectView.as_view(
-            url=settings.STATIC_URL + "weblate-180.png",
+            url=f"{settings.STATIC_URL}weblate-180.png",
             permanent=True,
         ),
     ),
     path(
         "favicon.ico",
         RedirectView.as_view(
-            url=settings.STATIC_URL + "favicon.ico",
+            url=f"{settings.STATIC_URL}favicon.ico",
             permanent=True,
         ),
     ),
@@ -908,15 +926,19 @@ real_patterns = [
     path(
         "site.webmanifest",
         cache_control(max_age=86400)(
-            TemplateView.as_view(
-                template_name="site.webmanifest", content_type="application/json"
+            login_not_required(
+                TemplateView.as_view(
+                    template_name="site.webmanifest", content_type="application/json"
+                )
             )
         ),
     ),
     # Redirects for .well-known
     path(
         ".well-known/change-password",
-        RedirectView.as_view(pattern_name="password", permanent=True),
+        login_not_required(
+            RedirectView.as_view(pattern_name="password", permanent=True)
+        ),
     ),
 ]
 
@@ -937,7 +959,25 @@ if "weblate.billing" in settings.INSTALLED_APPS:
             name="invoice-download",
         ),
         path("billing/", weblate.billing.views.overview, name="billing"),
+        path(
+            "manage/restore-backup/",
+            weblate.billing.views.restore_backup,
+            name="restore_backup",
+        ),
         path("billing/<int:pk>/", weblate.billing.views.detail, name="billing-detail"),
+        path(
+            "billing/<int:pk>/merge/", weblate.billing.views.merge, name="billing-merge"
+        ),
+        path(
+            "billing/<int:pk>/owners/",
+            weblate.billing.views.owner_add,
+            name="billing-owner-add",
+        ),
+        path(
+            "billing/<int:pk>/owners/<int:user_id>/",
+            weblate.billing.views.owner_remove,
+            name="billing-owner-remove",
+        ),
         path("manage/billing/", weblate.wladmin.views.billing, name="manage-billing"),
     ]
 

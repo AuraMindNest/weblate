@@ -10,7 +10,7 @@ from zipfile import BadZipfile
 
 from django.conf import settings
 from django.db import models
-from django.db.models import Model
+from django.db.models import Model, TextChoices
 from django.utils.translation import gettext_lazy
 from drf_spectacular.extensions import OpenApiSerializerExtension
 from drf_spectacular.plumbing import build_basic_type, build_object_type
@@ -25,7 +25,7 @@ from rest_framework import serializers
 
 from weblate.accounts.models import Subscription
 from weblate.addons.models import ADDONS, Addon
-from weblate.auth.models import AuthenticatedHttpRequest, Group, Permission, Role, User
+from weblate.auth.models import Group, Permission, Role, User
 from weblate.auth.results import PermissionResult
 from weblate.checks.models import CHECKS
 from weblate.lang.models import Language, Plural
@@ -59,6 +59,8 @@ from weblate.utils.views import (
 if TYPE_CHECKING:
     from drf_spectacular.openapi import AutoSchema
     from rest_framework.request import Request
+
+    from weblate.auth.models import AuthenticatedHttpRequest
 
 _MT = TypeVar("_MT", bound=Model)  # Model Type
 
@@ -96,6 +98,7 @@ class MultiFieldHyperlinkedIdentityField(serializers.HyperlinkedIdentityField):
         super().__init__(**kwargs)
         self.lookup_field = lookup_field
 
+    # pylint: disable-next=redefined-builtin
     def get_url(self, obj, view_name, request: AuthenticatedHttpRequest, format):  # noqa: A002
         """
         Given an object, return the URL that hyperlinks to the object.
@@ -167,7 +170,7 @@ class LanguageSerializer(serializers.ModelSerializer[Language]):
             "url",
             "statistics_url",
         )
-        extra_kwargs = {
+        extra_kwargs = {  # noqa: RUF012
             "url": {"view_name": "api:language-detail", "lookup_field": "code"},
             "code": {"validators": []},
         }
@@ -261,12 +264,18 @@ class FullUserSerializer(serializers.ModelSerializer[User]):
             "is_active",
             "is_bot",
             "date_joined",
+            "date_expires",
             "last_login",
             "url",
             "statistics_url",
             "contributions_url",
         )
-        extra_kwargs = {
+        read_only_fields = (
+            "id",
+            "date_joined",
+            "last_login",
+        )
+        extra_kwargs = {  # noqa: RUF012
             "url": {"view_name": "api:user-detail", "lookup_field": "username"}
         }
 
@@ -279,6 +288,7 @@ class BasicUserSerializer(serializers.ModelSerializer[User]):
             "full_name",
             "username",
         )
+        read_only_fields = ("id",)
 
 
 @extend_schema_field(str)
@@ -311,7 +321,9 @@ class RoleSerializer(serializers.ModelSerializer[Role]):
             "permissions",
             "url",
         )
-        extra_kwargs = {"url": {"view_name": "api:role-detail", "lookup_field": "id"}}
+        extra_kwargs = {  # noqa: RUF012
+            "url": {"view_name": "api:role-detail", "lookup_field": "id"},
+        }
 
     def create(self, validated_data):
         permissions_validated = validated_data.pop("permissions", [])
@@ -373,7 +385,7 @@ class CommentSerializer(serializers.Serializer[Comment]):
 
     class Meta:
         model = Comment
-        fields = ["scope", "comment", "timestamp", "user_email", "id", "user"]
+        fields = ("scope", "comment", "timestamp", "user_email", "id", "user")
 
     def validate_scope(self, value):
         unit: Unit | None = self.context.get("unit", None)
@@ -454,6 +466,12 @@ class GroupSerializer(serializers.ModelSerializer[Group]):
         queryset=Project.objects.none(),
         required=False,
     )
+    admins = serializers.HyperlinkedRelatedField(
+        view_name="api:user-detail",
+        lookup_field="username",
+        many=True,
+        read_only=True,
+    )
 
     class Meta:
         model = Group
@@ -470,8 +488,11 @@ class GroupSerializer(serializers.ModelSerializer[Group]):
             "componentlists",
             "components",
             "enforced_2fa",
+            "admins",
         )
-        extra_kwargs = {"url": {"view_name": "api:group-detail", "lookup_field": "id"}}
+        extra_kwargs = {  # noqa: RUF012
+            "url": {"view_name": "api:group-detail", "lookup_field": "id"},
+        }
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -544,7 +565,7 @@ class ProjectSerializer(serializers.ModelSerializer[Project]):
             "machinery_settings",
             "locked",
         )
-        extra_kwargs = {
+        extra_kwargs = {  # noqa: RUF012
             "url": {"view_name": "api:project-detail", "lookup_field": "slug"}
         }
 
@@ -577,6 +598,7 @@ class RelatedTaskField(serializers.HyperlinkedRelatedField):
     def get_attribute(self, instance):
         return instance
 
+    # pylint: disable-next=redefined-builtin
     def get_url(self, obj, view_name, request: Request, format):  # noqa: A002
         if not obj.in_progress():
             return None
@@ -669,6 +691,7 @@ class ComponentSerializer(RemovableSerializer[Component]):
             "intermediate",
             "new_base",
             "file_format",
+            "file_format_params",
             "license",
             "license_url",
             "agreement",
@@ -720,7 +743,7 @@ class ComponentSerializer(RemovableSerializer[Component]):
             "linked_component",
             "locked",
         )
-        extra_kwargs = {
+        extra_kwargs = {  # noqa: RUF012
             "url": {
                 "view_name": "api:component-detail",
                 "lookup_field": ("project__slug", "slug"),
@@ -962,7 +985,7 @@ class TranslationSerializer(RemovableSerializer[Translation]):
             "changes_list_url",
             "units_list_url",
         )
-        extra_kwargs = {
+        extra_kwargs = {  # noqa: RUF012
             "url": {
                 "view_name": "api:translation-detail",
                 "lookup_field": (
@@ -1050,9 +1073,151 @@ class UploadRequestSerializer(ReadOnlySerializer):
             )
 
 
+class RepoOperations(TextChoices):
+    COMMIT = "commit", gettext_lazy("Commit")
+    PULL = "pull", gettext_lazy("Update")
+    PULL_REBASE = "pull-rebase", gettext_lazy("Update with rebase")
+    PULL_MERGE = "pull-merge", gettext_lazy("Update with merge")
+    PULL_MERGE_NOFF = (
+        "pull-merge-noff",
+        gettext_lazy("Update with merge without fast-forward"),
+    )
+    PUSH = "push", gettext_lazy("Push")
+    RESET = "reset", gettext_lazy("Reset all changes in the Weblate repository")
+    RESET_KEEP = (
+        "reset-keep",
+        gettext_lazy("Reset the Weblate repository and reapply translations"),
+    )
+    CLEANUP = (
+        "cleanup",
+        gettext_lazy("Cleanup all untracked files in the Weblate repository"),
+    )
+    FILE_SYNC = (
+        "file-sync",
+        gettext_lazy("Force writing all translations to the Weblate repository"),
+    )
+    FILE_SCAN = (
+        "file-scan",
+        gettext_lazy("Rescan all translation files in the Weblate repository"),
+    )
+
+
 class RepoRequestSerializer(ReadOnlySerializer):
     operation = serializers.ChoiceField(
-        choices=("commit", "pull", "push", "reset", "cleanup")
+        choices=RepoOperations.choices,
+    )
+
+
+class CommitInfoSerializer(ReadOnlySerializer):
+    """Detailed information about a Git commit."""
+
+    revision = serializers.CharField(
+        required=False, allow_null=True, help_text="Full commit hash."
+    )
+    shortrevision = serializers.CharField(
+        required=False, allow_null=True, help_text="Abbreviated commit hash."
+    )
+    author = serializers.CharField(
+        required=False,
+        allow_null=True,
+        help_text="Commit author with email (e.g., 'Name <email@example.com>').",
+    )
+    author_name = serializers.CharField(
+        required=False, allow_null=True, help_text="Author name."
+    )
+    author_email = serializers.CharField(
+        required=False, allow_null=True, help_text="Author email address."
+    )
+    authordate = serializers.DateTimeField(
+        required=False, allow_null=True, help_text="Date when the commit was authored."
+    )
+    commit = serializers.CharField(
+        required=False,
+        allow_null=True,
+        help_text="Committer with email (e.g., 'Name <email@example.com>').",
+    )
+    commit_name = serializers.CharField(
+        required=False, allow_null=True, help_text="Committer name."
+    )
+    commit_email = serializers.CharField(
+        required=False, allow_null=True, help_text="Committer email address."
+    )
+    commitdate = serializers.DateTimeField(
+        required=False, allow_null=True, help_text="Date when the commit was committed."
+    )
+    message = serializers.CharField(
+        required=False, allow_null=True, help_text="Full commit message."
+    )
+    summary = serializers.CharField(
+        required=False, allow_null=True, help_text="First line of the commit message."
+    )
+
+
+class PendingUnitsSerializer(ReadOnlySerializer):
+    """Detailed breakdown of pending translation units."""
+
+    total = serializers.IntegerField(
+        help_text="Total number of translation units with pending changes."
+    )
+    errors_skipped = serializers.IntegerField(
+        help_text="Number of units skipped due to commit errors (blocked by retry policy)."
+    )
+    commit_policy_skipped = serializers.IntegerField(
+        help_text="Number of units skipped by the commit policy (e.g., needs editing, not approved)."
+    )
+    eligible_for_commit = serializers.IntegerField(
+        help_text="Number of units eligible to be committed based on the current policy."
+    )
+
+
+class RepositorySerializer(ReadOnlySerializer):
+    """Serializer for repository status information."""
+
+    needs_commit = serializers.BooleanField(
+        help_text="Whether the repository has pending changes that need to be committed."
+    )
+    needs_merge = serializers.BooleanField(
+        help_text="Whether the repository needs to pull changes from upstream."
+    )
+    needs_push = serializers.BooleanField(
+        help_text="Whether the repository has commits that need to be pushed."
+    )
+    url = serializers.CharField(help_text="URL to the repository API endpoint.")
+    remote_commit = CommitInfoSerializer(
+        required=False,
+        allow_null=True,
+        help_text="Detailed information about the last commit in the remote repository (component/translation only).",
+    )
+    weblate_commit = CommitInfoSerializer(
+        required=False,
+        allow_null=True,
+        help_text="Detailed information about the last commit in the Weblate repository (component/translation only).",
+    )
+    status = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        help_text="Full repository status text (component/translation only).",
+    )
+    merge_failure = serializers.CharField(
+        required=False,
+        allow_null=True,
+        help_text="Details about merge failure if any (component/translation only).",
+    )
+    pending_units = PendingUnitsSerializer(
+        required=False,
+        allow_null=True,
+        help_text="Detailed breakdown of translation units with pending changes.",
+    )
+    outgoing_commits = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text="Number of commits ready to be pushed to the remote repository (component/translation only).",
+    )
+    missing_commits = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text="Number of commits in the remote repository that need to be pulled (component/translation only).",
     )
 
 
@@ -1184,8 +1349,8 @@ class UnitLabelsSerializer(serializers.RelatedField, LabelSerializer):
 
 
 class UnitFlatLabelsSerializer(UnitLabelsSerializer):
-    def to_representation(self, value):
-        return value.id
+    def to_representation(self, instance):
+        return instance.id
 
 
 class UnitSerializer(serializers.ModelSerializer[Unit]):
@@ -1246,8 +1411,11 @@ class UnitSerializer(serializers.ModelSerializer[Unit]):
             "pending",
             "timestamp",
             "last_updated",
+            "automatically_translated",
         )
-        extra_kwargs = {"url": {"view_name": "api:unit-detail"}}
+        extra_kwargs = {  # noqa: RUF012
+            "url": {"view_name": "api:unit-detail"},
+        }
 
 
 class UnitWriteSerializer(serializers.ModelSerializer[Unit]):
@@ -1357,7 +1525,9 @@ class CategorySerializer(RemovableSerializer[Category]):
             "url",
             "statistics_url",
         )
-        extra_kwargs = {"url": {"view_name": "api:category-detail"}}
+        extra_kwargs = {  # noqa: RUF012
+            "url": {"view_name": "api:category-detail"},
+        }
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -1421,7 +1591,9 @@ class ScreenshotSerializer(RemovableSerializer[Screenshot]):
             "units",
             "url",
         )
-        extra_kwargs = {"url": {"view_name": "api:screenshot-detail"}}
+        extra_kwargs = {  # noqa: RUF012
+            "url": {"view_name": "api:screenshot-detail"}
+        }
 
 
 class ScreenshotCreateSerializer(ScreenshotSerializer):
@@ -1436,7 +1608,9 @@ class ScreenshotCreateSerializer(ScreenshotSerializer):
             "url",
             "image",
         )
-        extra_kwargs = {"url": {"view_name": "api:screenshot-detail"}}
+        extra_kwargs = {  # noqa: RUF012
+            "url": {"view_name": "api:screenshot-detail"}
+        }
 
 
 class ScreenshotFileSerializer(serializers.ModelSerializer[Screenshot]):
@@ -1445,7 +1619,9 @@ class ScreenshotFileSerializer(serializers.ModelSerializer[Screenshot]):
     class Meta:
         model = Screenshot
         fields = ("image",)
-        extra_kwargs = {"url": {"view_name": "api:screenshot-file"}}
+        extra_kwargs = {  # noqa: RUF012
+            "url": {"view_name": "api:screenshot-file"}
+        }
 
 
 class ChangeSerializer(RemovableSerializer[Change]):
@@ -1491,7 +1667,9 @@ class ChangeSerializer(RemovableSerializer[Change]):
             "action_name",
             "url",
         )
-        extra_kwargs = {"url": {"view_name": "api:change-detail"}}
+        extra_kwargs = {  # noqa: RUF012
+            "url": {"view_name": "api:change-detail"}
+        }
 
 
 class AutoComponentListSerializer(serializers.ModelSerializer[AutoComponentList]):
@@ -1525,7 +1703,7 @@ class ComponentListSerializer(serializers.ModelSerializer[ComponentList]):
             "auto_assign",
             "url",
         )
-        extra_kwargs = {
+        extra_kwargs = {  # noqa: RUF012
             "url": {"view_name": "api:componentlist-detail", "lookup_field": "slug"}
         }
 
@@ -1554,7 +1732,9 @@ class AddonSerializer(serializers.ModelSerializer[Addon]):
             "configuration",
             "url",
         )
-        extra_kwargs = {"url": {"view_name": "api:addon-detail"}}
+        extra_kwargs = {  # noqa: RUF012
+            "url": {"view_name": "api:addon-detail"}
+        }
 
     @staticmethod
     def check_addon(name, queryset) -> None:
@@ -1601,7 +1781,7 @@ class AddonSerializer(serializers.ModelSerializer[Addon]):
         if not instance:
             if component:
                 self.check_addon(name, Addon.objects.filter_component(component))
-                if not addon.can_install(component, None):
+                if not addon.can_install(component=component):
                     raise serializers.ValidationError(
                         {"name": f"could not enable add-on {name}, not compatible"}
                     )
@@ -1621,6 +1801,10 @@ class AddonSerializer(serializers.ModelSerializer[Addon]):
                     {"configuration": list(get_form_errors(form))}
                 )
         return attrs
+
+    def create(self, validated_data):
+        validated_data["acting_user"] = self.context["request"].user
+        return super().create(validated_data)
 
     def save(self, **kwargs):
         result = super().save(**kwargs)

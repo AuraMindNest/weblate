@@ -1,17 +1,18 @@
 # Copyright © Michal Čihař <michal@weblate.org>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
+from __future__ import annotations
 
 import os
 import re
 from itertools import chain
+from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.utils.functional import cached_property
 from django.utils.text import slugify
 from django.utils.translation import gettext
 
-from weblate.formats.base import TranslationFormat
 from weblate.formats.models import FILE_FORMATS
 from weblate.logger import LOGGER
 from weblate.trans.defines import COMPONENT_NAME_LENGTH
@@ -19,6 +20,9 @@ from weblate.trans.models import Component
 from weblate.trans.tasks import create_component
 from weblate.trans.util import path_separator
 from weblate.utils.render import render_template
+
+if TYPE_CHECKING:
+    from weblate.formats.base import TranslationFormat
 
 # Attributes to copy from main component
 COPY_ATTRIBUTES = (
@@ -221,6 +225,9 @@ class ComponentDiscovery:
         for key in COPY_ATTRIBUTES:
             if key not in kwargs and main is not None:
                 kwargs[key] = getattr(main, key)
+        # Copy file format parameters if the format is same
+        if main is not None and self.file_format == main.file_format:
+            kwargs["file_format_params"] = main.file_format_params
 
         # Disable template editing if not supported by format
         if not self.file_format_cls.can_edit_base:

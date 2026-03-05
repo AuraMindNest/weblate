@@ -3,11 +3,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from typing import TYPE_CHECKING, ClassVar, Literal
 
-from django.db.models import Count, Expression, F, Q
+from django.db.models import Count, F, Q
 from django.test import TestCase
+from django.utils.timezone import get_current_timezone
 
 from weblate.auth.models import User
 from weblate.trans.actions import ActionEvents
@@ -15,8 +16,9 @@ from weblate.trans.models import Change, Project, Unit
 from weblate.trans.tests.test_views import ViewTestCase
 from weblate.trans.util import PLURAL_SEPARATOR
 from weblate.utils.db import using_postgresql
-from weblate.utils.search import parse_query
+from weblate.utils.search import SearchQueryError, parse_query
 from weblate.utils.state import (
+    FUZZY_STATES,
     STATE_APPROVED,
     STATE_EMPTY,
     STATE_FUZZY,
@@ -26,6 +28,8 @@ from weblate.utils.state import (
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+
+    from django.db.models import Expression
 
 
 class SearchTestCase(TestCase):
@@ -123,11 +127,11 @@ class UnitQueryParserTest(SearchTestCase):
     def test_regex(self) -> None:
         self.assert_query('source:r"^hello"', Q(source__trgm_regex="^hello"))
         # Invalid regex
-        with self.assertRaises(ValueError):
+        with self.assertRaises(SearchQueryError):
             self.assert_query('source:r"^(hello"', Q(source__trgm_regex="^(hello"))
         # Not supported regex on PostgreSQL
         if using_postgresql():
-            with self.assertRaises(ValueError):
+            with self.assertRaises(SearchQueryError):
                 self.assert_query(
                     'source:r"^(?i)hello"', Q(source__trgm_regex="^(?i)hello")
                 )
@@ -147,7 +151,7 @@ class UnitQueryParserTest(SearchTestCase):
         self.assert_query("", Q())
 
     def test_invalid(self) -> None:
-        with self.assertRaises(ValueError):
+        with self.assertRaises(SearchQueryError):
             self.assert_query(
                 "changed:inval AND target:world", Q(target__substring="world")
             )
@@ -205,9 +209,9 @@ class UnitQueryParserTest(SearchTestCase):
             Q(change__timestamp__gte=datetime(2019, 3, 1, 0, 0, tzinfo=UTC))
             & action_change,
         )
-        with self.assertRaises(ValueError):
+        with self.assertRaises(SearchQueryError):
             self.assert_query("changed:>'Not a date'", Q())
-        with self.assertRaises(ValueError):
+        with self.assertRaises(SearchQueryError):
             self.assert_query("changed:>'Invalid 1, 2019'", Q())
 
     def test_date_range(self) -> None:
@@ -234,11 +238,17 @@ class UnitQueryParserTest(SearchTestCase):
             Q(source_unit__last_updated__gte=datetime(2019, 3, 1, 0, 0, tzinfo=UTC)),
         )
 
+    def test_last_updated(self) -> None:
+        self.assert_query(
+            "last_changed:>20190301",
+            Q(last_updated__gte=datetime(2019, 3, 1, 0, 0, tzinfo=UTC)),
+        )
+
     def test_bool(self) -> None:
         self.assert_query("pending:true", Q(pending_changes__isnull=False))
 
     def test_nonexisting(self) -> None:
-        with self.assertRaises(ValueError):
+        with self.assertRaises(SearchQueryError):
             self.assert_query("nonexisting:true", Q())
 
     def test_state(self) -> None:
@@ -271,7 +281,7 @@ class UnitQueryParserTest(SearchTestCase):
         self.assert_query("position:[1 to 10]", Q(position__range=(1, 10)))
 
     def test_invalid_state(self) -> None:
-        with self.assertRaises(ValueError):
+        with self.assertRaises(SearchQueryError):
             self.assert_query("state:invalid", Q())
 
     def test_parenthesis(self) -> None:
@@ -382,9 +392,7 @@ class UnitQueryParserTest(SearchTestCase):
                 & Q(context__regex=F("variant__variant_regex"))
             ),
         )
-        self.assert_query(
-            "has:label", Q(source_unit__labels__isnull=False) | Q(labels__isnull=False)
-        )
+        self.assert_query("has:label", Q(source_unit__labels__isnull=False))
         self.assert_query("has:context", ~Q(context=""))
         self.assert_query(
             "has:screenshot",
@@ -400,7 +408,7 @@ class UnitQueryParserTest(SearchTestCase):
         self.assert_query("is:untranslated", Q(state__lt=STATE_TRANSLATED))
         self.assert_query("is:approved", Q(state=STATE_APPROVED))
         self.assert_query("is:read-only", Q(state=STATE_READONLY))
-        self.assert_query("is:fuzzy", Q(state=STATE_FUZZY))
+        self.assert_query("is:fuzzy", Q(state__in=FUZZY_STATES))
 
     def test_changed_by(self) -> None:
         self.assert_query(
@@ -418,30 +426,6 @@ class UnitQueryParserTest(SearchTestCase):
         self.assert_query("suggestion:text", Q(suggestion__target__substring="text"))
         self.assert_query(
             "suggestion_author:nijel", Q(suggestion__user__username__iexact="nijel")
-        )
-
-    def test_checks(self) -> None:
-        self.assert_query(
-            "check:ellipsis",
-            Q(check__name__iexact="ellipsis") & Q(check__dismissed=False),
-        )
-        self.assert_query(
-            "dismissed_check:ellipsis",
-            Q(check__name__iexact="ellipsis") & Q(check__dismissed=True),
-        )
-
-    def test_labels(self) -> None:
-        self.assert_query(
-            "label:'test label'",
-            Q(source_unit__labels__name__iexact="test label")
-            | Q(labels__name__iexact="test label"),
-        )
-
-    def test_screenshot(self) -> None:
-        self.assert_query(
-            "screenshot:'test screenshot'",
-            Q(source_unit__screenshots__name__iexact="test screenshot")
-            | Q(screenshots__name__iexact="test screenshot"),
         )
 
     def test_priority(self) -> None:
@@ -488,6 +472,38 @@ class UnitQueryParserTest(SearchTestCase):
             & Q(change__action__in=Change.ACTIONS_CONTENT),
         )
 
+    def test_timestamp_exact_iso(self) -> None:
+        timestamp = datetime.now(tz=timezone(timedelta(hours=3)))
+        self.assert_query(
+            f"changed:{timestamp.isoformat()}",
+            Q(change__timestamp=timestamp)
+            & Q(change__action__in=Change.ACTIONS_CONTENT),
+        )
+        self.assert_query(
+            f"changed:={timestamp.isoformat()}",
+            Q(change__timestamp__exact=timestamp)
+            & Q(change__action__in=Change.ACTIONS_CONTENT),
+        )
+
+    def test_timestamp_exact_date(self) -> None:
+        # The microsecond = 5 is relict from the parser, it should be avoided if possible
+        timestamp = datetime(
+            2013, 7, 21, 22, 15, 20, tzinfo=timezone(timedelta(hours=5))
+        )
+        self.assert_query(
+            "changed:='21 July 2013 10:15:20 pm +0500'",
+            Q(change__timestamp__exact=timestamp)
+            & Q(change__action__in=Change.ACTIONS_CONTENT),
+        )
+
+    def test_timestamp_exact_human(self) -> None:
+        timestamp = datetime(2013, 7, 21, 22, 15, 20, tzinfo=get_current_timezone())
+        self.assert_query(
+            "changed:='21 July year 2013 10:15:20 pm'",
+            Q(change__timestamp__exact=timestamp)
+            & Q(change__action__in=Change.ACTIONS_CONTENT),
+        )
+
     def test_timestamp_interval(self) -> None:
         self.assert_query(
             "changed:2020-03-27",
@@ -495,6 +511,32 @@ class UnitQueryParserTest(SearchTestCase):
                 change__timestamp__range=(
                     datetime(2020, 3, 27, 0, 0, tzinfo=UTC),
                     datetime(2020, 3, 27, 23, 59, 59, 999999, tzinfo=UTC),
+                )
+            )
+            & Q(change__action__in=Change.ACTIONS_CONTENT),
+        )
+
+    def test_timestamp_interval_human(self) -> None:
+        today = datetime.now(tz=get_current_timezone())
+        timestamp = today - timedelta(days=20)
+        self.assert_query(
+            "changed:'20 days ago'",
+            Q(
+                change__timestamp__range=(
+                    timestamp.replace(hour=0, minute=0, second=0, microsecond=0),
+                    timestamp.replace(
+                        hour=23, minute=59, second=59, microsecond=999999
+                    ),
+                )
+            )
+            & Q(change__action__in=Change.ACTIONS_CONTENT),
+        )
+        self.assert_query(
+            "changed:[20_days_ago to today]",
+            Q(
+                change__timestamp__range=(
+                    timestamp.replace(hour=0, minute=0, second=0, microsecond=0),
+                    today.replace(hour=23, minute=59, second=59, microsecond=999999),
                 )
             )
             & Q(change__action__in=Change.ACTIONS_CONTENT),
@@ -532,7 +574,7 @@ class UnitQueryParserTest(SearchTestCase):
         self.assert_query('source:"', parse_query("""source:'"'"""))
 
     def test_labels_count(self) -> None:
-        annotation = {"labels_count": Count("source_unit__labels") + Count("labels")}
+        annotation = {"labels_count": Count("source_unit__labels")}
         self.assert_query(
             "labels_count:2", Q(labels_count=2), expected_annotations=annotation
         )
@@ -546,7 +588,7 @@ class UnitQueryParserTest(SearchTestCase):
             "labels_count:<=1", Q(labels_count__lte=1), expected_annotations=annotation
         )
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(SearchQueryError):
             self.assert_query("labels_count:invalid", Q())
 
 
@@ -571,18 +613,18 @@ class UserQueryParserTest(SearchTestCase):
         )
 
     def test_is(self) -> None:
-        with self.assertRaises(ValueError):
+        with self.assertRaises(SearchQueryError):
             self.assert_query("is:bot", Q(is_bot=True))
-        with self.assertRaises(ValueError):
+        with self.assertRaises(SearchQueryError):
             self.assert_query("is:superuser", Q(is_superuser=True))
-        with self.assertRaises(ValueError):
+        with self.assertRaises(SearchQueryError):
             self.assert_query("is:active", Q(is_active=True))
 
     def test_language(self) -> None:
         self.assert_query("language:cs", (Q(profile__languages__code__iexact="cs")))
 
     def test_email(self) -> None:
-        with self.assertRaises(ValueError):
+        with self.assertRaises(SearchQueryError):
             self.assert_query(
                 "email:hello",
                 Q(social_auth__verifiedemail__email__icontains="hello"),
@@ -616,23 +658,30 @@ class UserQueryParserTest(SearchTestCase):
         )
 
     def test_contributes(self) -> None:
+        user = User.objects.create(is_superuser=True)
         self.assert_query(
             "contributes:test",
-            Q(change__project__slug__iexact="test"),
+            Q(change__project__slug__iexact="test")
+            & Q(change__project__in=user.allowed_projects),
+            user=user,
         )
         self.assert_query(
             "contributes:test/test",
-            Q(change__component_id__in=[]),
+            Q(change__component_id__in=[])
+            & Q(change__project__in=user.allowed_projects),
+            user=user,
         )
         self.assert_query(
             "contributes:test change_time:>'90 days ago'",
             Q(change__project__slug__iexact="test")
+            & Q(change__project__in=user.allowed_projects)
             & Q(
                 change__timestamp__gte=datetime.now(tz=UTC).replace(
                     hour=0, minute=0, second=0, microsecond=0
                 )
                 - timedelta(days=90)
             ),
+            user=user,
         )
 
 

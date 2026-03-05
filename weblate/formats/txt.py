@@ -9,7 +9,8 @@ from __future__ import annotations
 import os
 from glob import glob
 from itertools import chain
-from typing import TYPE_CHECKING, Any, BinaryIO, NoReturn
+from pathlib import Path
+from typing import IO, TYPE_CHECKING, NoReturn
 
 from django.utils.functional import cached_property
 from django.utils.translation import gettext, gettext_lazy
@@ -23,7 +24,12 @@ from weblate.formats.base import (
 from weblate.utils.errors import report_error
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Generator
+
+    from lxml import etree
+
+    from weblate.checks.flags import Flags
+    from weblate.trans.file_format_params import FileFormatParams
 
 
 class MultiparserError(Exception):
@@ -44,6 +50,7 @@ class TextItem(BaseItem):
         self.line = line
         self.text = text
         self.flags = flags
+        self.needs_save: bool = False
 
     @cached_property
     def location(self) -> str:
@@ -57,8 +64,7 @@ class TextParser:
     """Simple text parser returning all content as single unit."""
 
     def __init__(self, storefile, filename=None, flags: str | None = None) -> None:
-        with open(storefile) as handle:
-            content = handle.read()
+        content = Path(storefile).read_text(encoding="utf-8")
         if filename:
             self.filename = filename
         else:
@@ -124,7 +130,7 @@ class AppStoreParser(MultiParser):
         ("short[_-]description.txt", "max-length:80"),
         ("summary.txt", "max-length:80"),
         ("full[_-]description.txt", "max-length:4000"),
-        ("subtitle.txt", "max-length:80"),
+        ("subtitle.txt", "max-length:30"),
         ("description.txt", "max-length:4000"),
         ("keywords.txt", "max-length:100"),
         ("video.txt", "max-length:256, url"),
@@ -140,7 +146,7 @@ class AppStoreParser(MultiParser):
         parts = filename.rsplit("changelogs/", 1)
         if len(parts) == 2:
             try:
-                return "-{}".format(int(parts[1].split(".")[0]))
+                return f"-{int(parts[1].split('.')[0])}"
             except ValueError:
                 pass
         return filename
@@ -175,18 +181,16 @@ class TextUnit(TranslationUnit):
         """Return context of message."""
         return self.mainunit.location
 
-    @cached_property
-    def flags(self):
-        """Return flags from unit."""
-        flags = super().flags
+    def get_extra_flags(self) -> Generator[str | etree._Element | Flags]:
+        yield from super().get_extra_flags()
         if self.mainunit.flags:
-            flags.merge(self.mainunit.flags)
-        return flags
+            yield self.mainunit.flags
 
     def set_target(self, target: str | list[str]) -> None:
         """Set translation unit target."""
         self._invalidate_target()
         self.unit.text = target
+        self.unit.needs_save = True
 
     def set_state(self, state) -> None:
         """Set fuzzy /approved flag on translated unit."""
@@ -208,7 +212,7 @@ class AppStoreFormat(TranslationFormat):
 
     def load(
         self,
-        storefile: str | BinaryIO,
+        storefile: str | IO[bytes],
         template_store: TranslationFormat | None,
     ) -> AppStoreParser:
         return AppStoreParser(storefile)
@@ -229,7 +233,7 @@ class AppStoreFormat(TranslationFormat):
         language: str,  # noqa: ARG003
         base: str,  # noqa: ARG003
         callback: Callable | None = None,  # noqa: ARG003
-        file_format_params: dict[str, Any] | None = None,  # noqa: ARG003
+        file_format_params: FileFormatParams | None = None,  # noqa: ARG003
     ) -> None:
         """Handle creation of new translation file."""
         os.makedirs(filename)
@@ -241,6 +245,8 @@ class AppStoreFormat(TranslationFormat):
     def save(self) -> None:
         """Save underlying store to disk."""
         for unit in self.store.units:
+            if not unit.needs_save:
+                continue
             filename = self.store.get_filename(unit.filename)
             if not unit.text:
                 if os.path.exists(filename):
@@ -265,7 +271,7 @@ class AppStoreFormat(TranslationFormat):
         monolingual: bool,  # noqa: ARG003
         errors: list[Exception] | None = None,
         fast: bool = False,
-        file_format_params: dict[str, Any] | None = None,  # noqa: ARG003
+        file_format_params: FileFormatParams | None = None,  # noqa: ARG003
     ) -> bool:
         """Check whether base is valid."""
         if not base:

@@ -25,10 +25,13 @@ can browse at ``/api/docs/``.
 Authentication and generic parameters
 +++++++++++++++++++++++++++++++++++++
 
-The public project API is available without authentication, though
-unauthenticated requests are heavily throttled (by default to 100 requests per
-day), so it is recommended to use authentication. The authentication uses a
-token, which you can get in your profile. Use it in the ``Authorization`` header:
+The read-only API is available without authentication unless
+:setting:`REQUIRE_LOGIN` is turned on. Unauthenticated requests are heavily
+throttled (by default to 100 requests per day), so it is recommended to use
+authentication.
+
+The authentication uses a token, which you can get in your profile. Use it in
+the ``Authorization`` header:
 
 .. http:any:: /
 
@@ -524,6 +527,7 @@ Groups
     :>json array components: link to associated components; see :http:get:`/api/components/(string:project)/(string:component)/`
     :>json array componentlists: link to associated componentlist; see :http:get:`/api/component-lists/(str:slug)/`
     :>json str defining_project: link to the defining project, used for :ref:`manage-acl`; see :http:get:`/api/projects/(string:project)/`
+    :>json array admins: link to associated administrators; see :http:get:`/api/users/(str:username)/`
 
     **Example JSON data:**
 
@@ -550,6 +554,9 @@ Groups
             "componentlist": "http://example.com/api/component-lists/new/",
             "components": [
                 "http://example.com/api/components/demo/weblate/"
+            ],
+            "admins": [
+                "http://example.com/api/users/exampleusername/"
             ]
         }
 
@@ -1100,6 +1107,10 @@ Projects
             --data-binary '{
                 "branch": "main",
                 "file_format": "po",
+                "file_format_params": {
+                    "po_line_wrap": 65535,
+                    "po_no_location": true
+                },
                 "filemask": "po/*.po",
                 "name": "Weblate",
                 "slug": "weblate",
@@ -1126,6 +1137,10 @@ Projects
         {
             "branch": "main",
             "file_format": "po",
+            "file_format_params": {
+                "po_line_wrap": 65535,
+                "po_no_location": true
+            },
             "filemask": "po/*.po",
             "name": "Weblate",
             "slug": "weblate",
@@ -1173,6 +1188,10 @@ Projects
         {
             "branch": "main",
             "file_format": "po",
+            "file_format_params": {
+                "po_line_wrap": 65535,
+                "po_no_location": true
+            },
             "filemask": "po/*.po",
             "git_export": "",
             "license": "",
@@ -1261,6 +1280,17 @@ Projects
     :<json string name: name of the label
     :<json string color: color of the label
 
+.. http:delete:: /api/projects/(string:project)/labels/(int:label_id)/
+
+   .. versionadded:: 5.14
+
+    Deletes a label from a project.
+
+    :param project: Project URL slug
+    :type project: string
+    :param label_id: ID of the label to delete
+    :type label_id: integer
+
 .. http:get:: /api/projects/(string:project)/credits/
 
     Returns contributor credits for a project.
@@ -1302,6 +1332,28 @@ Projects
     :form string service: Service name
     :form string configuration: Service configuration in JSON
 
+.. http:get:: /api/projects/(string:project)/languages/(string:language_code)/file/
+
+    .. versionchanged:: 5.15.1
+
+       Added ability to download ZIP file of all components translations in a project for 1 specific language.
+
+    Download a ZIP file of all translation files for a specified ``language_code`` across all components for a given ``project`` rather than downloading individual translated files and manually zipping them, with the archive named `{project-slug}-{language-code}.zip` and organized by component paths (e.g., `component-slug/po/lang.po`).
+
+    :param project: Project URL slug
+    :type project: string
+    :param language_code: Language code
+    :type language_code: string
+    :query string filter: Optional case-insensitive substring to filter components by slug (e.g., ``?filter=core`` will match components with 'core' anywhere in their slug); only components whose slugs contain the substring will be included in the download.
+    :query string format: The archive format to use; If not specified, defaults to ``zip``; Supported formats: ``zip`` and ``zip:CONVERSION`` where ``CONVERSION`` is one of converters listed at :ref:`download`.
+
+    .. note::
+
+        Possible responses:
+
+        - ``200 OK`` with the ZIP file of translations for the specified language across all components in the project. If no components have translations for the specified language, an empty ZIP file will be returned.
+        - ``403 Forbidden`` if the user does not have permission to the project.
+        - ``404 Not Found`` if the project slug does not exist.
 
 Components
 ++++++++++
@@ -1342,6 +1394,7 @@ Components
     :>json string intermediate: :ref:`component-intermediate`
     :>json string new_base: :ref:`component-new_base`
     :>json string file_format: :ref:`component-file_format`
+    :>json object file_format_params: :ref:`component-file_format_params`
     :>json string license: :ref:`component-license`
     :>json string agreement: :ref:`component-agreement`
     :>json string new_lang: :ref:`component-new_lang`
@@ -1386,6 +1439,10 @@ Components
         {
             "branch": "main",
             "file_format": "po",
+            "file_format_params": {
+                "po_line_wrap": 65535,
+                "po_no_location": true
+            },
             "filemask": "po/*.po",
             "git_export": "",
             "license": "",
@@ -1478,6 +1535,10 @@ Components
         {
             "branch": "main",
             "file_format": "po",
+            "file_format_params": {
+                "po_line_wrap": 65535,
+                "po_no_location": true
+            },
             "filemask": "po/*.po",
             "git_export": "",
             "license": "",
@@ -1517,6 +1578,7 @@ Components
     :type component: string
     :<json string branch: VCS repository branch
     :<json string file_format: file format of translations
+    :<json object file_format_params: parameters related to the file
     :<json string filemask: mask of translation files in the repository
     :<json string name: name of component
     :<json string slug: slug of component
@@ -1939,6 +2001,10 @@ Translations
             "component": {
                 "branch": "main",
                 "file_format": "po",
+                "file_format_params": {
+                    "po_line_wrap": 65535,
+                    "po_no_location": true
+                },
                 "filemask": "po/*.po",
                 "git_export": "",
                 "license": "",
@@ -2320,6 +2386,18 @@ and XLIFF.
     :>json string user: URL of the commenter's object
     :>json string timestamp: creation timestamp of the comment
 
+.. http:get:: /api/units/(int:id)/comments/
+
+    .. versionadded:: 5.15
+
+    Returns a list of comments on a given translation unit
+
+    :param id: Unit ID
+    :type id: int
+    :>json int id: comment identifier
+    :>json string comment: content of the comment
+    :>json string timestamp: creation timestamp of the comment
+    :>json string user: URL of the commenter's object
 
 Changes
 +++++++
@@ -2834,8 +2912,7 @@ update individual repositories; see
         Please use :http:post:`/api/components/(string:project)/(string:component)/repository/`
         instead which works properly with authentication for ACL limited projects.
 
-   Triggers update of a component (pulling from VCS and scanning for
-   translation changes).
+   .. versionremoved:: 5.14
 
 .. http:get:: /hooks/update/(string:project)/
 
@@ -2844,8 +2921,7 @@ update individual repositories; see
         Please use :http:post:`/api/projects/(string:project)/repository/`
         instead which works properly with authentication for ACL limited projects.
 
-   Triggers update of all components in a project (pulling from VCS and
-   scanning for translation changes).
+   .. versionremoved:: 5.14
 
 .. http:post:: /hooks/github/
 

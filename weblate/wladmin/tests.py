@@ -24,6 +24,7 @@ from weblate.trans.models import Announcement
 from weblate.trans.tests.test_views import ViewTestCase
 from weblate.trans.tests.utils import get_test_file
 from weblate.utils.apps import check_data_writable
+from weblate.utils.data import data_path
 from weblate.utils.unittest import tempdir_setting
 from weblate.wladmin.forms import ThemeColorField, ThemeColorWidget
 from weblate.wladmin.models import BackupService, ConfigurationError, SupportStatus
@@ -80,24 +81,51 @@ class AdminTest(ViewTestCase):
     def test_ssh_add(self) -> None:
         self.assertEqual(check_data_writable(app_configs=None, databases=None), [])
         oldpath = os.environ["PATH"]
+        hostsfile = data_path("ssh") / "known_hosts"
         try:
-            os.environ["PATH"] = ":".join((get_test_file(""), os.environ["PATH"]))
+            os.environ["PATH"] = f"{get_test_file('')}:{os.environ['PATH']}"
             # Verify there is button for adding
             response = self.client.get(reverse("manage-ssh"))
             self.assertContains(response, "Add host key")
+
+            # Invalid parameters
+            response = self.client.post(
+                reverse("manage-ssh"), {"action": "add-host", "host": "-github.com"}
+            )
+            self.assertContains(response, "Enter a valid domain name or IP address.")
+            self.assertFalse(hostsfile.exists())
+
+            # Non-responding host
+            response = self.client.post(
+                reverse("manage-ssh"), {"action": "add-host", "host": "1.2.3.4"}
+            )
+            self.assertContains(response, "Could not fetch public key for a host.")
+            self.assertFalse(hostsfile.exists())
+
+            # Error response
+            response = self.client.post(
+                reverse("manage-ssh"),
+                {
+                    "action": "add-host",
+                    "host": "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+                },
+            )
+            self.assertContains(
+                response, "Could not fetch public key for a host: test error"
+            )
+            self.assertFalse(hostsfile.exists())
 
             # Add the key
             response = self.client.post(
                 reverse("manage-ssh"), {"action": "add-host", "host": "github.com"}
             )
             self.assertContains(response, "Added host key for github.com")
+            self.assertTrue(hostsfile.exists())
         finally:
             os.environ["PATH"] = oldpath
 
         # Check the file contains it
-        hostsfile = os.path.join(settings.DATA_DIR, "ssh", "known_hosts")
-        with open(hostsfile) as handle:
-            self.assertIn("github.com", handle.read())
+        self.assertIn("github.com", hostsfile.read_text())
 
     @tempdir_setting("BACKUP_DIR")
     def test_backup(self) -> None:
@@ -178,7 +206,7 @@ class AdminTest(ViewTestCase):
         response = self.client.get(reverse("manage-tools"))
         self.assertContains(response, "announcement")
         self.assertFalse(Announcement.objects.exists())
-        response = self.client.post(
+        self.client.post(
             reverse("manage-tools"),
             {"message": "Test message", "severity": "info"},
             follow=True,
@@ -222,7 +250,7 @@ class AdminTest(ViewTestCase):
         response = self.client.get(
             reverse("manage-users-check"), {"email": "nonexisting"}, follow=True
         )
-        self.assertRedirects(response, reverse("manage-users") + "?q=nonexisting")
+        self.assertRedirects(response, f"{reverse('manage-users')}?q=nonexisting")
 
     @override_settings(
         EMAIL_HOST="nonexisting.weblate.org",

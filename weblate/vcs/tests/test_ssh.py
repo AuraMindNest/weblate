@@ -12,7 +12,7 @@ from django.test.utils import override_settings
 from weblate.trans.tests.utils import get_test_file
 from weblate.utils.apps import check_data_writable
 from weblate.utils.unittest import tempdir_setting
-from weblate.vcs.ssh import SSHWrapper, get_host_keys, ssh_file
+from weblate.vcs.ssh import SSHWrapper, extract_url_host_port, get_host_keys, ssh_file
 
 TEST_HOSTS = get_test_file("known_hosts")
 
@@ -33,11 +33,10 @@ class SSHTest(TestCase):
         wrapper = SSHWrapper()
         filename = wrapper.filename
         wrapper.create()
-        with open(filename) as handle:
-            data = handle.read()
-            self.assertIn(ssh_file("known_hosts").as_posix(), data)
-            self.assertIn(ssh_file("id_rsa").as_posix(), data)
-            self.assertIn(settings.DATA_DIR, data)
+        data = filename.read_text()
+        self.assertIn(ssh_file("known_hosts").as_posix(), data)
+        self.assertIn(ssh_file("id_rsa").as_posix(), data)
+        self.assertIn(settings.DATA_DIR, data)
         self.assertTrue(os.access(filename, os.X_OK))
         # Second run should not touch the file
         timestamp = os.stat(filename).st_mtime
@@ -50,11 +49,21 @@ class SSHTest(TestCase):
         wrapper = SSHWrapper()
         filename = wrapper.filename
         wrapper.create()
-        with open(filename) as handle:
-            data = handle.read()
-            self.assertIn(settings.SSH_EXTRA_ARGS, data)
+        data = filename.read_text()
+        self.assertIn(settings.SSH_EXTRA_ARGS, data)
         self.assertTrue(os.access(filename, os.X_OK))
         # Second run should not touch the file
         timestamp = os.stat(filename).st_mtime
         wrapper.create()
         self.assertEqual(timestamp, os.stat(filename).st_mtime)
+
+    def test_extract_url_host_port(self) -> None:
+        self.assertEqual((None, None), extract_url_host_port(""))
+        self.assertEqual((None, None), extract_url_host_port("http://"))
+        self.assertEqual((None, None), extract_url_host_port("http:// invalid/url"))
+        self.assertEqual(
+            ("github.com", None), extract_url_host_port("git@github.com:repo")
+        )
+        self.assertEqual(
+            ("github.com", 1234), extract_url_host_port("git://github.com:1234/repo")
+        )

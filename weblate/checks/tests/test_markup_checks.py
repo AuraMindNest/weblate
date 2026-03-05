@@ -17,6 +17,7 @@ from weblate.checks.markup import (
     RSTSyntaxCheck,
     SafeHTMLCheck,
     URLCheck,
+    XMLCharsAroundTagsCheck,
     XMLTagsCheck,
     XMLValidityCheck,
 )
@@ -152,6 +153,45 @@ class XMLTagsCheckTest(CheckTestCase):
         )
 
 
+class XMLCharsAroundTagsCheckTest(CheckTestCase):
+    check = XMLCharsAroundTagsCheck()
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.test_good_matching = ("<a>string</a>", "<a>string</a>", "")
+        self.test_good_none = ("string", "string", "")
+        self.test_failure_1 = ("<a>string</a>", "<a> string</a>", "")
+        self.test_failure_2 = ("<a> string</a>", "<a>string</a>", "")
+        self.test_failure_3 = ("<a>string</a>", "<a>string </a>", "")
+        self.test_failure_4 = ("<a>string </a>", "<a>string</a>", "")
+
+    def test_outside_of_tags(self) -> None:
+        self.do_test(True, ("b <a>c</a>", "b<a>c</a>", ""))
+        self.do_test(True, ("b<a>c</a>", "!<a>c</a>", ""))
+        self.do_test(False, ("b<a>c</a>", "<a>c</a>", ""))
+        self.do_test(False, ("<a>c</a>b", "<a>c</a>", ""))
+
+    def test_multiple_tags(self) -> None:
+        self.do_test(False, ("<a><b>c</b></a>", "<a><b>d</b></a>", ""))
+        self.do_test(True, ("c<a>d</a>e<b>f</b>g", "c<a>d</a> <b>f</b>g", ""))
+
+    def test_special_chars(self) -> None:
+        self.do_test(False, ("<a> ! </a>", "<a>!</a>", ""))
+        self.do_test(False, ('"b <a>c</a>d"', '"<a>c</a>b d"', ""))
+        self.do_test(True, ('"b<a>c</a>d"', '"<a>c</a>b d"', ""))
+
+    def test_unicode(self) -> None:
+        self.do_test(False, ("š<a>c</a>", "b<a>c</a>", ""))
+        self.do_test(True, ("š <a>c</a>", "b<a>c</a>", ""))
+        self.do_test(False, ("š<a>š</a>š", "b<a>b</a>b", ""))
+        self.do_test(False, ("<a>š</a>", "<a>ü</a>", ""))
+        self.do_test(True, ("<a>!</a>", "<a>š</a>", ""))
+
+    def test_flags(self) -> None:
+        self.do_test(False, ("<a> b</a>", "<a>b</a>", "safe-html"))
+        self.do_test(True, ("<a> b</a>", "<a>b</a>", "xml-text"))
+
+
 class MarkdownRefLinkCheckTest(CheckTestCase):
     check = MarkdownRefLinkCheck()
 
@@ -216,7 +256,7 @@ class MarkdownLinkCheckTest(CheckTestCase):
             target="[Moje stránka] (http://example.com)",
         )
 
-        self.assertEqual(self.check.get_fixup(unit), [(r"\] +\(", "](")])
+        self.assertEqual(self.check.get_fixup(unit), [("regex", r"\] +\(", "](", "u")])
 
         unit = Unit(
             source="[My Home Page](http://example.com)",
@@ -229,10 +269,8 @@ class MarkdownLinkCheckTest(CheckTestCase):
         self.do_test(
             False,
             (
-                "[Weblate](#weblate) has an [example]({{example}}) "
-                "for illustrating the usage of [Weblate](#weblate)",
-                "Ein [Beispiel]({{example}}) in [Webspät](#weblate) "  # codespell:ignore
-                "illustriert die Verwendung von [Webspät](#weblate)",
+                "[Weblate](#weblate) has an [example]({{example}}) for illustrating the usage of [Weblate](#weblate)",
+                "Ein [Beispiel]({{example}}) in [Webspät](#weblate) illustriert die Verwendung von [Webspät](#weblate)",  # codespell:ignore
                 "md-text",
             ),
         )
@@ -240,20 +278,16 @@ class MarkdownLinkCheckTest(CheckTestCase):
         self.do_test(
             True,
             (
-                "[Weblate](#weblate) has an [example]({{example}}) "
-                "for illustrating the usage of [Weblate](#weblate)",
-                "Ein [Beispiel]({{example}}) in [Webspät](#weblate) "  # codespell:ignore
-                "illustriert die Verwendung von [Webspät](#Webspät)",
+                "[Weblate](#weblate) has an [example]({{example}}) for illustrating the usage of [Weblate](#weblate)",
+                "Ein [Beispiel]({{example}}) in [Webspät](#weblate) illustriert die Verwendung von [Webspät](#Webspät)",  # codespell:ignore
                 "md-text",
             ),
         )
         self.do_test(
             True,
             (
-                "[Weblate](#weblate) has an [example]({{example}}) "
-                "for illustrating the usage of [Weblate](#weblate)",
-                "Ein [Beispiel]({{example}}) in [Webspät](#weblate) "  # codespell:ignore
-                "illustriert die Verwendung von Webspät",
+                "[Weblate](#weblate) has an [example]({{example}}) for illustrating the usage of [Weblate](#weblate)",
+                "Ein [Beispiel]({{example}}) in [Webspät](#weblate) illustriert die Verwendung von Webspät",  # codespell:ignore
                 "md-text",
             ),
         )
@@ -777,6 +811,40 @@ class RSTReferencesCheckTest(CheckTestCase):
             ),
         )
 
+    def test_substitution(self) -> None:
+        self.do_test(
+            False,
+            (
+                "|regular| Small",
+                "|regular| Small",
+                "rst-text",
+            ),
+        )
+        self.do_test(
+            True,
+            (
+                "|regular| Small",
+                "|other| Small",
+                "rst-text",
+            ),
+        )
+        self.do_test(
+            True,
+            (
+                "|regular| Small",
+                "Small",
+                "rst-text",
+            ),
+        )
+        self.do_test(
+            True,
+            (
+                "Small",
+                "|regular| Small",
+                "rst-text",
+            ),
+        )
+
 
 class RSTSyntaxCheckTest(CheckTestCase):
     check = RSTSyntaxCheck()
@@ -865,4 +933,72 @@ class RSTSyntaxCheckTest(CheckTestCase):
             The following errors were found:<br>
             Inline interpreted text or phrase reference start-string without end-string.
             """,
+        )
+
+    def test_substitution(self) -> None:
+        self.do_test(
+            False,
+            (
+                "|regular| Small",
+                "|regular| Small",
+                "rst-text",
+            ),
+        )
+
+    def test_list(self) -> None:
+        self.do_test(
+            False,
+            (
+                "Text",
+                "Text",
+                "rst-text",
+            ),
+        )
+        self.do_test(
+            True,
+            (
+                "Text",
+                "* Text",
+                "rst-text",
+            ),
+        )
+        self.do_test(
+            True,
+            (
+                "Text",
+                "- Text",
+                "rst-text",
+            ),
+        )
+        self.do_test(
+            True,
+            (
+                "Text",
+                "+ Text",
+                "rst-text",
+            ),
+        )
+        self.do_test(
+            False,
+            (
+                "- Text",
+                "- Text",
+                "rst-text",
+            ),
+        )
+        self.do_test(
+            False,
+            (
+                "- Text",
+                "* Text",
+                "rst-text",
+            ),
+        )
+        self.do_test(
+            False,
+            (
+                "- Text",
+                "+ Text",
+                "rst-text",
+            ),
         )

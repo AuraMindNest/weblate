@@ -10,17 +10,20 @@ from contextlib import suppress
 from email import message_from_string
 from functools import partial
 from selectors import EVENT_READ, DefaultSelector
+
+# pylint: disable-next=unused-import
 from typing import TYPE_CHECKING, BinaryIO, cast
 
+from django.contrib.auth.decorators import login_not_required
 from django.core.exceptions import PermissionDenied, SuspiciousOperation
-from django.http import Http404, HttpRequest, StreamingHttpResponse
-from django.http.response import HttpResponse, HttpResponseBase, HttpResponseServerError
+from django.http import Http404, StreamingHttpResponse
+from django.http.response import HttpResponse, HttpResponseServerError
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 
-from weblate.auth.models import AuthenticatedHttpRequest, User
+from weblate.auth.models import User
 from weblate.gitexport.utils import find_git_http_backend
 from weblate.trans.models import Component
 from weblate.utils.errors import report_error
@@ -29,6 +32,11 @@ from weblate.vcs.models import VCS_REGISTRY
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+    from django.http import HttpRequest
+    from django.http.response import HttpResponseBase
+
+    from weblate.auth.models import AuthenticatedHttpRequest
 
 
 def response_authenticate():
@@ -64,6 +72,7 @@ def authenticate(request: HttpRequest, auth: str) -> bool:
 
 @never_cache
 @csrf_exempt
+@login_not_required
 def git_export(
     request: AuthenticatedHttpRequest, path: list[str], git_request: str
 ) -> HttpResponseBase:
@@ -103,17 +112,15 @@ def git_export(
         msg = "Not a git repository"
         raise Http404(msg)
     if obj.is_repo_link:
+        url = reverse(
+            "git-export",
+            kwargs={
+                "path": cast("Component", obj.linked_component).get_url_path(),
+                "git_request": git_request,
+            },
+        )
         return redirect(
-            "{}?{}".format(
-                reverse(
-                    "git-export",
-                    kwargs={
-                        "path": obj.linked_component.get_url_path(),
-                        "git_request": git_request,
-                    },
-                ),
-                request.META["QUERY_STRING"],
-            ),
+            f"{url}?{request.META['QUERY_STRING']}",
             permanent=True,
         )
 
@@ -130,7 +137,7 @@ class GitStreamingHttpResponse(StreamingHttpResponse):
     def close(self) -> None:
         if self.wrapper.process.poll() is None:
             self.wrapper.process.kill()
-        self.wrapper.process.wait()
+        self.wrapper.wait()
         super().close()
 
 
@@ -253,10 +260,17 @@ class GitHTTPBackendWrapper:
 
         # Handle status in response
         if "status" in message:
-            self.process.wait()
+            self.wait()
             return HttpResponse(status=int(message["status"].split()[0]))
 
         # Send streaming content as response
         return GitStreamingHttpResponse(
             streaming_content=self, content_type=message["content-type"]
         )
+
+    def wait(self) -> None:
+        self.process.wait()
+        if self.process.stdout is not None:
+            self.process.stdout.close()
+        if self.process.stderr is not None:
+            self.process.stderr.close()

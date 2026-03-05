@@ -25,15 +25,20 @@ the following setups:
 
 * Users suggest and vote for suggestions and a limited group controls what is
   accepted.
+
   - Turn on voting.
   - Turn off automatic acceptance.
   - Don't let users save translations.
+
 * Users suggest and vote for suggestions with automatic acceptance
   once the defined number of them agree.
+
   - Turn on voting.
   - Set the desired number of votes for automatic acceptance.
+
 * Optional voting for suggestions. (Can optionally be used by users when they are unsure about
   a translation by making multiple suggestions.)
+
   - Only turn on voting.
 
 .. _additional:
@@ -136,6 +141,12 @@ Once a screenshot is uploaded, this interface handles
 management and source string association:
 
 .. image:: /screenshots/screenshot-ocr.webp
+
+You can upload a screenshot from a local file or provide a URL to download an image
+from an external source. URL-based uploads may be restricted based on the
+:setting:`ALLOWED_ASSET_DOMAINS` setting, which controls which domains are trusted
+for downloading external assets, and :setting:`ALLOWED_ASSET_SIZE` which
+limits maximal size for the asset.
 
 You can add or update screenshots directly from your
 Version Control System (VCS) repository.

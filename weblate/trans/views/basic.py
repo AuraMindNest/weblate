@@ -4,10 +4,13 @@
 from __future__ import annotations
 
 from collections import Counter
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
-from django.contrib.auth.decorators import login_required
+from django.conf import settings
+from django.contrib.auth.decorators import login_not_required, login_required
 from django.db import transaction
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -17,7 +20,6 @@ from django.utils.translation import gettext, ngettext
 from django.views.decorators.cache import never_cache
 from django.views.generic import RedirectView
 
-from weblate.auth.models import AuthenticatedHttpRequest
 from weblate.formats.models import EXPORTERS
 from weblate.lang.models import Language
 from weblate.trans.actions import ActionEvents
@@ -83,6 +85,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from weblate.auth.models import AuthenticatedHttpRequest, User
+    from weblate.trans.models.component import ComponentQuerySet
 
 
 @never_cache
@@ -111,7 +114,12 @@ def list_projects(request: AuthenticatedHttpRequest):
         {
             "allow_index": True,
             "projects": prefetch_project_flags(
-                get_paginator(request, projects, stats=True)
+                get_paginator(
+                    request,
+                    projects,
+                    stats=True,
+                    sort_by=request.GET.get("sort_by"),
+                )
             ),
             "title": gettext("Projects"),
             "query_string": query_string,
@@ -232,17 +240,24 @@ def show_project_language(request: AuthenticatedHttpRequest, obj: ProjectLanguag
     )
 
     translations = translation_prefetch_tasks(
-        get_paginator(request, obj.translation_set, stats=True)
+        get_paginator(
+            request,
+            obj.translation_set,
+            stats=True,
+            sort_by=request.GET.get("sort_by"),
+        )
     )
     extra_translations = []
 
     # Add ghost translations
     if user.is_authenticated and translations.paginator.num_pages == 1:
-        existing = {translation.component.slug for translation in obj.translation_set}
+        existing = {translation.component.id for translation in obj.translation_set}
         missing = project_object.get_child_components_filter(
-            lambda qs: qs.exclude(slug__in=existing)
-            .prefetch()
-            .prefetch_related("source_language")
+            lambda qs: (
+                qs.exclude(id__in=existing)
+                .prefetch()
+                .prefetch_related("source_language")
+            )
         )
         for item in missing:
             item.project = project_object
@@ -286,10 +301,18 @@ def show_project_language(request: AuthenticatedHttpRequest, obj: ProjectLanguag
                 ProjectLanguageDeleteForm, user, "translation.delete", obj, obj=obj
             ),
             "replace_form": optional_form(ReplaceForm, user, "unit.edit", obj, obj=obj),
+            "autoform": optional_form(
+                AutoForm,
+                user,
+                "translation.auto",
+                obj,
+                obj=obj,
+                user=user,
+            ),
             "bulk_state_form": optional_form(
                 BulkEditForm,
                 user,
-                "translation.auto",
+                "unit.bulk_edit",
                 obj,
                 user=user,
                 obj=obj,
@@ -310,13 +333,18 @@ def show_category_language(request: AuthenticatedHttpRequest, obj):
         .recent()
     )
 
-    translations = get_paginator(request, obj.translation_set, stats=True)
+    translations = get_paginator(
+        request,
+        obj.translation_set,
+        stats=True,
+        sort_by=request.GET.get("sort_by"),
+    )
     extra_translations = []
 
     # Add ghost translations
     if user.is_authenticated and translations.paginator.num_pages == 1:
-        existing = {translation.component.slug for translation in obj.translation_set}
-        missing = category_object.component_set.exclude(slug__in=existing)
+        existing = {translation.component.id for translation in obj.translation_set}
+        missing = category_object.component_set.exclude(id__in=existing)
         extra_translations = [
             GhostTranslation(obj.project, language_object, component)
             for component in missing
@@ -356,7 +384,7 @@ def show_category_language(request: AuthenticatedHttpRequest, obj):
             "bulk_state_form": optional_form(
                 BulkEditForm,
                 user,
-                "translation.auto",
+                "unit.bulk_edit",
                 obj,
                 user=user,
                 obj=obj,
@@ -367,16 +395,24 @@ def show_category_language(request: AuthenticatedHttpRequest, obj):
 
 
 def show_project(request: AuthenticatedHttpRequest, obj):
+    def filter_no_category(qs: ComponentQuerySet) -> ComponentQuerySet:
+        if settings.HIDE_SHARED_GLOSSARY_COMPONENTS:
+            qs = qs.exclude(Q(is_glossary=True) & ~Q(project=obj))
+        return qs.filter(category=None)
+
     user = request.user
 
     all_changes = obj.change_set.filter_components(request.user).prefetch()
     last_changes = all_changes.recent()
     last_announcements = all_changes.filter_announcements().recent()
 
-    all_components = obj.get_child_components_access(
-        user, lambda qs: qs.filter(category=None)
+    all_components = obj.get_child_components_access(user, filter_no_category)
+    all_components = get_paginator(
+        request,
+        all_components,
+        stats=True,
+        sort_by=request.GET.get("sort_by"),
     )
-    all_components = get_paginator(request, all_components, stats=True)
     for component in all_components:
         component.is_shared = None if component.project == obj else component.project
 
@@ -410,7 +446,9 @@ def show_project(request: AuthenticatedHttpRequest, obj):
             "reports_form": ReportsForm({"project": obj}),
             "language_stats": [stat.obj or stat for stat in language_stats],
             "search_form": SearchForm(
-                request=request, initial=SearchForm.get_initial(request), obj=obj
+                request=request,
+                initial=SearchForm.get_initial(request),
+                obj=obj,
             ),
             "announcement_form": optional_form(
                 AnnouncementForm, user, "announcement.add", obj
@@ -419,6 +457,7 @@ def show_project(request: AuthenticatedHttpRequest, obj):
             "delete_form": optional_form(
                 ProjectDeleteForm, user, "project.edit", obj, obj=obj
             ),
+            "managed_teams": obj.defined_groups.filter(admins=request.user),
             "rename_form": optional_form(
                 ProjectRenameForm,
                 user,
@@ -431,7 +470,7 @@ def show_project(request: AuthenticatedHttpRequest, obj):
             "bulk_state_form": optional_form(
                 BulkEditForm,
                 user,
-                "translation.auto",
+                "unit.bulk_edit",
                 obj,
                 user=user,
                 obj=obj,
@@ -455,7 +494,12 @@ def show_category(request: AuthenticatedHttpRequest, obj):
     last_announcements = all_changes.filter_announcements().recent()
 
     all_components = obj.get_child_components_access(user)
-    all_components = get_paginator(request, all_components, stats=True)
+    all_components = get_paginator(
+        request,
+        all_components,
+        stats=True,
+        sort_by=request.GET.get("sort_by"),
+    )
 
     language_stats = obj.stats.get_language_stats()
     can_add_language_components = obj.project.components_user_can_add_new_language(user)
@@ -490,7 +534,9 @@ def show_category(request: AuthenticatedHttpRequest, obj):
             "reports_form": ReportsForm({"category": obj}),
             "language_stats": [stat.obj or stat for stat in language_stats],
             "search_form": SearchForm(
-                request=request, initial=SearchForm.get_initial(request), obj=obj
+                request=request,
+                initial=SearchForm.get_initial(request),
+                obj=obj,
             ),
             "announcement_form": optional_form(
                 AnnouncementForm, user, "announcement.add", obj.project
@@ -507,10 +553,18 @@ def show_category(request: AuthenticatedHttpRequest, obj):
                 instance=obj,
             ),
             "replace_form": optional_form(ReplaceForm, user, "unit.edit", obj, obj=obj),
+            "autoform": optional_form(
+                AutoForm,
+                user,
+                "translation.auto",
+                obj,
+                obj=obj,
+                user=user,
+            ),
             "bulk_state_form": optional_form(
                 BulkEditForm,
                 user,
-                "translation.auto",
+                "unit.bulk_edit",
                 obj,
                 user=user,
                 obj=obj,
@@ -563,7 +617,7 @@ def show_component(request: AuthenticatedHttpRequest, obj: Component):
             "bulk_state_form": optional_form(
                 BulkEditForm,
                 user,
-                "translation.auto",
+                "unit.bulk_edit",
                 obj,
                 user=user,
                 obj=obj,
@@ -583,8 +637,18 @@ def show_component(request: AuthenticatedHttpRequest, obj: Component):
                 request=request,
                 instance=obj,
             ),
+            "autoform": optional_form(
+                AutoForm,
+                user,
+                "translation.auto",
+                obj,
+                obj=obj,
+                user=user,
+            ),
             "search_form": SearchForm(
-                request=request, initial=SearchForm.get_initial(request), obj=obj
+                request=request,
+                initial=SearchForm.get_initial(request),
+                obj=obj,
             ),
             "alerts": obj.all_active_alerts
             if "alerts" not in request.GET
@@ -614,7 +678,10 @@ def show_translation(request: AuthenticatedHttpRequest, obj):
     # Show up to 10 of them, needs to be list to append ghost ones later
     other_translations = list(
         Translation.objects.prefetch()
-        .filter(component__project=project, language=obj.language)
+        .filter(
+            Q(component__project=project) | Q(component__links=project),
+            language=obj.language,
+        )
         .exclude(component__is_glossary=True)
         .order_by("component__name")
         .exclude(pk=obj.pk)[:10]
@@ -630,15 +697,19 @@ def show_translation(request: AuthenticatedHttpRequest, obj):
         )
         # Include ghost translations for other components, this
         # adds quick way to create translations in other components
-        existing = {translation.component.slug for translation in other_translations}
-        existing.add(component.slug)
+        existing = {translation.component.id for translation in other_translations}
+        existing.add(component.id)
 
         # Figure out missing components
-        all_components = {c.slug for c in project.child_components}
+        available_components = [
+            c for c in project.child_components if not c.is_glossary
+        ]
+
+        all_components = {c.id for c in available_components}
         missing = all_components - existing
-        if len(missing) < 5:
-            for test_component in project.child_components:
-                if test_component.slug in existing:
+        if 0 < len(missing) < 5:
+            for test_component in available_components:
+                if test_component.id in existing:
                     continue
                 if test_component.can_add_new_language(user, fast=True):
                     other_translations.append(
@@ -670,7 +741,7 @@ def show_translation(request: AuthenticatedHttpRequest, obj):
             "bulk_state_form": optional_form(
                 BulkEditForm,
                 user,
-                "translation.auto",
+                "unit.bulk_edit",
                 obj,
                 user=user,
                 obj=obj,
@@ -911,7 +982,7 @@ def add_languages_to_component(
 
             lang_counts[f"errors_{lang_code}"] += 1
 
-        try:
+        with suppress(FileParseError):
             # force_scan needed, see add_new_language
             if added and not component.create_translations(
                 request=request, force_scan=True
@@ -923,14 +994,7 @@ def add_languages_to_component(
                             "All languages have been added, updates of translations are in progress."
                         ),
                     )
-                result = "{}?info=1".format(
-                    reverse(
-                        "show_progress",
-                        kwargs={"path": result.get_url_path()},
-                    )
-                )
-        except FileParseError:
-            pass
+                result = f"{reverse('show_progress', kwargs={'path': result.get_url_path()})}?info=1"
 
     if user.has_perm("component.edit", component):
         reset_rate_limit("language", request)
@@ -939,6 +1003,7 @@ def add_languages_to_component(
 
 
 @never_cache
+@login_not_required
 def healthz(request: AuthenticatedHttpRequest) -> HttpResponse:
     """Make simple health check endpoint."""
     return HttpResponse("ok")
@@ -952,6 +1017,7 @@ def show_component_list(request: AuthenticatedHttpRequest, name) -> HttpResponse
             request,
             obj.components.filter_access(request.user).order().prefetch(),
             stats=True,
+            sort_by=request.GET.get("sort_by"),
         )
     )
 
@@ -987,5 +1053,6 @@ class ProjectLanguageRedirectView(RedirectView):
     query_string = True
     pattern_name = "show"
 
+    # pylint: disable=arguments-differ
     def get_redirect_url(self, project: str | None, lang: str):
         return super().get_redirect_url(path=[project or "-", "-", lang])

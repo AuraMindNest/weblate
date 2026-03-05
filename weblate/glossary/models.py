@@ -5,8 +5,6 @@
 from __future__ import annotations
 
 import re
-import sys
-import unicodedata
 from collections import defaultdict
 from copy import copy
 from itertools import chain
@@ -21,20 +19,13 @@ from django.db.models.functions import MD5, Lower
 from weblate.trans.models.unit import Unit
 from weblate.utils.csv import PROHIBITED_INITIAL_CHARS
 from weblate.utils.state import STATE_TRANSLATED
+from weblate.utils.unicodechars import CONTROLCHARS
 
 if TYPE_CHECKING:
-    from weblate.trans.models.translation import Translation
+    from weblate.trans.models import Project, Translation
 
 SPLIT_RE = re.compile(r"[\s,.:!?]+")
 NON_WORD_RE = re.compile(r"\W")
-# All control chars including tab and newline, this is different from
-# weblate.formats.helpers.CONTROLCHARS which contains only chars
-# problematic in XML or SQL scopes.
-CONTROLCHARS = [
-    char
-    for char in map(chr, range(sys.maxunicode + 1))
-    if unicodedata.category(char) in {"Zl", "Cc"}
-]
 CONTROLCHARS_TRANS = str.maketrans(dict.fromkeys(CONTROLCHARS))
 
 
@@ -47,7 +38,7 @@ def get_glossary_sources(component):
     )
 
 
-def get_glossary_automaton(project):
+def get_glossary_automaton(project: Project) -> ahocorasick_rs.AhoCorasick:
     from weblate.trans.models.component import prefetch_glossary_terms
 
     with sentry_sdk.start_span(op="glossary.automaton", name=project.slug):
@@ -106,12 +97,11 @@ def fetch_glossary_terms(  # noqa: C901
     for translation_id, translation in translations.items():
         language = translation.language
         component = translation.component
+        # Do not get glossary matches when display is disabled
+        if component.hide_glossary_matches:
+            continue
         project = component.project
         source_language = component.source_language
-
-        # Short circuit source language
-        if language == source_language:
-            continue
 
         # Extract all source strings
         sources = [unit.source.lower() for unit in translation_units[translation_id]]
@@ -153,6 +143,11 @@ def fetch_glossary_terms(  # noqa: C901
             base_units = get_glossary_units(project, source_language, language)
             # Variant is used for variant grouping below, source unit for flags
             base_units = base_units.select_related("source_unit", "variant")
+
+            # Exclude currently edited unit items to prevent self-referencing glossary items
+            current_unit_ids = [u.pk for u in translation_units[translation_id] if u.pk]
+            if current_unit_ids:
+                base_units = base_units.exclude(pk__in=current_unit_ids)
 
             if full:
                 # Include full details needed for rendering
@@ -253,7 +248,7 @@ def render_glossary_units_tsv(units) -> str:
         """
         text = text.translate(CONTROLCHARS_TRANS)
         prohibited_initial_chars_pattern = (
-            "^(" + "|".join(re.escape(char) for char in PROHIBITED_INITIAL_CHARS) + ")*"
+            f"^({'|'.join(re.escape(char) for char in PROHIBITED_INITIAL_CHARS)})*"
         )
 
         return re.sub(prohibited_initial_chars_pattern, "", text).strip()

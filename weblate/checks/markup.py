@@ -5,11 +5,14 @@
 from __future__ import annotations
 
 import re
+import threading
 from collections import Counter, defaultdict
 from functools import cache, lru_cache
 from itertools import chain
-from typing import TYPE_CHECKING
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, cast
 
+import regex
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
 from django.utils.functional import cached_property
@@ -26,12 +29,14 @@ from docutils.nodes import (
     problematic,
     reference,
     strong,
-    system_message,
+    substitution_reference,
 )
-from docutils.parsers.rst import languages
-from docutils.parsers.rst.states import Inliner, Struct
+from docutils.parsers.rst import Parser, languages
+from docutils.parsers.rst.states import Inliner
+from docutils.readers.standalone import Reader
+from docutils.writers.null import Writer
 
-from weblate.checks.base import MissingExtraDict, TargetCheck
+from weblate.checks.base import TargetCheck
 from weblate.utils.html import (
     MD_BROKEN_LINK,
     MD_LINK,
@@ -46,12 +51,18 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from django_stubs_ext import StrOrPromise
+    from docutils.nodes import (
+        system_message,
+    )
     from lxml.etree import _Element
 
+    from weblate.checks.base import MissingExtraDict
     from weblate.trans.models import Unit
 
+    from .base import FixupType
     from .models import Check
 
+DOCUTILS_PARSER_LOCK = threading.Lock()
 BBCODE_MATCH = re.compile(
     r"(?P<start>\[(?P<tag>[^]]+)(@[^]]*)?\])(.*?)(?P<end>\[\/(?P=tag)\])", re.MULTILINE
 )
@@ -80,6 +91,9 @@ XML_ENTITY_MATCH = re.compile(
     """,
     re.VERBOSE,
 )
+XML_CDATA_MATCH = re.compile(r"<!\[CDATA\[(.*?)]]>")
+
+SINGLE_LETTER_MATCH = regex.compile(r"\p{L}")
 
 # Extracted from Sphinx sphinx/util/docutils.py
 RST_EXPLICIT_TITLE_RE = re.compile(r"^(.+?)\s*(?<!\x00)<(.*?)>$", re.DOTALL)
@@ -106,10 +120,12 @@ RST_ROLE_RE = [
     re.compile(r"""Interpreted text role "([^"]*)" not implemented\."""),
 ]
 
+RST_LIST_START = ("- ", "* ", "+ ")
+
 
 def strip_entities(text):
     """Strip all HTML entities (we don't care about them)."""
-    return XML_ENTITY_MATCH.sub(" ", text)
+    return XML_CDATA_MATCH.sub(r"\1", XML_ENTITY_MATCH.sub(" ", text))
 
 
 class BBCodeCheck(TargetCheck):
@@ -274,6 +290,61 @@ class XMLTagsCheck(BaseXMLCheck):
         return ret
 
 
+class XMLCharsAroundTagsCheck(BaseXMLCheck):
+    """Check that characters adjacent to target's XML tags are letters or non-letters according to the source."""
+
+    check_id = "xml-chars-around-tags"
+    name = gettext_lazy("Chars around XML tags")
+    description = gettext_lazy(
+        "Characters surrounding XML tags in translation do not align with source."
+    )
+
+    def check_single(self, source: str, target: str, unit: Unit) -> bool:
+        src_tags = list(XML_MATCH.finditer(source))
+        tgt_tags = list(XML_MATCH.finditer(target))
+
+        if len(src_tags) != len(tgt_tags):
+            return False
+
+        for i, tag in enumerate(src_tags):
+            src_start_idx = tag.start()
+            tgt_start_idx = tgt_tags[i].start()
+            src_end_idx = tag.end()
+            tgt_end_idx = tgt_tags[i].end()
+
+            # if string starts with tag, only check char following this tag
+            if src_start_idx == 0 or tgt_start_idx == 0:
+                if src_end_idx < len(source) and tgt_end_idx < len(target):
+                    src_next_char = source[src_end_idx]
+                    tgt_next_char = target[tgt_end_idx]
+                    if self.char_check(src_next_char, tgt_next_char):
+                        return True
+            # if string ends with tag, only check char preceding this tag
+            elif src_end_idx == len(source) or tgt_end_idx == len(target):
+                if src_start_idx > 0 and tgt_start_idx > 0:
+                    src_prev_char = source[src_start_idx - 1]
+                    tgt_prev_char = target[tgt_start_idx - 1]
+                    if self.char_check(src_prev_char, tgt_prev_char):
+                        return True
+            # if inline tag, check char preceding and following this tag
+            else:
+                src_prev_char = source[src_start_idx - 1]
+                tgt_prev_char = target[tgt_start_idx - 1]
+                src_next_char = source[src_end_idx]
+                tgt_next_char = target[tgt_end_idx]
+
+                if self.char_check(src_prev_char, tgt_prev_char):
+                    return True
+                if self.char_check(src_next_char, tgt_next_char):
+                    return True
+        return False
+
+    def char_check(self, src_char: str, tgt_char: str) -> bool:
+        src_letter = bool(SINGLE_LETTER_MATCH.search(src_char))
+        tgt_letter = bool(SINGLE_LETTER_MATCH.search(tgt_char))
+        return src_letter ^ tgt_letter
+
+
 class MarkdownBaseCheck(TargetCheck):
     default_disabled = True
 
@@ -322,9 +393,9 @@ class MarkdownLinkCheck(MarkdownBaseCheck):
         src_anchors = {x[2] for x in src_match if x[2] and x[2][0] in link_start}
         return tgt_anchors != src_anchors
 
-    def get_fixup(self, unit: Unit):
+    def get_fixup(self, unit: Unit) -> Iterable[FixupType] | None:
         if MD_BROKEN_LINK.findall(unit.target):
-            return [(MD_BROKEN_LINK.pattern, "](")]
+            return [("regex", MD_BROKEN_LINK.pattern, "](", "u")]
         return None
 
 
@@ -358,7 +429,7 @@ class MarkdownSyntaxCheck(MarkdownBaseCheck):
             start = match.start()
             end = match.end()
             yield (start, start + len(value), value)
-            yield ((end - len(value), end, value if value != "<" else ">"))
+            yield (end - len(value), end, value if value != "<" else ">")
 
 
 class URLCheck(TargetCheck):
@@ -408,10 +479,9 @@ class RSTBaseCheck(TargetCheck):
 
 @lru_cache(maxsize=512)
 def extract_rst_references(text: str) -> tuple[dict[str, str], Counter, list[str]]:
-    memo = Struct()
+    memo = SimpleNamespace()
     publisher = get_rst_publisher()
-    document = utils.new_document(None, publisher.settings)
-    document.reporter.stream = None
+    document = utils.new_document("", publisher.settings)
     memo.reporter = document.reporter
     memo.document = document
     memo.language = languages.get_language(
@@ -419,7 +489,8 @@ def extract_rst_references(text: str) -> tuple[dict[str, str], Counter, list[str
     )
     inliner = Inliner()
     inliner.init_customizations(document.settings)
-    nodes, system_messages = inliner.parse(text, 0, memo, document)
+    with DOCUTILS_PARSER_LOCK:
+        nodes, system_messages = inliner.parse(text, 0, memo, document)
 
     message_ids = {
         message["ids"][0]: Element.astext(message)
@@ -447,7 +518,7 @@ def extract_rst_references(text: str) -> tuple[dict[str, str], Counter, list[str
 
                     result.append((name, node.rawsource))
                     break
-        elif isinstance(node, footnote_reference):
+        elif isinstance(node, (footnote_reference, substitution_reference)):
             result.append((node.rawsource, node.rawsource))
             alltags.append(node.rawsource)
         elif isinstance(node, reference):
@@ -516,7 +587,7 @@ class RSTReferencesCheck(RSTBaseCheck):
         unit = check_obj.unit
 
         errors: list[StrOrPromise] = []
-        results: MissingExtraDict = defaultdict(list)
+        results: MissingExtraDict = cast("MissingExtraDict", defaultdict(list))
 
         # Merge plurals
         for result in self.check_target_generator(
@@ -548,11 +619,15 @@ class RSTReferencesCheck(RSTBaseCheck):
 
 @cache
 def get_rst_publisher() -> Publisher:
-    publisher = Publisher(settings=None)
-    publisher.set_components("standalone", "restructuredtext", "null")
+    parser = Parser()
+    reader: Reader = Reader(parser)
+    writer = Writer()
+    publisher = Publisher(settings=None, reader=reader, parser=parser, writer=writer)
     publisher.get_settings(
         # Never halt parsing with an exception
         halt_level=5,
+        # Disable warnings
+        warning_stream=False,
         # Do not allow file insertion
         file_insertion_enabled=False,
         # Following are needed in case django.contrib.admindocs is imported
@@ -566,10 +641,9 @@ def get_rst_publisher() -> Publisher:
 @lru_cache(maxsize=512)
 def validate_rst_snippet(
     snippet: str, source_tags: tuple[str] | None = None
-) -> tuple[list[str], list[str]]:
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
     publisher = get_rst_publisher()
-    document = utils.new_document(None, publisher.settings)
-    document.reporter.stream = None
+    document = utils.new_document("", publisher.settings)
 
     errors: list[str] = []
     roles: list[str] = []
@@ -588,6 +662,8 @@ def validate_rst_snippet(
                 "Too many autonumbered footnote",
                 # Can not work on snippets
                 "Enumerated list start value not ordinal",
+                # Substitutions are typically defined at the document level
+                "Undefined substitution referenced",
             )
         ):
             return
@@ -601,15 +677,14 @@ def validate_rst_snippet(
         errors.append(message)
 
     document.reporter.attach_observer(error_collector)
-    publisher.reader.parser.parse(snippet, document)
+    with DOCUTILS_PARSER_LOCK:
+        cast("Parser", publisher.reader.parser).parse(snippet, document)
     transformer = document.transformer
     transformer.populate_from_components(
         (
-            publisher.source,
             publisher.reader,
-            publisher.reader.parser,
+            cast("Parser", publisher.reader.parser),
             publisher.writer,
-            publisher.destination,
         )
     )
     while transformer.transforms:
@@ -617,12 +692,12 @@ def validate_rst_snippet(
             # Unsorted initially, and whenever a transform is added.
             transformer.transforms.sort()
             transformer.transforms.reverse()
-            transformer.sorted = 1
+            transformer.sorted = True
         priority, transform_class, pending, kwargs = transformer.transforms.pop()
         transform = transform_class(transformer.document, startnode=pending)
         transform.apply(**kwargs)
         transformer.applied.append((priority, transform_class, pending, kwargs))
-    return errors, roles
+    return tuple(errors), tuple(roles)
 
 
 class RSTSyntaxCheck(RSTBaseCheck):
@@ -634,7 +709,14 @@ class RSTSyntaxCheck(RSTBaseCheck):
         self, source: str, target: str, unit: Unit
     ) -> bool | MissingExtraDict:
         _errors, source_roles = validate_rst_snippet(source)
-        errors, _target_roles = validate_rst_snippet(target, tuple(source_roles))
+        rst_errors, _target_roles = validate_rst_snippet(target, source_roles)
+        errors = list(rst_errors)
+
+        # This is valid RST, but might mess up the document
+        if not source.startswith(RST_LIST_START) and target.startswith(RST_LIST_START):
+            errors.append(
+                gettext("The translation should not start with a list marker.")
+            )
 
         if errors:
             return {"errors": errors}
@@ -644,7 +726,7 @@ class RSTSyntaxCheck(RSTBaseCheck):
         unit = check_obj.unit
 
         errors: list[StrOrPromise] = []
-        results: MissingExtraDict = defaultdict(list)
+        results: MissingExtraDict = cast("MissingExtraDict", defaultdict(list))
 
         # Merge plurals
         for result in self.check_target_generator(

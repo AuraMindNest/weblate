@@ -24,6 +24,12 @@ authentication.
 Accessing repositories from Hosted Weblate
 ++++++++++++++++++++++++++++++++++++++++++
 
+.. note::
+
+   This section applies **only** to Hosted Weblate (hosted.weblate.org). If you are
+   running your own self-hosted Weblate instance, please see
+   :ref:`the next section <vcs-repos-code-hosting>` instead.
+
 For Hosted Weblate, there is a dedicated push user registered on GitHub,
 Bitbucket, Codeberg, and GitLab (with the username :guilabel:`weblate`, e-mail
 ``hosted@weblate.org``, and a name or profile description :guilabel:`Weblate push user`).
@@ -46,20 +52,22 @@ Once the :guilabel:`weblate` user is added to your repository, you can configure
 :ref:`component-repo` and :ref:`component-push` using the SSH protocol (for example
 ``git@github.com:WeblateOrg/weblate.git``).
 
+.. _vcs-repos-code-hosting:
+
 Accessing repositories on code hosting sites (GitHub, GitLab, Bitbucket, Azure DevOps, ...)
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-Accessing repositories on code hosting sites is typically done by creating a
+.. note::
+
+   This section applies to **self-hosted** Weblate instances. If you are using
+   Hosted Weblate (hosted.weblate.org), see :ref:`hosted-push` instead.
+
+For self-hosted Weblate, accessing repositories on code hosting sites is typically done by creating a
 dedicated user who is associated with a Weblate SSH key (see
 :ref:`weblate-ssh-key`). This way you associate Weblate SSH key with a single
 user (platforms frequently enforce single use of a SSH key) and grant this user access
 to the repository. You can then use SSH URL to access the repository (see
 :ref:`ssh-repos`).
-
-.. hint::
-
-   On a Hosted Weblate, this is pre-configured for most of the public sites,
-   please see :ref:`hosted-push`.
 
 .. _ssh-repos:
 
@@ -166,28 +174,88 @@ ECDSA or Ed25519).
 GitHub repositories
 +++++++++++++++++++
 
+There are two main approaches to accessing GitHub repositories with Weblate:
+
+**Option 1: HTTPS with Personal Access Token (simpler for getting started)**
+
+Use HTTPS authentication with a personal access token and your GitHub account.
+This works for both read-only access (cloning) and read-write access (pushing
+changes or creating pull requests).
+
+To use this approach:
+
+1. Create a personal access token as described in `Creating an access token for command-line use`_.
+2. Include the token in your repository URL: ``https://username:token@github.com/owner/repo.git``
+
+This is suitable when you're starting with Weblate or working with a single repository.
+
+.. _Creating an access token for command-line use: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token
+
+**Option 2: SSH with Dedicated User (recommended for multiple repositories)**
+
+For setups with multiple repositories, it is recommended to create a dedicated
+user for Weblate. This avoids GitHub's limitation that each SSH key can only
+be used once per platform.
+
+To use this approach:
+
+1. Create a dedicated GitHub user account (e.g., ``weblate-bot``)
+2. Add Weblate's public SSH key to this user (see :ref:`weblate-ssh-key`)
+3. Grant this user access to all repositories you want to translate
+4. Use SSH URLs for your repositories: ``git@github.com:owner/repo.git``
+
+This approach is also used for Hosted Weblate, which has a dedicated
+:guilabel:`weblate` user for that purpose.
+
+.. note::
+
+   When using :ref:`vcs-github` for pull requests, the
+   :ref:`component-push_branch` configuration affects the behavior: if not set,
+   the project is forked and changes are pushed through a fork. If set, changes
+   are pushed to the upstream repository and the chosen branch.
+
+.. seealso::
+
+   * :ref:`vcs-github`
+   * :ref:`hosted-push`
+   * :setting:`GITHUB_CREDENTIALS`
+
+.. _vcs-repos-gitlab:
+
+GitLab repositories
++++++++++++++++++++
+
 Access via SSH is possible (see :ref:`ssh-repos`), but in case you need to
-access more than one repository, you will hit a GitHub limitation on allowed
+access more than one repository, you will hit a GitLab limitation on allowed
 SSH key usage (since each key can be used only once).
 
 In case the :ref:`component-push_branch` is not set, the project is forked and
 changes pushed through a fork. In case it is set, changes are pushed to the
 upstream repository and chosen branch.
 
-For smaller deployments, use HTTPS authentication with a personal access
-token and your GitHub account, see `Creating an access token for command-line use`_.
+Using personal or project access tokens is possible as well. The token needs
+:guilabel:`write_repository` scope to be able to push changes to the
+repository. The project access token requires :guilabel:`Developer` role for
+pushing.
 
-.. _Creating an access token for command-line use: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token
+The URL needs to contain an username, for personal access token it is the
+actual username (
+``https://user:personal_access_token@gitlab.com/example/example.git``) for
+project access tokens it can be non-blank value
+(``https://example:project_access_token@gitlab.com/example/example.git``).
 
-For bigger setups, it is usually better to create a dedicated user for Weblate,
-assign it the public SSH key generated in Weblate (see :ref:`weblate-ssh-key`)
-and grant it access to all the repositories you want to translate. This
-approach is also used for Hosted Weblate, there is dedicated
-:guilabel:`weblate` user for that.
+.. note::
+
+   The rules for using project access tokens has changed between GitLab
+   releases, the non-blank value is the current requirement, but older versions
+   had different expectations (project name, bot user name). Check GitLab
+   documentation matching your version if unsure.
 
 .. seealso::
 
-    :ref:`hosted-push`
+   * :ref:`vcs-gitlab`
+   * :ref:`hosted-push`
+   * :setting:`GITLAB_CREDENTIALS`
 
 .. _internal-urls:
 
@@ -218,12 +286,23 @@ Reasons to use this:
 HTTPS repositories
 ++++++++++++++++++
 
+.. seealso::
+
+   * :ref:`vcs-repos-github`
+   * :ref:`vcs-repos-gitlab`
+
 To access protected HTTPS repositories, include the username and password
 in the URL. Don't worry, Weblate will strip this info when the URL is shown
 to users (if even allowed to see the repository URL at all).
 
 For example the GitHub URL with authentication added might look like:
 ``https://user:your_access_token@github.com/WeblateOrg/weblate.git``.
+
+In case you don't provide credentials in the URL and the repository requires it, Git will fail with an error:
+
+.. code-block:: text
+
+   fatal: could not read Username for 'https://github.com': terminal prompts disabled
 
 .. versionchanged:: 5.10.2
 
@@ -298,44 +377,6 @@ Customizing Git configuration
 Weblate invokes all VCS commands with ``HOME=$DATA_DIR/home`` (see
 :setting:`DATA_DIR`), therefore editing the user configuration needs to be done
 in ``DATA_DIR/home/.git``.
-
-.. _vcs-git-helpers:
-
-Git remote helpers
-++++++++++++++++++
-
-You can also use Git `remote helpers`_ for additionally supporting other version
-control systems, but be prepared to debug problems this may lead to.
-
-At this time, helpers for Bazaar and Mercurial are available within separate
-repositories on GitHub: `git-remote-hg`_ and `git-remote-bzr`_.
-Download them manually and put somewhere in your search path
-(for example :file:`~/bin`). Make sure you have the corresponding version control
-systems installed.
-
-Once you have these installed, such remotes can be used to specify a repository
-in Weblate.
-
-To clone the ``gnuhello`` project from Launchpad using Bazaar:
-
-.. code-block:: text
-
-    bzr::lp:gnuhello
-
-For the ``hello`` repository from selenic.com using Mercurial:
-
-.. code-block:: text
-
-    hg::https://selenic.com/repo/hello
-
-.. _remote helpers: https://git-scm.com/docs/gitremote-helpers
-.. _git-remote-hg: https://github.com/felipec/git-remote-hg
-.. _git-remote-bzr: https://github.com/felipec/git-remote-bzr
-
-.. warning::
-
-    The inconvenience of using Git remote helpers is for example with Mercurial,
-    the remote helper sometimes creates a new tip when pushing changes back.
 
 .. _vcs-github:
 .. _github-push:

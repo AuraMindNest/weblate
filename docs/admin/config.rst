@@ -37,14 +37,57 @@ Configure this as a list of e-mail addresses:
    * :setting:`CONTACT_FORM`
    * :setting:`ADMINS`
 
-.. setting:: AKISMET_API_KEY
 
-AKISMET_API_KEY
----------------
+.. setting:: ALLOWED_ASSET_DOMAINS
 
-Weblate can use Akismet to check incoming anonymous suggestions for spam.
-Visit `akismet.com <https://akismet.com/>`_ to purchase an API key
-and associate it with a site.
+ALLOWED_ASSET_DOMAINS
+---------------------
+
+.. versionadded:: 5.14
+
+Configures which domains are allowed for fetching assets in Weblate.
+
+This enhances security by preventing loading assets from untrusted sources.
+Assets are downloaded once by the Weblate server and stored locally, rather than
+being served directly from external domains to users.
+
+It expects a list of host/domain names. You can use fully qualified names
+(e.g ``www.example.com``) or prepend with a period as a wildcard to match
+all subdomains (e.g ``.example.com`` will match ``cdn.example.com`` or ``static.example.com``).
+
+Defaults to `[*]` which will allow all domains.
+
+**Example**
+
+.. code-block:: python
+
+   ALLOWED_ASSET_DOMAINS = [
+       # Allows only cdn.anotherdomain.org
+       "cdn.anotherdomain.org",
+       # Allows example.com and all its subdomains
+       ".example.com",
+   ]
+
+This is currently used in the following places:
+
+* Screenshot uploads, see :ref:`screenshots`
+
+.. seealso::
+
+   * :setting:`ALLOWED_ASSET_SIZE`
+
+.. setting:: ALLOWED_ASSET_SIZE
+
+ALLOWED_ASSET_SIZE
+------------------
+
+.. versionadded:: 5.14
+
+Configures size limit for fetching assets in Weblate. Defaults to 4 MB.
+
+.. seealso::
+
+   * :setting:`ALLOWED_ASSET_DOMAINS`
 
 .. setting:: ALTCHA_MAX_NUMBER
 
@@ -198,6 +241,7 @@ You can select which ones to use:
 
    * :ref:`autofix`
    * :ref:`custom-autofix`
+   * :ref:`custom-modules`
 
 .. setting:: BACKGROUND_TASKS
 
@@ -372,7 +416,8 @@ You can turn on only a few:
 .. seealso::
 
    * :ref:`checks`
-   * :ref:`custom-checks`
+   * :ref:`own-checks`
+   * :ref:`custom-modules`
 
 .. setting:: COMMENT_CLEANUP_DAYS
 
@@ -412,6 +457,10 @@ Choose a configuration that matches the configuration of your mail server.
 ``"from"``
    The sender is used in as :mailheader:`From`. Your mail server needs to allow
    sending such e-mails.
+``"disabled"``
+   Disables the contact form entirely.
+
+   .. versionadded:: 5.15
 
 
 .. seealso::
@@ -516,7 +565,7 @@ should be turned on for new users. Defaults to ``True``.
 
 .. seealso::
 
-   :ref:`subscriptions`
+   :ref:`notifications`
 
 .. setting:: DEFAULT_RESTRICTED_COMPONENT
 
@@ -645,6 +694,25 @@ DEFAULT_SHARED_TM
 -----------------
 
 Configures the default value of :ref:`project-use_shared_tm` and :ref:`project-contribute_shared_tm`.
+
+
+.. setting:: DEFAULT_TRANSLATION_REVIEW
+
+DEFAULT_TRANSLATION_REVIEW
+--------------------------
+
+.. versionadded:: 5.16
+
+Configures the default value for :ref:`project-translation_review`, turned off by default.
+
+.. setting:: DEFAULT_SOURCE_REVIEW
+
+DEFAULT_SOURCE_REVIEW
+---------------------
+
+.. versionadded:: 5.16
+
+Configures the default value for :ref:`project-source_review`, turned off by default.
 
 .. setting:: DEFAULT_AUTOCLEAN_TM
 
@@ -821,6 +889,10 @@ List for credentials for GitLab servers.
         },
     }
 
+.. note::
+
+   The personal access token needs the :guilabel:`api` scope to be able to use the API.
+
 .. include:: /snippets/vcs-credentials.rst
 
 .. seealso::
@@ -910,9 +982,9 @@ List for credentials for Bitbucket Cloud servers.
 
     BITBUCKETCLOUD_CREDENTIALS = {
         "bitbucket.org": {
-            "username": "your-username",
+            "username": "your-email",
             "workspace": "your-workspace-slug",
-            "token": "your-app-password",
+            "token": "your-api-token",
         },
     }
 
@@ -927,15 +999,15 @@ The following configuration is available for each host:
 ``workspace``
     The user workspace slug.
 ``token``
-    The App password with `pullrequest:write` permission.
+    The API token with `pullrequest:write` permission.
 
 Additional settings not described here can be found at :ref:`settings-credentials`.
 
 .. seealso::
 
    * :ref:`vcs-bitbucket-cloud`
-   * `Create an App password <https://support.atlassian.com/bitbucket-cloud/docs/create-an-app-password/>`_
-   * `App password permissions <https://support.atlassian.com/bitbucket-cloud/docs/app-password-permissions/>`_
+   * `Create an API token <https://support.atlassian.com/bitbucket-cloud/docs/create-an-api-token/>`_
+   * `API token permissions <https://support.atlassian.com/bitbucket-cloud/docs/api-token-permissions/>`_
 
 .. setting:: AZURE_DEVOPS_CREDENTIALS
 
@@ -1025,44 +1097,6 @@ does not prevent an attacker from figuring out version by probing behavior.
 .. note::
 
     This is turned off by default.
-
-.. setting:: INTERLEDGER_PAYMENT_BUILTIN
-
-INTERLEDGER_PAYMENT_BUILTIN
----------------------------
-
-.. versionadded:: 5.11
-
-Toggles built-in Interledger Payment Pointer for funding Weblate.
-
-.. seealso::
-
-   :setting:`INTERLEDGER_PAYMENT_POINTERS`
-
-
-.. setting:: INTERLEDGER_PAYMENT_POINTERS
-
-INTERLEDGER_PAYMENT_POINTERS
-----------------------------
-
-.. versionadded:: 4.12.1
-
-List of Interledger Payment Pointers (ILPs) for Web Monetization.
-
-If multiple are specified, probabilistic revenue sharing is achieved by
-selecting one randomly.
-
-Please check <https://webmonetization.org/> for more details.
-
-.. hint::
-
-   A pointer to fund Weblate itself is automatically added unless turned off
-   by :setting:`INTERLEDGER_PAYMENT_BUILTIN`.
-
-
-.. seealso::
-
-   :setting:`INTERLEDGER_PAYMENT_BUILTIN`
 
 .. setting:: IP_BEHIND_REVERSE_PROXY
 
@@ -1284,42 +1318,6 @@ store generated files which will be served at the :setting:`LOCALIZE_CDN_URL`.
 
    :ref:`addon-weblate.cdn.cdnjs`
 
-.. setting:: LOGIN_REQUIRED_URLS
-
-LOGIN_REQUIRED_URLS
--------------------
-
-A list of URLs you want to require signing in. (Besides the standard rules built into Weblate).
-
-.. hint::
-
-    This allows you to password protect a whole installation using:
-
-    .. code-block:: python
-
-        LOGIN_REQUIRED_URLS = (r"/(.*)$",)
-        REST_FRAMEWORK["DEFAULT_PERMISSION_CLASSES"] = [
-            "rest_framework.permissions.IsAuthenticated"
-        ]
-
-.. hint::
-
-   It is desirable to lock down API access as well, as shown in the above example.
-
-.. seealso::
-
-   :setting:`REQUIRE_LOGIN`
-
-.. setting:: LOGIN_REQUIRED_URLS_EXCEPTIONS
-
-LOGIN_REQUIRED_URLS_EXCEPTIONS
-------------------------------
-
-List of exceptions for :setting:`LOGIN_REQUIRED_URLS`.
-If not specified, users are allowed to access the sign-in page.
-
-See the :ref:`sample-configuration` for recommended configuration of this setting.
-
 .. setting:: PIWIK_SITE_ID
 .. setting:: MATOMO_SITE_ID
 
@@ -1470,14 +1468,53 @@ PRIVATE_COMMIT_EMAIL_TEMPLATE
 
 .. versionadded:: 4.15
 
-Template to generate private commit e-mail for an user. Defaults to ``"{username}@users.noreply.{site_domain}"``.
+Template to generate a private commit e-mail for a user. Defaults to ``"{username}@users.noreply.{site_domain}"``.
+
+It can contain ``{user_id}``, ``{username}``, ``{site_title}``, and ``{site_domain}``.
 
 Set to blank string to disable.
 
 .. note::
 
-   Using different commit e-mail is opt-in for users unless configured by
-   :setting:`PRIVATE_COMMIT_EMAIL_OPT_IN`. Users can configure commit e-mail in
+   Using a different commit e-mail is opt-in for users unless configured by
+   :setting:`PRIVATE_COMMIT_EMAIL_OPT_IN`. Users can configure their commit e-mail in
+   the :ref:`profile`.
+
+.. setting:: PRIVATE_COMMIT_NAME_OPT_IN
+
+PRIVATE_COMMIT_NAME_OPT_IN
+--------------------------
+
+.. versionadded:: 5.16
+
+Configures whether the private commit name is opt-in or opt-out (by default it is opt-in).
+
+.. hint::
+
+   This setting only applies to users which have not explicitly chosen a commit name.
+
+.. seealso::
+
+   * :ref:`profile`
+   * :setting:`PRIVATE_COMMIT_NAME_TEMPLATE`
+
+.. setting:: PRIVATE_COMMIT_NAME_TEMPLATE
+
+PRIVATE_COMMIT_NAME_TEMPLATE
+----------------------------
+
+.. versionadded:: 5.16
+
+Template to generate a private commit name for a user. Defaults to ``"{site_title} user {user_id}"``.
+
+It can contain ``{user_id}``, ``{username}``, ``{site_title}``, and ``{site_domain}``.
+
+Set to blank string to disable.
+
+.. note::
+
+   Using a different commit name is opt-in for users unless configured by
+   :setting:`PRIVATE_COMMIT_NAME_OPT_IN`. Users can configure their commit name in
    the :ref:`profile`.
 
 .. setting:: PROJECT_BACKUP_KEEP_COUNT
@@ -1573,6 +1610,31 @@ Defines a regular expression to limit what can be entered as :ref:`project-web`.
    * :ref:`project-web`
    * :setting:`PROJECT_WEB_RESTRICT_HOST`
    * :setting:`PROJECT_WEB_RESTRICT_NUMERIC`
+
+.. setting:: RATELIMIT_NOTIFICATION_LIMITS
+
+RATELIMIT_NOTIFICATION_LIMITS
+-----------------------------
+
+.. versionadded:: 5.14
+
+Limits how many notifications for a single user will be sent out.
+
+The default setting is:
+
+.. code-block:: python
+
+    # Multi-level rate limiting for email notifications
+    # Each tuple contains (max_emails, time_window_seconds)
+    RATELIMIT_NOTIFICATION_LIMITS = [
+        # Prevent burst sends - 3 emails per 2 minutes
+        (3, 120),
+        # Equalize to avoid getting blocked for too long - 10 emails per hour
+        (10, 3600),
+        # Daily limit: 50 emails per day
+        (50, 86400),
+    ]
+
 
 .. setting:: RATELIMIT_ATTEMPTS
 
@@ -1683,6 +1745,21 @@ You can use it to restrict registration to a single e-mail domain:
 
     REGISTRATION_EMAIL_MATCH = r"^.*@weblate\.org$"
 
+.. setting:: REGISTRATION_ALLOW_DISPOSABLE_EMAILS
+
+REGISTRATION_ALLOW_DISPOSABLE_EMAILS
+-------------------------------------
+
+.. versionadded:: 5.16.1
+
+Allow registration with disposable e-mail domains. When enabled, the
+disposable domain blocklist is bypassed. Default is ``False``.
+
+.. seealso::
+
+   - :setting:`REGISTRATION_EMAIL_MATCH`
+   - :envvar:`WEBLATE_REGISTRATION_ALLOW_DISPOSABLE_EMAILS`
+
 .. setting:: REGISTRATION_OPEN
 
 REGISTRATION_OPEN
@@ -1744,8 +1821,12 @@ REQUIRE_LOGIN
 
 .. versionadded:: 4.1
 
-This enables :setting:`LOGIN_REQUIRED_URLS` and configures REST framework to
-require authentication for all API endpoints.
+This enables :class:`django:django.contrib.auth.middleware.LoginRequiredMiddleware`
+and configures REST framework to require authentication for all API endpoints.
+
+.. versionchanged:: 5.15
+
+   Weblate now relies on Django built-in middleware.
 
 .. note::
 
@@ -1848,6 +1929,20 @@ for these default combinations.
 
 Turn this off if you want to different translations for each variant.
 
+.. setting:: HIDE_SHARED_GLOSSARY_COMPONENTS
+
+HIDE_SHARED_GLOSSARY_COMPONENTS
+-------------------------------
+
+.. versionadded:: 5.16
+
+Glossary components are typically shared into other projects to make them
+available for translation work. When these are visible in the component list of
+projects that are using them, it can cause confusion or distract translators
+from the actual components that are meant to be translated.
+
+This is turned off by default, making shared glossary components visible.
+
 .. setting:: SITE_DOMAIN
 
 SITE_DOMAIN
@@ -1947,7 +2042,7 @@ Their offer: diffie-hellman-group1-sha1`, you can turn that on using:
 
 .. seealso::
 
-   `OpenSSH Legacy Options <https://www.openssh.com/legacy.html>`_
+   `OpenSSH Legacy Options <https://www.openssh.org/legacy.html>`_
 
 .. setting:: STATUS_URL
 
@@ -2038,6 +2133,24 @@ Example:
     This setting does not work with Django's built-in server, you would have to
     adjust :file:`urls.py` to contain this prefix.
 
+.. setting:: VCS_ALLOW_HOSTS
+
+VCS_ALLOW_HOSTS
+---------------
+
+.. versionadded:: 5.15
+
+A set of hosts to allow when configuring VCS URL. Defaults to an empty set what does no filtering at all.
+
+.. setting:: VCS_ALLOW_SCHEMES
+
+VCS_ALLOW_SCHEMES
+-----------------
+
+.. versionadded:: 5.15
+
+A set of hosts to allow when configuring VCS URL. Only ``https`` and ``ssh`` are allowed by default.
+
 .. setting:: VCS_API_DELAY
 
 VCS_API_DELAY
@@ -2052,6 +2165,19 @@ Configures minimal delay in seconds between third-party API calls in
 This rate-limits API calls from Weblate to these services to avoid overloading them.
 
 If you are being limited by secondary rate-limiter at GitHub, increasing this might help.
+
+The default value is 10.
+
+.. setting:: VCS_API_TIMEOUT
+
+VCS_API_TIMEOUT
+---------------
+
+.. versionadded:: 5.15
+
+Configures timeout in seconds for third-party API calls such as forking or
+creating merge requests in :ref:`vcs-github`, :ref:`vcs-gitlab`,
+:ref:`vcs-gitea`, :ref:`vcs-pagure`, and :ref:`vcs-azure-devops`.
 
 The default value is 10.
 
@@ -2149,6 +2275,7 @@ example:
 .. seealso::
 
    * :ref:`addons`
+   * :ref:`custom-modules`
    * :setting:`DEFAULT_ADDONS`
    * :setting:`ADDON_ACTIVITY_LOG_EXPIRY`
 
@@ -2202,7 +2329,9 @@ List of machinery services available for use.
 
 .. seealso::
 
-   :doc:`/admin/machine`
+   * :doc:`/admin/machine`
+   * :ref:`custom-machinery`
+   * :ref:`custom-modules`
 
 .. setting:: WEBLATE_GPG_IDENTITY
 

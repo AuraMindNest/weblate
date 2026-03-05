@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import json
 import os
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
 from django.conf import settings
@@ -21,12 +22,13 @@ from weblate.addons.tasks import cdn_parse_html
 from weblate.utils.state import STATE_TRANSLATED
 
 if TYPE_CHECKING:
+    from weblate.addons.models import Addon
     from weblate.auth.models import User
-    from weblate.trans.models import Component
+    from weblate.trans.models import Component, Project
 
 
 class CDNJSAddon(BaseAddon):
-    events = {
+    events: ClassVar[set[AddonEvent]] = {
         AddonEvent.EVENT_DAILY,
         AddonEvent.EVENT_POST_COMMIT,
         AddonEvent.EVENT_POST_UPDATE,
@@ -45,35 +47,56 @@ class CDNJSAddon(BaseAddon):
     stay_on_create = True
 
     @classmethod
-    def create_object(cls, component, **kwargs):
+    def create_object(
+        cls,
+        *,
+        component: Component | None = None,
+        project: Project | None = None,
+        acting_user: User | None = None,
+        **kwargs,
+    ) -> Addon:
         # Generate UUID for the CDN
         if "state" not in kwargs:
             kwargs["state"] = {"uuid": uuid4().hex}
-        return super().create_object(component=component, **kwargs)
+        return super().create_object(
+            component=component, project=project, acting_user=acting_user, **kwargs
+        )
 
     @classmethod
-    def can_install(cls, component, user: User | None):
+    def can_install(
+        cls,
+        *,
+        component: Component | None = None,
+        project: Project | None = None,
+    ) -> bool:
         if (
             not settings.LOCALIZE_CDN_URL
             or not settings.LOCALIZE_CDN_PATH
-            or not component.has_template()
-            or not component.translation_set.exists()
+            or (
+                component is not None
+                and (
+                    not component.has_template()
+                    or not component.translation_set.exists()
+                )
+            )
         ):
             return False
-        return super().can_install(component, user)
+        return super().can_install(component=component, project=project)
 
-    def cdn_path(self, filename):
+    def cdn_path(self, filename: str) -> str:
         return os.path.join(
             settings.LOCALIZE_CDN_PATH, self.instance.state["uuid"], filename
         )
 
     @cached_property
-    def cdn_js_url(self):
+    def cdn_js_url(self) -> str:
         return os.path.join(
             settings.LOCALIZE_CDN_URL, self.instance.state["uuid"], "weblate.js"
         )
 
-    def post_commit(self, component: Component, store_hash: bool) -> None:
+    def post_commit(
+        self, component: Component, store_hash: bool, activity_log_id: int | None = None
+    ) -> None:
         # Get list of applicable translations
         threshold = self.instance.configuration["threshold"]
         translations = [
@@ -89,30 +112,29 @@ class CDNJSAddon(BaseAddon):
             os.makedirs(dirname)
 
         # Generate JavasScript loader
-        with open(self.cdn_path("weblate.js"), "w") as handle:
-            # The languages variable is included inside quotes to make
-            # sure the template is valid JavaScript code as well
-            handle.write(
-                render_to_string(
-                    "addons/js/weblate.js.template",
-                    {
-                        "languages": sorted(
-                            translation.language.code for translation in translations
-                        ),
-                        "url": os.path.join(
-                            settings.LOCALIZE_CDN_URL,
-                            self.instance.state["uuid"],
-                        ),
-                        "cookie_name": self.instance.configuration["cookie_name"],
-                        "css_selector": self.instance.configuration["css_selector"],
-                    },
-                )
-            )
+        Path(self.cdn_path("weblate.js")).write_text(
+            render_to_string(
+                "addons/js/weblate.js.template",
+                {
+                    "languages": sorted(
+                        translation.language.code for translation in translations
+                    ),
+                    "url": os.path.join(
+                        settings.LOCALIZE_CDN_URL, self.instance.state["uuid"]
+                    ),
+                    "cookie_name": self.instance.configuration["cookie_name"],
+                    "css_selector": self.instance.configuration["css_selector"],
+                },
+            ),
+            encoding="utf-8",
+        )
 
         # Generate bilingual JSON files
         for translation in translations:
             with open(
-                self.cdn_path(f"{translation.language.code}.json"), "w"
+                self.cdn_path(f"{translation.language.code}.json"),
+                "w",
+                encoding="utf-8",
             ) as handle:
                 json.dump(
                     {
@@ -124,11 +146,17 @@ class CDNJSAddon(BaseAddon):
                     handle,
                 )
 
-    def daily(self, component) -> None:
+    def daily(self, component: Component, activity_log_id: int | None = None) -> None:
         if not self.instance.configuration["files"].strip():
             return
         # Trigger parsing files
         cdn_parse_html.delay(self.instance.id, component.id)
 
-    def post_update(self, component, previous_head: str, skip_push: bool) -> None:
+    def post_update(
+        self,
+        component: Component,
+        previous_head: str,
+        skip_push: bool,
+        activity_log_id: int | None = None,
+    ) -> None:
         self.daily(component)

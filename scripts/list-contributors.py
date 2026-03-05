@@ -3,23 +3,42 @@
 # Copyright © Michal Čihař <michal@weblate.org>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
+from __future__ import annotations
 
 import argparse
 from collections import defaultdict
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-from git import Commit, Repo
-from git.diff import Diff
+from git import Repo
 
 import weblate.utils.version
+
+if TYPE_CHECKING:
+    from git import Commit
+    from git.diff import Diff
 
 VERSION = weblate.utils.version.VERSION_BASE
 ROOT_DIR = Path(__file__).parent.parent
 
 CategoryType = Literal["code", "translations", "docs"]
 
-IGNORE_AUTHORS: set[str] = {"GitHub", "Anonymous", "Hosted Weblate"}
+# Ignore known bots
+IGNORE_AUTHORS: tuple[str, ...] = (
+    "GitHub",
+    "Anonymous",
+    "Hosted Weblate",
+    "Copilot",
+    "root",
+)
+
+# GitHub sometimes uses username instead of full name
+MAP_AUTHORS: dict[str, str] = {
+    "nijel": "Michal Čihař",
+    "gersona": "Gersona",
+    "gers": "Gersona",
+    "KarenKonou": "Karen Konou",
+}
 
 CATEGORIES: dict[CategoryType, str] = {
     "code": "Code contributions",
@@ -58,7 +77,7 @@ def is_valid_author(author: str) -> bool:
         "(bot)" not in author
         and "[bot]" not in author
         and "add-on" not in author
-        and author not in IGNORE_AUTHORS
+        and not author.startswith(IGNORE_AUTHORS)
     )
 
 
@@ -71,7 +90,9 @@ def get_commit_authors(commit: Commit) -> set[str]:
         for line in str(commit.message).splitlines()
         if line.lower().startswith("co-authored-by:")
     )
-    return {author for author in authors if is_valid_author(author)}
+    return {
+        MAP_AUTHORS.get(author, author) for author in authors if is_valid_author(author)
+    }
 
 
 def get_contributors() -> dict[CategoryType, list[str]]:

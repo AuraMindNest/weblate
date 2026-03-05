@@ -45,7 +45,7 @@ Fields
 ``added:DATETIME``
    Timestamp for when the string was added to Weblate.
 ``state:TEXT``
-   Search for string states (``approved``, ``translated``, ``needs-editing``, ``empty``, ``read-only``).
+   Search for string states (``approved``, ``translated``, ``needs-editing``, ``needs-rewriting``, ``needs-checking``, ``empty``, ``read-only``).
 
    This field also supports :ref:`search-operators`, so searching for completed strings can be performed as ``state:>=translated``, searching for strings needing translation as ``state:<translated``.
 ``source_state:TEXT``
@@ -62,13 +62,15 @@ Fields
    ``approved``
       Approved strings, same as ``state:approved``.
    ``needs-editing`` or ``fuzzy``
-      Needing editing strings, same as ``state:needs-editing``.
+      Needing editing/checking/rewriting strings, same as ``state:needs-editing OR state:needs-rewriting OR state:needs-checking``.
    ``translated``
       Translated strings, same as ``state:>translated``.
    ``untranslated``
       Untranslated strings, same as ``state:<translated``.
    ``pending``
       Pending strings not yet committed to the file (see :ref:`lazy-commit`).
+   ``automatically-translated``
+      Strings that were translated automatically (see :ref:`auto-translation`).
 ``language:TEXT``
    String target language.
 ``component:TEXT``
@@ -80,18 +82,21 @@ Fields
 ``changed_by:TEXT``
    String was changed by author with given username.
 ``changed:DATETIME``
-   String content was changed on date, supports :ref:`search-operators`.
+   String content was changed on date, supports :ref:`search-operators` and :ref:`date-search`.
 ``change_time:DATETIME``
-   String was changed on date, supports :ref:`search-operators`, unlike
-   ``changed`` this includes event which don't change content and you can apply
-   custom action filtering using ``change_action``.
+   String was changed on date, supports :ref:`search-operators` and :ref:`date-search`.
+
+   Unlike ``changed`` this includes event which don't change content and you
+   can apply custom action filtering using ``change_action``.
 ``change_action:TEXT``
    Filters on change action, useful together with ``change_time``. Accepts
    English name of the change action, either quoted and with spaces or
    lowercase and spaces replaced by a hyphen. See :ref:`search-changes` for
    examples.
 ``source_changed:DATETIME``
-   Source string was changed on date, supports :ref:`search-operators`.
+   Source string was last changed on date, supports :ref:`search-operators` and :ref:`date-search`.
+``last_changed:DATETIME``
+   The string was last changed on date, supports :ref:`search-operators` and :ref:`date-search`.
 ``check:TEXT``
    String has failing check, see :doc:`/user/checks` for check identifiers.
 ``dismissed_check:TEXT``
@@ -148,12 +153,40 @@ You can specify operators, ranges or partial lookups for date or numeric searche
 
 ``state:>=translated``
    State is ``translated`` or better (``approved``).
-``changed:2019``
-   Changed in year 2019.
 ``changed:[2019-03-01 to 2019-04-01]``
-   Changed between two given dates.
+   Changed between two given dates (inclusive).
 ``position:[10 to 100]``
    Strings with position between 10 and 100 (inclusive).
+
+.. _date-search:
+
+Searching for DATETIME fields
+-----------------------------
+
+Timestamp searching supports multiple ways to specify the value. It supports
+wide range of ways to specify date and time.
+
+* ISO 8601 formatted like :samp:`2025-09-08T12:16:55.336146+00:00`.
+* English written date and time like :samp:`July 4, 2013 PST`.
+* English adverbs of time like :samp:`yesterday`, :samp:`last month`, and :samp:`2 days ago`.
+
+Whenever only the date is specified, it is always used as inclusive and covers
+that date. Specify the exact timestamp if you need to override this behavior.
+
+Examples:
+
+``changed:>=2019-03-01``
+   Changed on 1st March 2019 and later (inclusive).
+``changed:>="2 weeks ago"``
+   Changed 2 weeks ago from the current date and time.
+``changed:>=yesterday``
+   Changed starting yesterday.
+``changed:2019``
+   Changed in the year 2019.
+``changed:[2019-03-01 to 2019-04-01]``
+   Changed between two given dates (inclusive).
+``changed:[20_days_ago to yesterday]``
+   Changed between two relative dates (inclusive).
 
 Exact operators
 ---------------
@@ -248,20 +281,3 @@ Additional lookups are available in the :ref:`management-interface`:
    Search for active users.
 ``email:TEXT``
    Search by e-mail.
-
-.. _date-search:
-
-Fuzzy values for DATETIME fields
-++++++++++++++++++++++++++++++++
-
-Instead of using DATETIME values like MM-DD-YYYY, a string containing an adverb
-of time like :samp:`yesterday`, :samp:`last month`, and :samp:`2 days ago` can
-be used as values in the DATETIME fields. Only English phrases are supported
-here.
-
-Examples:
-
-``changed:>="2 weeks ago"``
-    Returns strings that are changed 2 weeks ago from the current date and time.
-``changed:>=yesterday``
-    Returns strings that are changed starting yesterday.

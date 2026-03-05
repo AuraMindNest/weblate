@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import json
-from typing import TypedDict
+from typing import TYPE_CHECKING, ClassVar, TypedDict
 
 import dateutil.parser
 from appconf import AppConf
@@ -18,7 +18,7 @@ from django.utils import timezone
 from django.utils.functional import cached_property
 from django.utils.translation import gettext, gettext_lazy
 
-from weblate.auth.models import AuthenticatedHttpRequest, User
+from weblate.auth.models import User
 from weblate.trans.models import Component, Project
 from weblate.utils.backup import (
     BackupError,
@@ -30,11 +30,14 @@ from weblate.utils.backup import (
     prune,
 )
 from weblate.utils.const import SUPPORT_STATUS_CACHE_KEY
-from weblate.utils.requests import request
+from weblate.utils.requests import http_request
 from weblate.utils.site import get_site_url
 from weblate.utils.stats import GlobalStats
 from weblate.utils.validators import validate_backup_path
 from weblate.vcs.ssh import ensure_ssh_key
+
+if TYPE_CHECKING:
+    from weblate.auth.models import AuthenticatedHttpRequest
 
 
 class WeblateConf(AppConf):
@@ -57,7 +60,7 @@ class ConfigurationErrorManager(models.Manager["ConfigurationError"]):
         if checks is None:
             checks = run_checks(include_deployment_checks=True)
         checks_dict = {check.id: check for check in checks}
-        criticals = {
+        critical_checks = {
             "weblate.E002",
             "weblate.E003",
             "weblate.E007",
@@ -81,11 +84,12 @@ class ConfigurationErrorManager(models.Manager["ConfigurationError"]):
             "weblate.C038",
             "weblate.C040",
             "weblate.C041",
+            "weblate.E006",
         }
         removals = []
         existing = {error.name: error for error in self.all()}
 
-        for check_id in criticals:
+        for check_id in critical_checks:
             if check_id in checks_dict:
                 check = checks_dict[check_id]
                 if check_id in existing:
@@ -111,7 +115,7 @@ class ConfigurationError(models.Model):
     objects = ConfigurationErrorManager()
 
     class Meta:
-        indexes = [
+        indexes: ClassVar = [
             models.Index(fields=["ignored", "timestamp"]),
         ]
         verbose_name = "Configuration error"
@@ -202,7 +206,9 @@ class SupportStatus(models.Model):
         ssh_key = ensure_ssh_key()
         if ssh_key:
             data["ssh_key"] = ssh_key["key"]
-        response = request("post", settings.SUPPORT_API_URL, data=data, timeout=360)
+        response = http_request(
+            "post", settings.SUPPORT_API_URL, data=data, timeout=360
+        )
         response.raise_for_status()
         payload = response.json()
         self.name = payload["name"]

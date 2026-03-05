@@ -9,6 +9,7 @@ from contextlib import suppress
 from datetime import timedelta
 from functools import partial
 from pathlib import Path
+from typing import ClassVar
 
 from appconf import AppConf
 from django.conf import settings
@@ -45,7 +46,7 @@ class LibreCheck:
         return self.message
 
 
-class PlanQuerySet(models.QuerySet):
+class PlanQuerySet(models.QuerySet["Plan"]):
     def public(self, user=None):
         """List of public paid plans which are available."""
         base = self.exclude(Q(price=0) & Q(yearly_price=0))
@@ -119,14 +120,10 @@ class BillingQuerySet(models.QuerySet["Billing"]):
 
     def for_user(self, user: User):
         if user.has_perm("billing.manage"):
-            return self.all().order_by("state")
-        return (
-            self.filter(
-                Q(projects__in=user.projects_with_perm("billing.view")) | Q(owners=user)
-            )
-            .distinct()
-            .order_by("state")
-        )
+            billings = self.all()
+        else:
+            billings = self.filter(owners=user).distinct()
+        return billings.order_by("state")
 
     def for_user_within_limits(self, user: User):
         """Return billings for the given user which are valid and within project creation limits."""
@@ -159,8 +156,8 @@ class Billing(models.Model):
     STATE_TRIAL = 1
     STATE_TERMINATED = 3
 
-    EXPIRING_STATES = {STATE_TRIAL}
-    ACTIVE_STATES = {STATE_ACTIVE, STATE_TRIAL}
+    EXPIRING_STATES: ClassVar[set[int]] = {STATE_TRIAL}
+    ACTIVE_STATES: ClassVar[set[int]] = {STATE_ACTIVE, STATE_TRIAL}
 
     plan = models.ForeignKey(
         Plan,
@@ -225,6 +222,7 @@ class Billing(models.Model):
         trial = ", trial" if self.is_trial else ""
         return f"{base} ({self.plan}{trial})"
 
+    # pylint: disable-next=arguments-differ
     def save(
         self,
         force_insert=False,
@@ -379,6 +377,7 @@ class Billing(models.Model):
         return f"{invoice.start} - {invoice.end}"
 
     @admin.display(
+        # Translators: Whether the package is inside displayed (soft) limits
         description=gettext_lazy("In display limits"),
         boolean=True,
     )
@@ -404,9 +403,7 @@ class Billing(models.Model):
             )
         )
 
-    # Translators: Whether the package is inside displayed (soft) limits
-
-    def check_payment_status(self, now: bool = False):
+    def check_payment_status(self, now: bool = False) -> bool:
         """
         Check current payment status.
 
@@ -421,7 +418,8 @@ class Billing(models.Model):
             or self.state == Billing.STATE_TRIAL
         )
 
-    def check_limits(self, save=True):
+    @transaction.atomic
+    def check_limits(self, save=True) -> bool:
         self.flush_cache()
         in_limits = self.check_in_limits()
         paid = self.check_payment_status()
@@ -431,6 +429,10 @@ class Billing(models.Model):
             self.expiry = None
             self.removal = timezone.now() + timedelta(
                 days=settings.BILLING_REMOVAL_PERIOD
+            )
+            self.billinglog_set.create(
+                event=BillingEvent.EXPIRED,
+                summary=f"Scheduled removal at {self.removal.isoformat()}",
             )
             modified = True
 
@@ -445,6 +447,7 @@ class Billing(models.Model):
 
         if save:
             if modified:
+                Billing.objects.select_for_update().get(pk=self.pk)
                 self.save(skip_limits=True)
             self.update_alerts()
 
@@ -464,10 +467,7 @@ class Billing(models.Model):
         return self.state in Billing.ACTIVE_STATES
 
     def get_notify_users(self):
-        users = self.owners.distinct()
-        for project in self.projects.iterator():
-            users |= User.objects.having_perm("billing.view", project)
-        return users.exclude(is_superuser=True)
+        return self.owners.all()
 
     def _get_libre_checklist(self):
         message = ngettext(
@@ -545,7 +545,7 @@ class Billing(models.Model):
         return all(self.libre_checklist)
 
 
-class InvoiceQuerySet(models.QuerySet):
+class InvoiceQuerySet(models.QuerySet["Invoice"]):
     def order(self):
         return self.order_by("-start")
 
@@ -556,7 +556,7 @@ class Invoice(models.Model):
     CURRENCY_USD = 2
     CURRENCY_CZK = 3
 
-    billing = models.ForeignKey(Billing, on_delete=models.deletion.CASCADE)
+    billing = models.ForeignKey(Billing, on_delete=models.deletion.RESTRICT)
     start = models.DateField()
     end = models.DateField()
     amount = models.FloatField()
@@ -636,10 +636,54 @@ class Invoice(models.Model):
             overlapping = overlapping.exclude(pk=self.pk)
 
         if overlapping.exists():
-            msg = "Overlapping invoices exist: {}".format(
-                format_html_join_comma("{}", list_to_tuples(overlapping))
-            )
+            msg = f"Overlapping invoices exist: {format_html_join_comma('{}', list_to_tuples(overlapping))}"
             raise ValidationError(msg)
+
+
+class BillingEvent(models.IntegerChoices):
+    EMAIL = 1, "Outbound e-mail"
+    EXPIRED = 2, "Trial expired"
+    REMOVED = 3, "Projects removed"
+    PAYMENT = 4, "Payment received"
+    UNPAID = 5, "Unpaid billing"
+    CREATED = 6, "Created billing"
+    DISABLED_RECURRING = 7, "Disabled recurring payment"
+    LIBRE_REQUEST = 8, "Requested Libre hosting"
+    LIBRE_APPROVED = 9, "Approved Libre hosting"
+    TERMINATED = 10, "Billing terminated"
+    EXTENDED_TRIAL = 11, "Trial extended"
+    PROJECT_BACKUP = 12, "Project backed up"
+    ADMIN_ADDED = 13, "Admin added"
+    ADMIN_ADDED_PROJECT = 14, "Admin added on project removal"
+    ADMIN_REMOVED = 15, "Admin removed"
+
+
+class BillingLogQuerySet(models.QuerySet["BillingLog"]):
+    def order(self) -> BillingLogQuerySet:
+        return self.order_by("-timestamp")
+
+    def recent(self) -> BillingLogQuerySet:
+        return self.order()[:20]
+
+
+class BillingLog(models.Model):
+    billing = models.ForeignKey(
+        Billing,
+        on_delete=models.deletion.RESTRICT,
+        verbose_name=gettext_lazy("Billing"),
+    )
+    timestamp = models.DateTimeField(default=timezone.now, verbose_name="Timestamp")
+    event = models.IntegerField(
+        choices=BillingEvent, verbose_name=gettext_lazy("Billing event")
+    )
+    summary = models.CharField(max_length=200, verbose_name="Summary")
+    user = models.ForeignKey(User, null=True, on_delete=models.RESTRICT)
+    details = models.JSONField(default=dict)
+
+    objects = BillingLogQuerySet.as_manager()
+
+    def __str__(self) -> str:
+        return f"{self.timestamp.isoformat()}: {self.billing}: {self.get_event_display()} {self.summary}"
 
 
 @receiver(post_save, sender=Component)
@@ -668,6 +712,18 @@ def record_project_bill(
             return
     if isinstance(instance, Component):
         instance = instance.project
+
+    # Sync billing access upon project removal, otherwise users might not be able to
+    # terminate billing for removed project
+    if isinstance(instance, Project):
+        users = User.objects.having_perm("project.edit", instance)
+        for billing in instance.billing_set.all():
+            for user in users:
+                billing.owners.add(user)
+                billing.billinglog_set.create(
+                    event=BillingEvent.ADMIN_ADDED_PROJECT, summary=user.username
+                )
+
     # Collect billings to update for delete_project_bill
     instance.billings_to_update = list(
         instance.billing_set.values_list("pk", flat=True)

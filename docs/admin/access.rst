@@ -148,14 +148,15 @@ the project’s menu :guilabel:`Operations` ↓ :guilabel:`Users`.
     You can limit teams to languages or components,
     and assign them designated access roles (see :ref:`privileges`).
 
+.. _team-admins:
 
 Team administrators
 +++++++++++++++++++
 
 .. versionadded:: 4.15
 
-Each team can have team administrator,
-who can add and remove users within the team.
+Each team can have team administrators, who can add and remove users within the team.
+
 This is useful in case you want to build self-governed teams.
 
 .. _invite-user:
@@ -226,7 +227,8 @@ team memberships same as with users.
 
 .. seealso::
 
-   :ref:`api-tokens`
+   * :ref:`api-tokens`
+   * :ref:`expiring-accounts`
 
 .. _custom-acl:
 
@@ -479,353 +481,7 @@ set of permissions.
 
 .. _privileges:
 
-List of privileges
-++++++++++++++++++
-
-..
-   Generated using ./manage.py list_permissions
-
-+------------------------------+-------------------------------------------+---------------------------------------+
-| Scope                        | Permission                                | Built-in roles                        |
-+==============================+===========================================+=======================================+
-| Billing (see :ref:`billing`) | View billing info                         | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Billing`                   |
-+------------------------------+-------------------------------------------+---------------------------------------+
-| Changes                      | Download changes                          | :guilabel:`Administration`            |
-+------------------------------+-------------------------------------------+---------------------------------------+
-| Comments                     | Post comment                              | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Edit source`               |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Power user`                |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Review strings`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translate`                 |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Delete comment                            | :guilabel:`Administration`            |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Resolve comment                           | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Review strings`            |
-+------------------------------+-------------------------------------------+---------------------------------------+
-| Component                    | Edit component settings                   | :guilabel:`Administration`            |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Lock component, preventing translations   | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage repository`         |
-+------------------------------+-------------------------------------------+---------------------------------------+
-| Glossary                     | Add glossary entry                        | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage glossary`           |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Power user`                |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Add glossary terminology                  | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage glossary`           |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Edit glossary entry                       | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage glossary`           |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Power user`                |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Delete glossary entry                     | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage glossary`           |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Power user`                |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Upload glossary entries                   | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage glossary`           |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Power user`                |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-+------------------------------+-------------------------------------------+---------------------------------------+
-| Automatic suggestions        | Use automatic suggestions                 | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Edit source`               |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Power user`                |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Review strings`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translate`                 |
-+------------------------------+-------------------------------------------+---------------------------------------+
-| Translation memory           | Edit translation memory                   | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage translation memory` |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Delete translation memory                 | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage translation memory` |
-+------------------------------+-------------------------------------------+---------------------------------------+
-| Projects                     | Edit project settings                     | :guilabel:`Administration`            |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Manage project access                     | :guilabel:`Administration`            |
-+------------------------------+-------------------------------------------+---------------------------------------+
-| Reports                      | Download reports                          | :guilabel:`Administration`            |
-+------------------------------+-------------------------------------------+---------------------------------------+
-| Screenshots                  | Add screenshot                            | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage screenshots`        |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Edit screenshot                           | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage screenshots`        |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Delete screenshot                         | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage screenshots`        |
-+------------------------------+-------------------------------------------+---------------------------------------+
-| Source strings               | Edit additional string info               | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Edit source`               |
-+------------------------------+-------------------------------------------+---------------------------------------+
-| Strings                      | Add new string                            | :guilabel:`Administration`            |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Remove a string                           | :guilabel:`Administration`            |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Dismiss failing check                     | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Edit source`               |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Power user`                |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Review strings`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translate`                 |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Edit strings                              | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Edit source`               |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Power user`                |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Review strings`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translate`                 |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Review strings                            | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Review strings`            |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Edit string when suggestions are enforced | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Review strings`            |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Edit source strings                       | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Edit source`               |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Power user`                |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-+------------------------------+-------------------------------------------+---------------------------------------+
-| Suggestions                  | Accept suggestion                         | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Edit source`               |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Power user`                |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Review strings`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translate`                 |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Add suggestion                            | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Edit source`               |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Add suggestion`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Power user`                |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Review strings`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translate`                 |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Delete suggestion                         | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Power user`                |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Vote on suggestion                        | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Edit source`               |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Power user`                |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Review strings`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translate`                 |
-+------------------------------+-------------------------------------------+---------------------------------------+
-| Translations                 | Add language for translation              | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Power user`                |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage languages`          |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Perform automatic translation             | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Automatic translation`     |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Delete existing translation               | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage languages`          |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Download translation file                 | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Edit source`               |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Access repository`         |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Power user`                |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Review strings`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translate`                 |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage languages`          |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Add several languages for translation     | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage languages`          |
-+------------------------------+-------------------------------------------+---------------------------------------+
-| Uploads                      | Define author of uploaded translation     | :guilabel:`Administration`            |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Overwrite existing strings with upload    | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Edit source`               |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Power user`                |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Review strings`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translate`                 |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Upload translations                       | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Edit source`               |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Power user`                |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Review strings`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translate`                 |
-+------------------------------+-------------------------------------------+---------------------------------------+
-| VCS                          | Access the internal repository            | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Access repository`         |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Power user`                |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage repository`         |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Commit changes to the internal repository | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage repository`         |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Push change from the internal repository  | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage repository`         |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Reset changes in the internal repository  | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage repository`         |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | View upstream repository location         | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Access repository`         |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Power user`                |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage repository`         |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Update the internal repository            | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Manage repository`         |
-+------------------------------+-------------------------------------------+---------------------------------------+
-| Announcements                | Post announcements                        | :guilabel:`Administration`            |
-|                              |                                           +---------------------------------------+
-|                              |                                           | :guilabel:`Translation coordinator`   |
-+------------------------------+-------------------------------------------+---------------------------------------+
-| Site wide privileges         | Use management interface                  |                                       |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Add new projects                          | :guilabel:`Add new projects`          |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Add language definitions                  |                                       |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Manage language definitions               |                                       |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Manage teams                              |                                       |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Manage users                              |                                       |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Manage roles                              |                                       |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Manage announcements                      |                                       |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Manage translation memory                 |                                       |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Manage machinery                          |                                       |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Manage component lists                    |                                       |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Manage billing                            |                                       |
-|                              +-------------------------------------------+---------------------------------------+
-|                              | Manage site-wide add-ons                  |                                       |
-+------------------------------+-------------------------------------------+---------------------------------------+
+.. include:: /snippets/permissions.rst
 
 .. note::
 
@@ -833,188 +489,7 @@ List of privileges
    These are powerful and quite close to the Superuser status.
    Most of them affect all projects in your Weblate installation.
 
-List of built-in roles
-++++++++++++++++++++++
-
-..
-   Generated using ./manage.py list_permissions
-
-.. list-table::
-
-   * - `Administration`
-     - * :guilabel:`Post announcements`
-       * :guilabel:`View billing info`
-       * :guilabel:`Download changes`
-       * :guilabel:`Post comment`
-       * :guilabel:`Delete comment`
-       * :guilabel:`Resolve comment`
-       * :guilabel:`Edit component settings`
-       * :guilabel:`Lock component, preventing translations`
-       * :guilabel:`Add glossary entry`
-       * :guilabel:`Delete glossary entry`
-       * :guilabel:`Edit glossary entry`
-       * :guilabel:`Add glossary terminology`
-       * :guilabel:`Upload glossary entries`
-       * :guilabel:`Use automatic suggestions`
-       * :guilabel:`Delete translation memory`
-       * :guilabel:`Edit translation memory`
-       * :guilabel:`Edit project settings`
-       * :guilabel:`Manage project access`
-       * :guilabel:`Download reports`
-       * :guilabel:`Add screenshot`
-       * :guilabel:`Delete screenshot`
-       * :guilabel:`Edit screenshot`
-       * :guilabel:`Edit additional string info`
-       * :guilabel:`Accept suggestion`
-       * :guilabel:`Add suggestion`
-       * :guilabel:`Delete suggestion`
-       * :guilabel:`Vote on suggestion`
-       * :guilabel:`Add language for translation`
-       * :guilabel:`Add several languages for translation`
-       * :guilabel:`Perform automatic translation`
-       * :guilabel:`Delete existing translation`
-       * :guilabel:`Download translation file`
-       * :guilabel:`Add new string`
-       * :guilabel:`Dismiss failing check`
-       * :guilabel:`Remove a string`
-       * :guilabel:`Edit strings`
-       * :guilabel:`Edit string when suggestions are enforced`
-       * :guilabel:`Review strings`
-       * :guilabel:`Edit source strings`
-       * :guilabel:`Define author of uploaded translation`
-       * :guilabel:`Overwrite existing strings with upload`
-       * :guilabel:`Upload translations`
-       * :guilabel:`Access the internal repository`
-       * :guilabel:`Commit changes to the internal repository`
-       * :guilabel:`Push change from the internal repository`
-       * :guilabel:`Reset changes in the internal repository`
-       * :guilabel:`Update the internal repository`
-       * :guilabel:`View upstream repository location`
-   * - `Edit source`
-     - * :guilabel:`Post comment`
-       * :guilabel:`Use automatic suggestions`
-       * :guilabel:`Edit additional string info`
-       * :guilabel:`Accept suggestion`
-       * :guilabel:`Add suggestion`
-       * :guilabel:`Vote on suggestion`
-       * :guilabel:`Download translation file`
-       * :guilabel:`Dismiss failing check`
-       * :guilabel:`Edit strings`
-       * :guilabel:`Edit source strings`
-       * :guilabel:`Overwrite existing strings with upload`
-       * :guilabel:`Upload translations`
-   * - `Add suggestion`
-     - * :guilabel:`Add suggestion`
-   * - `Access repository`
-     - * :guilabel:`Download translation file`
-       * :guilabel:`Access the internal repository`
-       * :guilabel:`View upstream repository location`
-   * - `Manage glossary`
-     - * :guilabel:`Add glossary entry`
-       * :guilabel:`Delete glossary entry`
-       * :guilabel:`Edit glossary entry`
-       * :guilabel:`Add glossary terminology`
-       * :guilabel:`Upload glossary entries`
-   * - `Power user`
-     - * :guilabel:`Post comment`
-       * :guilabel:`Add glossary entry`
-       * :guilabel:`Delete glossary entry`
-       * :guilabel:`Edit glossary entry`
-       * :guilabel:`Upload glossary entries`
-       * :guilabel:`Use automatic suggestions`
-       * :guilabel:`Accept suggestion`
-       * :guilabel:`Add suggestion`
-       * :guilabel:`Delete suggestion`
-       * :guilabel:`Vote on suggestion`
-       * :guilabel:`Add language for translation`
-       * :guilabel:`Download translation file`
-       * :guilabel:`Dismiss failing check`
-       * :guilabel:`Edit strings`
-       * :guilabel:`Edit source strings`
-       * :guilabel:`Overwrite existing strings with upload`
-       * :guilabel:`Upload translations`
-       * :guilabel:`Access the internal repository`
-       * :guilabel:`View upstream repository location`
-   * - `Translation coordinator`
-     - * :guilabel:`Post announcements`
-       * :guilabel:`Post comment`
-       * :guilabel:`Resolve comment`
-       * :guilabel:`Add glossary entry`
-       * :guilabel:`Delete glossary entry`
-       * :guilabel:`Edit glossary entry`
-       * :guilabel:`Add glossary terminology`
-       * :guilabel:`Upload glossary entries`
-       * :guilabel:`Use automatic suggestions`
-       * :guilabel:`Add screenshot`
-       * :guilabel:`Delete screenshot`
-       * :guilabel:`Edit screenshot`
-       * :guilabel:`Accept suggestion`
-       * :guilabel:`Add suggestion`
-       * :guilabel:`Delete suggestion`
-       * :guilabel:`Vote on suggestion`
-       * :guilabel:`Add language for translation`
-       * :guilabel:`Download translation file`
-       * :guilabel:`Dismiss failing check`
-       * :guilabel:`Edit strings`
-       * :guilabel:`Edit string when suggestions are enforced`
-       * :guilabel:`Review strings`
-       * :guilabel:`Edit source strings`
-       * :guilabel:`Overwrite existing strings with upload`
-       * :guilabel:`Upload translations`
-       * :guilabel:`Access the internal repository`
-       * :guilabel:`View upstream repository location`
-   * - `Review strings`
-     - * :guilabel:`Post comment`
-       * :guilabel:`Resolve comment`
-       * :guilabel:`Use automatic suggestions`
-       * :guilabel:`Accept suggestion`
-       * :guilabel:`Add suggestion`
-       * :guilabel:`Vote on suggestion`
-       * :guilabel:`Download translation file`
-       * :guilabel:`Dismiss failing check`
-       * :guilabel:`Edit strings`
-       * :guilabel:`Edit string when suggestions are enforced`
-       * :guilabel:`Review strings`
-       * :guilabel:`Overwrite existing strings with upload`
-       * :guilabel:`Upload translations`
-   * - `Translate`
-     - * :guilabel:`Post comment`
-       * :guilabel:`Use automatic suggestions`
-       * :guilabel:`Accept suggestion`
-       * :guilabel:`Add suggestion`
-       * :guilabel:`Vote on suggestion`
-       * :guilabel:`Download translation file`
-       * :guilabel:`Dismiss failing check`
-       * :guilabel:`Edit strings`
-       * :guilabel:`Overwrite existing strings with upload`
-       * :guilabel:`Upload translations`
-   * - `Manage languages`
-     - * :guilabel:`Add language for translation`
-       * :guilabel:`Add several languages for translation`
-       * :guilabel:`Delete existing translation`
-       * :guilabel:`Download translation file`
-   * - `Automatic translation`
-     - * :guilabel:`Perform automatic translation`
-   * - `Manage translation memory`
-     - * :guilabel:`Delete translation memory`
-       * :guilabel:`Edit translation memory`
-   * - `Manage screenshots`
-     - * :guilabel:`Add screenshot`
-       * :guilabel:`Delete screenshot`
-       * :guilabel:`Edit screenshot`
-   * - `Manage repository`
-     - * :guilabel:`Lock component, preventing translations`
-       * :guilabel:`Access the internal repository`
-       * :guilabel:`Commit changes to the internal repository`
-       * :guilabel:`Push change from the internal repository`
-       * :guilabel:`Reset changes in the internal repository`
-       * :guilabel:`Update the internal repository`
-       * :guilabel:`View upstream repository location`
-   * - `Billing`
-     - * :guilabel:`View billing info`
-   * - `Add new projects`
-     - * :guilabel:`Add new projects`
-
+.. include:: /snippets/roles.rst
 
 .. _default-teams:
 
@@ -1082,9 +557,21 @@ If you want to use your Weblate installation in a less public manner, i.e. allow
 new users on an invitational basis only, it can be done by configuring Weblate
 in such a way that only known users have an access to it. In order to do so, you can set
 :setting:`REGISTRATION_OPEN` to ``False`` to prevent registrations of any new
-users, and set :setting:`REQUIRE_LOGIN` to ``/.*`` to require signing in to access
+users, and set :setting:`REQUIRE_LOGIN` to ``True`` to require signing in to access
 all the site pages. This is basically the way to lock your Weblate installation.
+
+Additionally, changing :setting:`DEFAULT_ACCESS_CONTROL` to ``100`` will make
+all newly created projects private, requiring explicit access to be granted.
 
 .. hint::
 
     You can use built-in :ref:`invite-user` to add new users.
+
+.. _expiring-accounts:
+
+Expiration of user accounts
+---------------------------
+
+Each account can have an expiry set. After the expiration, the account will be
+automatically disabled. This is used for :ref:`project-api`, but can be
+utilized for regular users as well.

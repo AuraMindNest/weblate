@@ -5,16 +5,17 @@
 from __future__ import annotations
 
 import threading
+import warnings
 from datetime import datetime
 from functools import lru_cache, reduce
 from itertools import chain
 from operator import and_, or_
-from typing import TYPE_CHECKING, Any, Literal, cast, overload
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast, overload
 
 from dateutil.parser import ParserError
 from dateutil.parser import parse as dateutil_parse
 from django.db import transaction
-from django.db.models import Count, Expression, F, Q, Value
+from django.db.models import Count, Exists, F, OuterRef, Q, Value
 from django.db.utils import DataError, OperationalError
 from django.http import Http404
 from django.utils import timezone
@@ -23,22 +24,23 @@ from pyparsing import (
     CaselessKeyword,
     OpAssoc,
     Optional,
-    ParserElement,
+    ParseException,
     ParseResults,
     Regex,
     Word,
+    alphanums,
     infix_notation,
     one_of,
 )
 
 from weblate.checks.parser import RawQuotedString
 from weblate.lang.models import Language
-from weblate.trans.models import Category, Component, Project, Translation
+from weblate.trans.models import Category, Component, Label, Project, Translation
 from weblate.trans.util import PLURAL_SEPARATOR
 from weblate.utils.db import re_escape, using_postgresql
 from weblate.utils.state import (
+    FUZZY_STATES,
     STATE_APPROVED,
-    STATE_FUZZY,
     STATE_NAMES,
     STATE_READONLY,
     STATE_TRANSLATED,
@@ -48,6 +50,13 @@ from weblate.utils.views import parse_path
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from django.db.models import Expression
+    from pyparsing import ParserElement
+
+
+class SearchQueryError(Exception):
+    """Error in the search expression."""
 
 
 # Helper parsing objects
@@ -87,7 +96,7 @@ def build_parser(term_expression: type[BaseTermExpr]) -> ParserElement:
 
     # Match token
     word = Regex(r"""[^ \r\n\(\)]([^ \r\n'"]*[^ \r\n'"\)])?""")
-    date = Word("0123456789:.-T")
+    date = Word(alphanums + ":._-")
 
     # Date range
     date_range = "[" + date + "to" + date + "]"
@@ -128,11 +137,11 @@ def build_parser(term_expression: type[BaseTermExpr]) -> ParserElement:
 
 
 class BaseTermExpr:
-    PLAIN_FIELDS: set[str] = set()
-    NONTEXT_FIELDS: dict[str, str] = {}
-    STRING_FIELD_MAP: dict[str, str] = {}
-    EXACT_FIELD_MAP: dict[str, str] = {}
-    enable_fulltext = True
+    PLAIN_FIELDS: ClassVar[set[str]] = set()
+    NONTEXT_FIELDS: ClassVar[dict[str, str]] = {}
+    STRING_FIELD_MAP: ClassVar[dict[str, str]] = {}
+    EXACT_FIELD_MAP: ClassVar[dict[str, str]] = {}
+    enable_fulltext: ClassVar[bool] = True
 
     def __init__(self, tokens) -> None:
         if len(tokens) == 1:
@@ -160,7 +169,9 @@ class BaseTermExpr:
         try:
             return STATE_NAMES[text]
         except KeyError as exc:
-            raise ValueError(gettext("Unsupported state: {}").format(text)) from exc
+            raise SearchQueryError(
+                gettext("Unsupported state: {}").format(text)
+            ) from exc
 
     def convert_bool(self, text: str) -> bool:
         ltext = text.lower()
@@ -168,8 +179,9 @@ class BaseTermExpr:
             return True
         if ltext in {"no", "false", "off", "0"}:
             return False
-        msg = f"Invalid boolean value: {text}"
-        raise ValueError(msg)
+        raise SearchQueryError(
+            gettext("Could not parse boolean value: {}").format(text)
+        )
 
     @overload
     def convert_int(self, text: RangeExpr) -> tuple[int, int]: ...
@@ -181,7 +193,12 @@ class BaseTermExpr:
                 self.convert_int(text.start),
                 self.convert_int(text.end),
             )
-        return int(text)
+        try:
+            return int(text)
+        except ValueError as error:
+            raise SearchQueryError(
+                gettext("Could not parse numeric value: {}").format(text)
+            ) from error
 
     def convert_id(self, text: str) -> int | set[int]:
         if "," in text:
@@ -192,32 +209,22 @@ class BaseTermExpr:
     def convert_datetime(
         self,
         text: RangeExpr,
-        hour: int = 5,
-        minute: int = 55,
-        second: int = 55,
-        microsecond: int = 0,
     ) -> tuple[datetime, datetime]: ...
     @overload
     def convert_datetime(
         self,
         text: str,
-        hour: int = 5,
-        minute: int = 55,
-        second: int = 55,
-        microsecond: int = 0,
     ) -> datetime: ...
-    def convert_datetime(self, text, hour=5, minute=55, second=55, microsecond=0):
-        tzinfo = timezone.get_current_timezone()
+    def convert_datetime(self, text):
         if isinstance(text, RangeExpr):
             return (
-                self.convert_datetime(
-                    text.start, hour=0, minute=0, second=0, microsecond=0
-                ),
-                self.convert_datetime(
+                self.date_parse(text.start, hour=0, minute=0, second=0, microsecond=0),
+                self.date_parse(
                     text.end, hour=23, minute=59, second=59, microsecond=999999
                 ),
             )
         if text.isdigit() and len(text) == 4:
+            tzinfo = timezone.get_current_timezone()
             year = int(text)
             return (
                 datetime(
@@ -242,49 +249,160 @@ class BaseTermExpr:
                 ),
             )
 
-        return self.human_date_parse(text, hour, minute, second, microsecond)
+        return self.date_parse(text)
 
-    def human_date_parse(
+    def get_day_range(self, timestamp: datetime) -> tuple[datetime, datetime]:
+        return (
+            timestamp.replace(hour=0, minute=0, second=0, microsecond=0),
+            timestamp.replace(hour=23, minute=59, second=59, microsecond=999999),
+        )
+
+    @overload
+    def date_parse_human(
         self,
         text: str,
-        hour: int = 5,
-        minute: int = 55,
-        second: int = 55,
-        microsecond: int = 0,
-    ) -> datetime | tuple[datetime, datetime]:
-        tzinfo = timezone.get_current_timezone()
+        hour: None = None,
+        minute: None = None,
+        second: None = None,
+        microsecond: None = None,
+    ) -> datetime | tuple[datetime, datetime]: ...
+    @overload
+    def date_parse_human(
+        self,
+        text: str,
+        hour: int,
+        minute: int,
+        second: int,
+        microsecond: int,
+    ) -> datetime: ...
+    def date_parse_human(
+        self,
+        text,
+        hour=None,
+        minute=None,
+        second=None,
+        microsecond=None,
+    ):
+        # Lazily import as this can be expensive
+        from dateparser.date import DateDataParser
 
+        # Custom RELATIVE_BASE allows to base "1 day ago" from the midnight instead
+        # of the current time
+        parser = DateDataParser(
+            locales=["en"],
+            settings={
+                "RELATIVE_BASE": timezone.now().replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+            },
+        )
+
+        # Attempts to parse the text using dateparser
+        # If the text is unparsable it will return None
+        data = parser.get_date_data(text)
+
+        date_obj: datetime | None = data.date_obj
+
+        if date_obj is None:
+            raise SearchQueryError(
+                gettext("Could not parse timestamp: {}").format(text)
+            )
+
+        # Always include timezone
+        if date_obj.tzinfo is None:
+            date_obj = date_obj.replace(tzinfo=timezone.get_current_timezone())
+
+        if data.period == "day":
+            if (
+                hour is not None
+                and minute is not None
+                and second is not None
+                and microsecond is not None
+            ):
+                # Replace timestamp when parsing range
+                return date_obj.replace(
+                    hour=hour,
+                    minute=minute,
+                    second=second,
+                    microsecond=microsecond,
+                    tzinfo=timezone.get_current_timezone(),
+                )
+            # Create one day range from date only
+            if (
+                date_obj.hour == 0
+                and date_obj.minute == 0
+                and date_obj.second == 0
+                and date_obj.microsecond == 0
+            ):
+                return self.get_day_range(date_obj)
+
+        return date_obj
+
+    @overload
+    def date_parse(
+        self,
+        text: str,
+        hour: None = None,
+        minute: None = None,
+        second: None = None,
+        microsecond: None = None,
+    ) -> datetime | tuple[datetime, datetime]: ...
+    @overload
+    def date_parse(
+        self,
+        text: str,
+        hour: int,
+        minute: int,
+        second: int,
+        microsecond: int,
+    ) -> datetime: ...
+    def date_parse(
+        self,
+        text,
+        hour=None,
+        minute=None,
+        second=None,
+        microsecond=None,
+    ):
         result: datetime | None
 
-        try:
+        default = timezone.now()
+        if hour is None or minute is None or second is None or microsecond is None:
             # Here we inject 5:55:55 time and if that was not changed
             # during parsing, we assume it was not specified while
             # generating the query
-            result = dateutil_parse(
-                text,
-                default=timezone.now().replace(
-                    hour=hour, minute=minute, second=second, microsecond=microsecond
-                ),
+            default = default.replace(hour=5, minute=5, second=5, microsecond=5)
+        else:
+            # Apply real defaults
+            default = default.replace(
+                hour=hour, minute=minute, second=second, microsecond=microsecond
             )
+
+        try:
+            with warnings.catch_warnings():
+                # Ignore ambiguous date warning, it is gracefully handled by datetutil
+                # or raises exception.
+                warnings.filterwarnings(
+                    "ignore",
+                    "Parsing dates involving a day of month without a year specified",
+                    DeprecationWarning,
+                )
+                result = dateutil_parse(text, default=default)
         except ParserError:
-            # Lazily import as this can be expensive
-            from dateparser import parse as dateparser_parse
+            result = None
 
-            # Attempts to parse the text using dateparser
-            # If the text is unparsable it will return None
-            result = dateparser_parse(text, locales=["en"])
         if not result:
-            msg = "Could not parse timestamp"
-            raise ValueError(msg)
+            return self.date_parse_human(
+                text, hour=hour, minute=minute, second=second, microsecond=microsecond
+            )
 
-        result = result.replace(
-            hour=hour,
-            minute=minute,
-            second=second,
-            microsecond=microsecond,
-            tzinfo=tzinfo,
-        )
-        if result.hour == 5 and result.minute == 55 and result.second == 55:
+        if (
+            hour is None
+            and result.hour == 5
+            and result.minute == 5
+            and result.second == 5
+            and result.microsecond == 5
+        ):
             return (
                 result.replace(hour=0, minute=0, second=0, microsecond=0),
                 result.replace(hour=23, minute=59, second=59, microsecond=999999),
@@ -324,8 +442,7 @@ class BaseTermExpr:
             if suffix not in {"substring", "iexact"}:
                 return f"{self.NONTEXT_FIELDS[field]}__{suffix}"
             return self.NONTEXT_FIELDS[field]
-        msg = f"Unsupported field: {field}"
-        raise ValueError(msg)
+        raise SearchQueryError(gettext("Unknown search field: {}").format(field))
 
     def convert_non_field(self) -> Q:
         raise NotImplementedError
@@ -361,7 +478,7 @@ class BaseTermExpr:
                     ).exists()
                 except (DataError, OperationalError) as error:
                     # PostgreSQL raises DataError, MySQL OperationalError
-                    raise ValueError(
+                    raise SearchQueryError(
                         gettext("Invalid regular expression: {}").format(error)
                     ) from error
             return Q(**{self.field_name(field, "trgm_regex"): match.expr})
@@ -391,17 +508,29 @@ class BaseTermExpr:
         return query
 
     def is_field(self, text: str, context: dict) -> Q:
-        msg = f"Unsupported is lookup: {text}"
-        raise ValueError(msg)
+        raise SearchQueryError(
+            gettext("Unsupported lookup for {field}: {value}").format(
+                field="is", value=text
+            )
+        )
 
     def has_field(self, text: str, context: dict) -> Q:
-        msg = f"Unsupported has lookup: {text}"
-        raise ValueError(msg)
+        raise SearchQueryError(
+            gettext("Unsupported lookup for {field}: {value}").format(
+                field="has", value=text
+            )
+        )
 
 
 class UnitTermExpr(BaseTermExpr):
-    PLAIN_FIELDS: set[str] = {"source", "target", "context", "note", "location"}
-    NONTEXT_FIELDS: dict[str, str] = {
+    PLAIN_FIELDS: ClassVar[set[str]] = {
+        "source",
+        "target",
+        "context",
+        "note",
+        "location",
+    }
+    NONTEXT_FIELDS: ClassVar[dict[str, str]] = {
         "priority": "priority",
         "id": "id",
         "state": "state",
@@ -410,28 +539,25 @@ class UnitTermExpr(BaseTermExpr):
         "pending": "pending_changes__isnull",
         "changed": "change__timestamp",
         "source_changed": "source_unit__last_updated",
+        "last_changed": "last_updated",
         "change_time": "change__timestamp",
         "added": "timestamp",
         "change_action": "change__action",
         "labels_count": "labels_count",
     }
-    STRING_FIELD_MAP: dict[str, str] = {
+    STRING_FIELD_MAP: ClassVar[dict[str, str]] = {
         "suggestion": "suggestion__target",
         "comment": "comment__comment",
         "resolved_comment": "comment__comment",
         "key": "context",
         "explanation": "source_unit__explanation",
     }
-    EXACT_FIELD_MAP: dict[str, str] = {
-        "check": "check__name",
-        "dismissed_check": "check__name",
+    EXACT_FIELD_MAP: ClassVar[dict[str, str]] = {
         "language": "translation__language__code",
         "project": "translation__component__project__slug",
         "changed_by": "change__author__username",
         "suggestion_author": "suggestion__user__username",
         "comment_author": "comment__user__username",
-        "label": "source_unit__labels__name",
-        "screenshot": "source_unit__screenshots__name",
     }
 
     def is_field(self, text: str, context: dict) -> Q:
@@ -440,13 +566,15 @@ class UnitTermExpr(BaseTermExpr):
         if text == "approved":
             return Q(state=STATE_APPROVED)
         if text in {"fuzzy", "needs-editing"}:
-            return Q(state=STATE_FUZZY)
+            return Q(state__in=FUZZY_STATES)
         if text == "translated":
             return Q(state__gte=STATE_TRANSLATED)
         if text == "untranslated":
             return Q(state__lt=STATE_TRANSLATED)
         if text == "pending":
             return Q(pending_changes__isnull=False)
+        if text in {"automatically-translated", "automatically_translated"}:
+            return Q(automatically_translated=True)
 
         return super().is_field(text, context)
 
@@ -482,7 +610,7 @@ class UnitTermExpr(BaseTermExpr):
                 & Q(context__regex=F("variant__variant_regex"))
             )
         if text == "label":
-            return Q(source_unit__labels__isnull=False) | Q(labels__isnull=False)
+            return Q(source_unit__labels__isnull=False)
         if text == "context":
             return ~Q(context="")
         if text == "screenshot":
@@ -569,10 +697,81 @@ class UnitTermExpr(BaseTermExpr):
         boolean_value = self.convert_bool(text)
         return Q(pending_changes__isnull=not boolean_value)
 
+    def label_field(self, text: str, context: dict) -> Q:
+        """
+        Handle label filtering.
+
+        This is needed because filtering on a reverse ManyToMany relation
+        with and using exists ensures each label condition gets its own join.
+        """
+        lookup = "name__iexact" if self.operator == ":=" else "name__icontains"
+        label_filter = {lookup: text}
+        label_query = Label.objects.filter(**label_filter)
+        project = context.get("project")
+        if project:
+            label_query = label_query.filter(project=project)
+
+        return Q(Exists(label_query.filter(unit__id=OuterRef("source_unit_id"))))
+
+    def check_field(self, text: str, context: dict) -> Q:
+        """
+        Handle check filtering.
+
+        This is needed because filtering on a reverse ForeignKey relation
+        with AND using exists ensures each check condition gets its own subquery.
+        """
+        from weblate.checks.models import Check
+
+        lookup = "name__iexact" if self.operator == ":=" else "name__icontains"
+        return Q(
+            Exists(
+                Check.objects.filter(
+                    **{lookup: text}, dismissed=False, unit_id=OuterRef("pk")
+                )
+            )
+        )
+
+    def dismissed_check_field(self, text: str, context: dict) -> Q:
+        """
+        Handle dismissed check filtering.
+
+        This is needed because filtering on a reverse ForeignKey relation
+        with AND using exists ensures each check condition gets its own subquery.
+        """
+        from weblate.checks.models import Check
+
+        lookup = "name__iexact" if self.operator == ":=" else "name__icontains"
+        return Q(
+            Exists(
+                Check.objects.filter(
+                    **{lookup: text}, dismissed=True, unit_id=OuterRef("pk")
+                )
+            )
+        )
+
+    def screenshot_field(self, text: str, context: dict) -> Q:
+        """
+        Handle screenshot filtering.
+
+        This is needed because filtering on ManyToMany relations
+        with AND using exists ensures each screenshot condition gets its own subquery.
+        """
+        from weblate.screenshots.models import Screenshot
+
+        lookup = "name__iexact" if self.operator == ":=" else "name__icontains"
+        screenshot_query = Screenshot.objects.filter(**{lookup: text})
+        return Q(
+            Exists(screenshot_query.filter(units__id=OuterRef("source_unit_id")))
+            | Exists(screenshot_query.filter(units__id=OuterRef("pk")))
+        )
+
     def convert_changed(self, text: str) -> datetime | tuple[datetime, datetime]:
         return self.convert_datetime(text)
 
     def convert_source_changed(self, text: str) -> datetime | tuple[datetime, datetime]:
+        return self.convert_datetime(text)
+
+    def convert_last_changed(self, text: str) -> datetime | tuple[datetime, datetime]:
         return self.convert_datetime(text)
 
     def convert_added(self, text: str) -> datetime | tuple[datetime, datetime]:
@@ -592,14 +791,6 @@ class UnitTermExpr(BaseTermExpr):
 
         if field in {"changed", "changed_by"}:
             return query & Q(change__action__in=Change.ACTIONS_CONTENT)
-        if field == "check":
-            return query & Q(check__dismissed=False)
-        if field == "dismissed_check":
-            return query & Q(check__dismissed=True)
-        if field == "label":
-            return query | Q(labels__name__iexact=match)
-        if field == "screenshot":
-            return query | Q(screenshots__name__iexact=match)
         if field == "comment":
             return query & Q(comment__resolved=False)
         if field == "resolved_comment":
@@ -616,22 +807,22 @@ class UnitTermExpr(BaseTermExpr):
 
     def get_annotations(self, context: dict) -> dict[str, Expression]:
         if self.field == "labels_count":
-            return {"labels_count": Count("source_unit__labels") + Count("labels")}
+            return {"labels_count": Count("source_unit__labels")}
         return super().get_annotations(context)
 
 
 class UserTermExpr(BaseTermExpr):
-    PLAIN_FIELDS: set[str] = {"username", "full_name"}
-    NONTEXT_FIELDS: dict[str, str] = {
+    PLAIN_FIELDS: ClassVar[set[str]] = {"username", "full_name"}
+    NONTEXT_FIELDS: ClassVar[dict[str, str]] = {
         "joined": "date_joined",
         "change_time": "change__timestamp",
         "change_action": "change__action",
     }
-    EXACT_FIELD_MAP: dict[str, str] = {
+    EXACT_FIELD_MAP: ClassVar[dict[str, str]] = {
         "language": "profile__languages__code",
         "translates": "change__language__code",
     }
-    enable_fulltext = False
+    enable_fulltext: ClassVar[bool] = False
 
     def convert_joined(self, text: str) -> datetime | tuple[datetime, datetime]:
         return self.convert_datetime(text)
@@ -640,19 +831,19 @@ class UserTermExpr(BaseTermExpr):
         return Q(username__icontains=self.match) | Q(full_name__icontains=self.match)
 
     def contributes_field(self, text: str, context: dict) -> Q:
-        from weblate.trans.models import Component
-
         if "/" not in text:
-            return Q(change__project__slug__iexact=text)
-        return Q(
-            change__component_id__in=list(
-                Component.objects.filter_by_path(text).values_list("id", flat=True)
+            slug_filter = Q(change__project__slug__iexact=text)
+        else:
+            slug_filter = Q(
+                change__component_id__in=list(
+                    Component.objects.filter_by_path(text).values_list("id", flat=True)
+                )
             )
-        )
+        return slug_filter & Q(change__project__in=context["user"].allowed_projects)
 
 
 class SuperuserUserTermExpr(UserTermExpr):
-    STRING_FIELD_MAP: dict[str, str] = {
+    STRING_FIELD_MAP: ClassVar[dict[str, str]] = {
         "email": "social_auth__verifiedemail__email",
     }
 
@@ -694,8 +885,8 @@ def parser_to_query(obj: ParseResults | BaseTermExpr, context: dict) -> Q:
     for item in obj:
         if isinstance(item, str) and (current := item.upper()) in {"OR", "AND", "NOT"}:
             if operator and current != operator:
-                msg = "Mixed operators!"
-                raise ValueError(msg)
+                msg = gettext("Mixed operators!")
+                raise SearchQueryError(msg)
             operator = current
             was_operator = True
             continue
@@ -729,15 +920,19 @@ def parser_annotations(
     return result
 
 
-@lru_cache(maxsize=512)
+@lru_cache(maxsize=32)
 def parse_string(
     text: str, parser: Literal["unit", "user", "superuser"]
 ) -> ParseResults:
     if "\x00" in text:
-        msg = "Invalid query string."
-        raise ValueError(msg)
+        raise SearchQueryError(gettext("Invalid character in the query string"))
     with PARSER_LOCK:
-        return PARSERS[parser].parse_string(text, parse_all=True)
+        try:
+            return PARSERS[parser].parse_string(text, parse_all=True)
+        except ParseException as error:
+            raise SearchQueryError(
+                gettext("Failed to parse the query string: {}").format(error)
+            ) from error
 
 
 def parse_query(

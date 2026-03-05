@@ -6,17 +6,18 @@
 
 import os
 from datetime import timedelta
+from pathlib import Path
 
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
-from django.core.management.color import no_style
-from django.db import connection, transaction
+from django.db import transaction
 from django.test import TestCase
 from django.test.utils import override_settings
 from django.utils import timezone
+from django.utils.translation import activate
 
 from weblate.auth.models import Group, User
 from weblate.checks.models import Check
-from weblate.lang.models import Language, Plural
+from weblate.lang.models import Language
 from weblate.trans.actions import ActionEvents
 from weblate.trans.exceptions import SuggestionSimilarToTranslationError
 from weblate.trans.models import (
@@ -38,29 +39,26 @@ from weblate.trans.tests.utils import (
     RepoTestMixin,
     create_another_user,
     create_test_user,
+    fixup_languages_seq,
 )
 from weblate.utils.django_hacks import immediate_on_commit, immediate_on_commit_leave
 from weblate.utils.files import remove_tree
-from weblate.utils.state import STATE_APPROVED, STATE_FUZZY, STATE_TRANSLATED
+from weblate.utils.state import (
+    STATE_APPROVED,
+    STATE_FUZZY,
+    STATE_NEEDS_CHECKING,
+    STATE_READONLY,
+    STATE_TRANSLATED,
+)
 from weblate.utils.version import GIT_VERSION
 
 
-def fixup_languages_seq() -> None:
-    # Reset sequence for Language and Plural objects as
-    # we're manipulating with them in FixtureTestCase.setUpTestData
-    # and that seems to affect sequence for other tests as well
-    # on some PostgreSQL versions (probably sequence is not rolled back
-    # in a transaction).
-    commands = connection.ops.sequence_reset_sql(no_style(), [Language, Plural])
-    if commands:
-        with connection.cursor() as cursor:
-            for sql in commands:
-                cursor.execute(sql)
-    # Invalidate object cache for languages
-    Language.objects.flush_object_cache()
-
-
 class BaseTestCase(TestCase):
+    def setUp(self) -> None:
+        # Ensure we're using English
+        activate("en")
+        super().setUp()
+
     @classmethod
     def setUpTestData(cls) -> None:
         fixup_languages_seq()
@@ -77,6 +75,11 @@ class BaseTestCase(TestCase):
 
 
 class BaseLiveServerTestCase(StaticLiveServerTestCase):
+    def setUp(self) -> None:
+        # Ensure we're using English
+        activate("en")
+        super().setUp()
+
     @classmethod
     def setUpTestData(cls) -> None:
         fixup_languages_seq()
@@ -97,6 +100,7 @@ class RepoTestCase(BaseTestCase, RepoTestMixin):
 
     def setUp(self) -> None:
         self.clone_test_repos()
+        super().setUp()
 
 
 class ProjectTest(RepoTestCase):
@@ -213,9 +217,29 @@ class ProjectTest(RepoTestCase):
         # Create project
         project = self.create_project()
 
+        self.assertEqual(
+            {"Administration"},
+            set(project.defined_groups.values_list("name", flat=True)),
+        )
+
         # Enable ACL
         project.access_control = Project.ACCESS_PRIVATE
         project.save()
+        self.assertEqual(
+            {
+                "Administration",
+                "Automatic translation",
+                "Bulk editing",
+                "Glossary",
+                "Languages",
+                "Memory",
+                "Screenshots",
+                "Sources",
+                "Translate",
+                "VCS",
+            },
+            set(project.defined_groups.values_list("name", flat=True)),
+        )
 
         # Check user does not have access
         self.assertFalse(user.can_access_project(project))
@@ -228,6 +252,26 @@ class ProjectTest(RepoTestCase):
 
         # We now should have access
         self.assertTrue(user.can_access_project(project))
+
+        project.translation_review = True
+        project.save()
+
+        self.assertEqual(
+            {
+                "Administration",
+                "Automatic translation",
+                "Bulk editing",
+                "Glossary",
+                "Languages",
+                "Memory",
+                "Review",
+                "Screenshots",
+                "Sources",
+                "Translate",
+                "VCS",
+            },
+            set(project.defined_groups.values_list("name", flat=True)),
+        )
 
 
 class TranslationTest(RepoTestCase):
@@ -387,13 +431,15 @@ class TranslationTest(RepoTestCase):
         self.assertEqual(PendingUnitChange.objects.count(), 1)
 
     def test_commit_policy(self) -> None:
-        component = self.create_component()
+        component = self.create_xliff()
         translation = component.translation_set.get(language_code="cs")
         user = create_test_user()
 
         project = component.project
         project.commit_policy = CommitPolicyChoices.APPROVED_ONLY
         project.save()
+
+        self.assertIn("approved", project.get_commit_policy_description())
 
         unit1 = translation.unit_set.get(source="Hello, world!\n")
         unit1.translate(user, "Unit 1 - Test 1", STATE_TRANSLATED)
@@ -405,7 +451,7 @@ class TranslationTest(RepoTestCase):
         unit2.translate(user, "Unit 2 - Test 1", STATE_FUZZY)
 
         unit3 = translation.unit_set.get(
-            source="Try Weblate at <https://demo.weblate.org/>!\n"
+            source="Try Weblate at &lt;https://demo.weblate.org/&gt;!\n"
         )
         unit3.translate(user, "Unit 3 - Test 1", STATE_TRANSLATED)
 
@@ -420,8 +466,15 @@ class TranslationTest(RepoTestCase):
         component.commit_pending("test", None)
         self.assertEqual(PendingUnitChange.objects.count(), 3)
 
+        translation = component.translation_set.get(language_code="cs")
+        ttk_unit1, _ = translation.store.find_unit(unit1.context, unit1.source)
+        self.assertEqual(ttk_unit1.target, "Unit 1 - Test 3\n")
+        self.assertTrue(ttk_unit1.is_approved())
+
         project.commit_policy = CommitPolicyChoices.WITHOUT_NEEDS_EDITING
         project.save()
+
+        self.assertIn("needing editing", project.get_commit_policy_description())
 
         changes = list(PendingUnitChange.objects.for_translation(translation))
         self.assertEqual(len(changes), 1)
@@ -434,11 +487,19 @@ class TranslationTest(RepoTestCase):
         project.commit_policy = CommitPolicyChoices.ALL
         project.save()
 
+        self.assertEqual("", project.get_commit_policy_description())
+
         changes = list(PendingUnitChange.objects.for_translation(translation))
         self.assertEqual(len(changes), 2)
         self.assertEqual([STATE_FUZZY, STATE_FUZZY], [p.state for p in changes])
         component.commit_pending("test", None)
+
         self.assertEqual(PendingUnitChange.objects.count(), 0)
+
+        translation = component.translation_set.get(language_code="cs")
+        ttk_unit1, _ = translation.store.find_unit(unit1.context, unit1.source)
+        self.assertEqual(ttk_unit1.target, "Unit 1 - Test 4\n")
+        self.assertTrue(ttk_unit1.is_fuzzy())
 
     def test_commit_retry_unit_not_found(self) -> None:
         """Test retry logic for units failing due to UnitFoundError works correctly."""
@@ -472,7 +533,7 @@ class TranslationTest(RepoTestCase):
         translation.store.save()
         translation.store_hash()
 
-        self.assertEqual(translation.count_pending_units, 2)
+        self.assertEqual(translation.count_pending_units, 1)
         component.commit_pending("test", None)
         self.assertEqual(PendingUnitChange.objects.count(), 0)
 
@@ -536,7 +597,7 @@ class TranslationTest(RepoTestCase):
 
         unit.translate(user, "Ahoj, ${ jméno }!", STATE_TRANSLATED)
         unit.translate(user, "Ahoj, ${ name }!", STATE_TRANSLATED)
-        self.assertEqual(translation.count_pending_units, 2)
+        self.assertEqual(translation.count_pending_units, 1)
 
         component.commit_pending("test", None)
 
@@ -582,6 +643,32 @@ class ComponentListTest(RepoTestCase):
         )
         self.assertEqual(clist.components.count(), 0)
 
+    def test_source_review(self) -> None:
+        component = self.create_json_intermediate()
+
+        source = component.translation_set.get(language_code="en")
+        unit = source.unit_set.get(source="Hello world!\n")
+
+        translation_unit = unit.unit_set.get(translation__language__code="cs")
+        self.assertEqual(translation_unit.state, STATE_TRANSLATED)
+
+        unit.translate(None, "Hello, world!\n", STATE_NEEDS_CHECKING)
+
+        translation_unit = unit.unit_set.get(translation__language__code="en")
+        self.assertEqual(translation_unit.state, STATE_NEEDS_CHECKING)
+
+        # Verify the state after editing
+        translation_unit = unit.unit_set.get(translation__language__code="cs")
+        self.assertEqual(translation_unit.state, STATE_READONLY)
+
+        # Commit changes to the repository
+        component.commit_pending("test", None)
+
+        # Verify the state after reset
+        component.do_file_scan()
+        translation_unit = unit.unit_set.get(translation__language__code="cs")
+        self.assertEqual(translation_unit.state, STATE_READONLY)
+
 
 class ModelTestCase(RepoTestCase):
     def setUp(self) -> None:
@@ -612,6 +699,8 @@ class SourceUnitTest(ModelTestCase):
         self.assertEqual(Check.objects.count(), 3)
         check = Check.objects.all()[0]
         unit = check.unit
+        # reload component to clear stats cache
+        self.component = unit.translation.component
         self.assertEqual(self.component.stats.allchecks, 3)
         source = unit.source_unit
         source.extra_flags = f"ignore-{check.name}"
@@ -735,11 +824,17 @@ class AnnouncementTest(ModelTestCase):
 
     def setUp(self) -> None:
         super().setUp()
+        self.second_project = self.create_project("Other", "other")
         Announcement.objects.create(
             language=Language.objects.get(code="cs"), message="test cs"
         )
         Announcement.objects.create(
             language=Language.objects.get(code="de"), message="test de"
+        )
+        Announcement.objects.create(
+            project=self.second_project,
+            language=Language.objects.get(code="cs"),
+            message="test other cs",
         )
         Announcement.objects.create(
             project=self.component.project, message="test project"
@@ -830,3 +925,201 @@ class ChangeTest(ModelTestCase):
             Change.objects.since_day(timezone.now() - timedelta(days=1)).count(),
             2,
         )
+
+
+class PendingUnitChangeTest(RepoTestCase):
+    """Test(s) for PendingUnitChange model."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = create_test_user()
+        self.component = self.create_component()
+        self.project = self.component.project
+        self.component2 = self.create_json_mono(
+            name="Component 2", project=self.project
+        )
+        self.other_project = self.create_project("Other", "other")
+        self.component3 = self.create_android(
+            name="Component 3", project=self.other_project
+        )
+
+    def test_find_committable_components_basic(self) -> None:
+        """Test find_committable_components returns components with old enough changes."""
+        self.component.commit_pending_age = 1
+        self.component.save()
+
+        self.component3.commit_pending_age = 3
+        self.component3.save()
+
+        translation = self.component.translation_set.get(language_code="cs")
+        unit = translation.unit_set.get(source="Hello, world!\n")
+        unit.translate(self.user, "Nazdar svete!\n", STATE_TRANSLATED)
+
+        translation3 = self.component3.translation_set.get(language_code="cs")
+        unit3 = translation3.unit_set.get(source="Orangutan has %d banana.\n")
+        unit3.translate(self.user, "Orangutan má %d banánů.\n", STATE_TRANSLATED)
+
+        components = PendingUnitChange.objects.find_committable_components()
+        self.assertEqual(set(components.values_list("pk", flat=True)), set())
+
+        PendingUnitChange.objects.update(timestamp=timezone.now() - timedelta(hours=2))
+        components = PendingUnitChange.objects.find_committable_components()
+        self.assertEqual(
+            set(components.values_list("pk", flat=True)), {self.component.pk}
+        )
+
+        components = PendingUnitChange.objects.find_committable_components(hours=1)
+        self.assertEqual(
+            set(components.values_list("pk", flat=True)),
+            {self.component.pk, self.component3.pk},
+        )
+
+        components = PendingUnitChange.objects.find_committable_components(
+            pks=[self.component.pk], hours=1
+        )
+        self.assertEqual(
+            set(components.values_list("pk", flat=True)), {self.component.pk}
+        )
+
+    def test_find_committable_components_with_commit_policy(self) -> None:
+        """Test find_committable_components respects commit policies."""
+        self.project.commit_policy = CommitPolicyChoices.WITHOUT_NEEDS_EDITING
+        self.project.save()
+
+        self.other_project.commit_policy = CommitPolicyChoices.APPROVED_ONLY
+        self.other_project.save()
+
+        translation = self.component.translation_set.get(language_code="cs")
+        unit = translation.unit_set.get(source="Hello, world!\n")
+        unit.translate(self.user, "Nazdar svete!\n", STATE_FUZZY)
+
+        translation2 = self.component2.translation_set.get(language_code="cs")
+        unit2 = translation2.unit_set.get(source="Hello, world!\n")
+        unit2.translate(self.user, "Nazdar svete!\n", STATE_TRANSLATED)
+
+        translation3 = self.component3.translation_set.get(language_code="cs")
+        unit3 = translation3.unit_set.get(source="Orangutan has %d banana.\n")
+        unit3.translate(self.user, "Orangutan má %d banánů.\n", STATE_TRANSLATED)
+
+        PendingUnitChange.objects.update(timestamp=timezone.now() - timedelta(hours=2))
+
+        components = PendingUnitChange.objects.find_committable_components(hours=1)
+        self.assertEqual(
+            set(components.values_list("pk", flat=True)), {self.component2.pk}
+        )
+
+        unit.translate(self.user, "Nazdar svete!\n", STATE_TRANSLATED)
+        unit3.translate(self.user, "Orangutan má %d banánů.\n", STATE_APPROVED)
+        PendingUnitChange.objects.update(timestamp=timezone.now() - timedelta(hours=2))
+
+        components = PendingUnitChange.objects.find_committable_components(hours=1)
+        self.assertEqual(
+            set(components.values_list("pk", flat=True)),
+            {self.component.pk, self.component2.pk, self.component3.pk},
+        )
+
+    def test_find_committable_components_with_retry_filter(self) -> None:
+        """Test find_committable_components applies retry eligibility filter."""
+        translation = self.component.translation_set.get(language_code="cs")
+        unit = translation.unit_set.get(source="Hello, world!\n")
+        unit.translate(self.user, "Nazdar svete!\n", STATE_TRANSLATED)
+
+        pending_change = unit.pending_changes.first()
+        pending_change.metadata = {
+            "last_failed": timezone.now().isoformat(),
+            "failed_revision": translation.revision,
+            "weblate_version": GIT_VERSION,
+        }
+        pending_change.save()
+
+        translation3 = self.component3.translation_set.get(language_code="cs")
+        unit3 = translation3.unit_set.get(source="Orangutan has %d banana.\n")
+        unit3.translate(self.user, "Orangutan má %á banánů.\n", STATE_TRANSLATED)
+        pending_change3 = unit3.pending_changes.first()
+        pending_change3.metadata = {
+            "last_failed": timezone.now().isoformat(),
+            "failed_revision": translation3.revision,
+            "weblate_version": GIT_VERSION,
+            "blocking_unit": True,
+        }
+        pending_change3.save()
+
+        PendingUnitChange.objects.update(timestamp=timezone.now() - timedelta(hours=2))
+
+        components = PendingUnitChange.objects.find_committable_components(hours=1)
+        self.assertEqual(set(components.values_list("pk", flat=True)), set())
+
+        pending_change.metadata["last_failed"] = (
+            timezone.now() - timedelta(days=8)
+        ).isoformat()
+        pending_change.save()
+
+        unit3.translate(self.user, "Orangutan má %d banánů.\n", STATE_TRANSLATED)
+        PendingUnitChange.objects.update(timestamp=timezone.now() - timedelta(hours=2))
+
+        # component 1 is now finable because the change failed to apply more than a week ago
+        # component 3 is now findable because the blocking_unit filter is not applied here
+        components = PendingUnitChange.objects.find_committable_components(hours=1)
+        self.assertEqual(
+            set(components.values_list("pk", flat=True)),
+            {self.component.pk, self.component3.pk},
+        )
+
+
+class AutomaticallyTranslatedFromFileTest(RepoTestCase):
+    def test_xliff_state_qualifier_loaded_to_database(self) -> None:
+        component = self.create_xliff_auto()
+        translation = component.translation_set.get(language_code="cs")
+        user = create_test_user()
+
+        file_content = Path(translation.get_filename()).read_text(encoding="utf-8")
+        self.assertEqual(file_content.count('state-qualifier="leveraged-mt"'), 1)
+        self.assertEqual(file_content.count('state-qualifier="mt-suggestion"'), 1)
+
+        self.assertTrue(
+            translation.unit_set.get(source="Hello").automatically_translated
+        )
+
+        world_unit = translation.unit_set.get(source="World")
+        self.assertTrue(world_unit.automatically_translated)
+        world_unit.translate(
+            user=user, new_target=world_unit.target, new_state=STATE_TRANSLATED
+        )
+        self.assertFalse(world_unit.automatically_translated)
+
+        car_unit = translation.unit_set.get(source="Car")
+        self.assertFalse(car_unit.automatically_translated)
+        car_unit.translate(
+            user=user,
+            new_target="Automobil",
+            new_state=STATE_TRANSLATED,
+            change_action=ActionEvents.AUTO,
+        )
+        self.assertTrue(car_unit.automatically_translated)
+
+        translation.commit_pending("test", None)
+
+        file_content = Path(translation.get_filename()).read_text(encoding="utf-8")
+        self.assertIn("Automobil", file_content)
+        self.assertEqual(file_content.count('state-qualifier="leveraged-mt"'), 2)
+        self.assertEqual(file_content.count('state-qualifier="mt-suggestion"'), 0)
+
+    def test_xliff_file_sync_gets_automatically_translated_from_file(self) -> None:
+        component = self.create_xliff_auto()
+        translation = component.translation_set.get(language_code="cs")
+
+        car_unit = translation.unit_set.get(source="Car")
+        self.assertFalse(car_unit.automatically_translated)
+
+        file_content = Path(translation.get_filename()).read_text(encoding="utf-8")
+        modified_content = file_content.replace(
+            "<target>Auto</target>",
+            '<target state-qualifier="leveraged-mt">Auto</target>',
+        )
+        Path(translation.get_filename()).write_text(modified_content, encoding="utf-8")
+
+        translation = component.translation_set.get(language_code="cs")
+        translation.check_sync(force=True)
+
+        car_unit = translation.unit_set.get(source="Car")
+        self.assertTrue(car_unit.automatically_translated)

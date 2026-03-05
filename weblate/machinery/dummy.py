@@ -1,12 +1,19 @@
 # Copyright © Michal Čihař <michal@weblate.org>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from .base import (
-    DownloadTranslations,
     GlossaryMachineTranslationMixin,
     MachineTranslation,
 )
+
+if TYPE_CHECKING:
+    from .base import (
+        DownloadTranslations,
+    )
 
 
 class DummyTranslation(MachineTranslation):
@@ -60,6 +67,13 @@ class DummyTranslation(MachineTranslation):
         if source_language == "en" and text.strip() == "Hello, [X7X]!":
             yield {
                 "text": "Nazdar [X7X ]!",
+                "quality": self.max_score,
+                "service": "Dummy",
+                "source": text,
+            }
+        if source_language == "en" and text.strip() == r"Hello, [X7X] C:\Windows!":
+            yield {
+                "text": r"Nazdar [X7X ] C:\Windows!",
                 "quality": self.max_score,
                 "service": "Dummy",
                 "source": text,

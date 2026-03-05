@@ -18,8 +18,6 @@ SELECTION_ALL_PROTECTED = 4
 
 PERMISSIONS = (
     # Translators: Permission name
-    ("billing.view", gettext_noop("View billing info")),
-    # Translators: Permission name
     ("change.download", gettext_noop("Download changes")),
     # Translators: Permission name
     ("comment.add", gettext_noop("Post comment")),
@@ -72,6 +70,8 @@ PERMISSIONS = (
     # Translators: Permission name
     ("unit.review", gettext_noop("Review strings")),
     # Translators: Permission name
+    ("unit.bulk_edit", gettext_noop("Bulk edit strings")),
+    # Translators: Permission name
     ("unit.override", gettext_noop("Edit string when suggestions are enforced")),
     # Translators: Permission name
     ("unit.template", gettext_noop("Edit source strings")),
@@ -113,6 +113,8 @@ PERMISSIONS = (
     ("vcs.update", gettext_noop("Update the internal repository")),
     # Translators: Permission name
     ("announcement.add", gettext_noop("Post announcements")),
+    # Translators: Permission name
+    ("announcement.delete", gettext_noop("Delete announcements")),
 )
 
 PERMISSION_NAMES = {perm[0] for perm in PERMISSIONS}
@@ -130,9 +132,15 @@ GLOBAL_PERMISSIONS = (
     # Translators: Permission name
     ("group.edit", gettext_noop("Manage teams")),
     # Translators: Permission name
+    ("group.view", gettext_noop("View team info")),
+    # Translators: Permission name
     ("user.edit", gettext_noop("Manage users")),
     # Translators: Permission name
+    ("user.view", gettext_noop("View user info")),
+    # Translators: Permission name
     ("role.edit", gettext_noop("Manage roles")),
+    # Translators: Permission name
+    ("role.view", gettext_noop("View role info")),
     # Translators: Permission name
     ("announcement.edit", gettext_noop("Manage announcements")),
     # Translators: Permission name
@@ -208,6 +216,7 @@ ROLES = (
         TRANSLATE_PERMS
         | {
             "announcement.add",
+            "announcement.delete",
             "translation.add",
             "unit.template",
             "suggestion.delete",
@@ -230,6 +239,10 @@ ROLES = (
         filter_perms("translation.", {"translation.auto"}),
     ),
     (
+        pgettext_noop("Access-control role", "Bulk editing"),
+        {"unit.bulk_edit"},
+    ),
+    (
         pgettext_noop("Access-control role", "Automatic translation"),
         {"translation.auto"},
     ),
@@ -245,7 +258,6 @@ ROLES = (
         pgettext_noop("Access-control role", "Manage repository"),
         filter_perms("vcs.") | {"component.lock"},
     ),
-    (pgettext_noop("Access-control role", "Billing"), filter_perms("billing.")),
     (pgettext_noop("Access-control role", "Add new projects"), {"project.add"}),
 )
 
@@ -300,8 +312,10 @@ ACL_GROUPS = {
         "Per-project access-control team name", "Screenshots"
     ): "Manage screenshots",
     pgettext_noop(
+        "Per-project access-control team name", "Bulk editing"
+    ): "Bulk editing",
+    pgettext_noop(
         "Per-project access-control team name", "Automatic translation"
     ): "Automatic translation",
     pgettext_noop("Per-project access-control team name", "VCS"): "Manage repository",
-    pgettext_noop("Per-project access-control team name", "Billing"): "Billing",
 }

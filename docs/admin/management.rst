@@ -19,15 +19,15 @@ Invoking management commands
 
 As mentioned before, invocation depends on how you installed Weblate.
 
-If using virtualenv for Weblate, you can either specify the full path to
-:command:`weblate`, or activate the virtualenv prior to invoking it:
+If using a Python environment for Weblate, you can either specify the full path to
+:command:`weblate`, or activate the Python environment prior to invoking it:
 
 .. code-block:: sh
 
    # Direct invocation
    ~/weblate-env/bin/weblate
 
-   # Activating virtualenv adds it to search path
+   # Activating Python environment adds it to search path
    . ~/weblate-env/bin/activate
    weblate
 
@@ -40,7 +40,7 @@ To run it:
     python ./manage.py list_versions
 
 If you've installed Weblate using the pip installer, or by using the :file:`./setup.py`
-script, the :command:`weblate` is installed to your path (or virtualenv path),
+script, the :command:`weblate` is installed to your path (or Python environment path),
 from where you can use it to control Weblate:
 
 .. code-block:: sh
@@ -183,6 +183,23 @@ Imports given content into Weblate, useful for benchmarking.
 
    # Display it
    fixefox memray-flamegraph-manage.py.2554179.html
+
+billing_demo
+------------
+
+.. weblate-admin:: billing_demo
+
+.. versionadded:: 5.15
+
+Creates a demo billing project. Can be executed multiple times to add
+additional invoices and billing events.
+
+This can be useful when developing Weblate. Needs :ref:`billing` installed.
+
+.. seealso::
+
+   * :wladmin:`import_demo`
+   * :ref:`devel-demo`
 
 
 celery_queues
@@ -351,6 +368,11 @@ This can be useful when developing Weblate.
 .. weblate-admin-option:: --delete
 
    Removes existing demo project.
+
+.. seealso::
+
+   * :wladmin:`billing_demo`
+   * :ref:`devel-demo`
 
 
 import_json
@@ -730,7 +752,7 @@ list_languages
 Lists supported languages in MediaWiki markup - language codes, English names
 and localized names.
 
-This is used to generate <https://wiki.l10n.cz/Slovn%C3%ADk_s_n%C3%A1zvy_jazyk%C5%AF>.
+This is used to generate <https://www.l10n.cz/wiki/Slovn%C3%ADky/Slovn%C3%ADk_s_n%C3%A1zvy_jazyk%C5%AF/>.
 
 list_machinery
 --------------
@@ -778,6 +800,13 @@ list_file_format_params
 .. weblate-admin:: list_file_format_params
 
 Lists File format parameters.
+
+list_change_events
+------------------
+
+.. weblate-admin:: list_change_events
+
+Lists all possible change event types.
 
 loadpo
 ------

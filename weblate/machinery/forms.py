@@ -225,8 +225,8 @@ class GoogleV3MachineryForm(BaseMachineryForm):
         ),
         widget=forms.Select(
             choices=(
-                ("global ", pgettext_lazy("Google Cloud region", "Global")),
-                ("europe-west1 ", pgettext_lazy("Google Cloud region", "Europe")),
+                ("global", pgettext_lazy("Google Cloud region", "Global")),
+                ("europe-west1", pgettext_lazy("Google Cloud region", "Europe")),
                 ("us-west1", pgettext_lazy("Google Cloud region", "US")),
             )
         ),
@@ -320,7 +320,7 @@ class DeepLMachineryForm(KeyURLMachineryForm):
         ),
         widget=forms.Select(
             choices=(
-                ("default ", "Default"),
+                ("default", "Default"),
                 ("prefer_more", "Formal"),
                 ("prefer_less", "Informal"),
             )
@@ -351,7 +351,18 @@ class DeepLMachineryForm(KeyURLMachineryForm):
     )
 
 
-class BaseOpenAIMachineryForm(KeyMachineryForm):
+class LLMBasicMachineryForm(BaseMachineryForm):
+    base_url = WeblateServiceURLField(
+        label=pgettext_lazy("Automatic suggestion service configuration", "API URL"),
+        required=False,
+    )
+    model = forms.CharField(
+        label=pgettext_lazy(
+            "Automatic suggestion service configuration",
+            "LLM model",
+        ),
+        required=False,
+    )
     persona = forms.CharField(
         label=pgettext_lazy(
             "Automatic suggestion service configuration",
@@ -376,12 +387,18 @@ class BaseOpenAIMachineryForm(KeyMachineryForm):
     )
 
 
+class BaseOpenAIMachineryForm(KeyMachineryForm, LLMBasicMachineryForm):
+    pass
+
+
 class OpenAIMachineryForm(BaseOpenAIMachineryForm):
     # Ordering choices here defines priority for automatic selection
     MODEL_CHOICES = (
         ("auto", pgettext_lazy("OpenAI model selection", "Automatic selection")),
         ("gpt-5-nano", "GPT-5-nano"),
         ("gpt-5-mini", "GPT-5-mini"),
+        ("gpt-5.2", "GPT-5.2"),
+        ("gpt-5.1", "GPT-5.1"),
         ("gpt-5", "GPT-5"),
         ("gpt-4.1-nano", "GPT-4.1-nano"),
         ("gpt-4.1-mini", "GPT-4.1-mini"),
@@ -457,3 +474,92 @@ class AzureOpenAIMachineryForm(BaseOpenAIMachineryForm):
         widget=forms.TextInput,
         help_text=gettext_lazy("The model's unique deployment name."),
     )
+
+
+class OllamaMachineryForm(LLMBasicMachineryForm):
+    base_url = WeblateServiceURLField(
+        label=pgettext_lazy("Automatic suggestion service configuration", "API URL"),
+        help_text=gettext_lazy(
+            "Base URL of the Ollama API, localhost and port 11434 by default."
+        ),
+        initial="http://localhost:11434",
+    )
+    model = forms.CharField(
+        label=pgettext_lazy(
+            "Automatic suggestion service configuration",
+            "Ollama model",
+        ),
+        help_text=gettext_lazy("Name of the model described in Ollama catalogue."),
+        initial="llama3.2:3b",
+    )
+
+
+class AnthropicMachineryForm(KeyMachineryForm, LLMBasicMachineryForm):
+    MODEL_CHOICES = (
+        (
+            "claude-sonnet-4-5",
+            pgettext_lazy(
+                "Anthropic model selection", "Claude Sonnet 4.5 (Recommended)"
+            ),
+        ),
+        (
+            "claude-haiku-4-5",
+            pgettext_lazy("Anthropic model selection", "Claude Haiku 4.5"),
+        ),
+        (
+            "claude-opus-4-5",
+            pgettext_lazy("Anthropic model selection", "Claude Opus 4.5"),
+        ),
+        ("custom", pgettext_lazy("Anthropic model selection", "Custom model")),
+    )
+    base_url = WeblateServiceURLField(
+        label=pgettext_lazy(
+            "Automatic suggestion service configuration",
+            "Anthropic API URL",
+        ),
+        help_text=gettext_lazy(
+            "Base URL of the Anthropic API. Leave empty to use the default URL."
+        ),
+        initial="https://api.anthropic.com",
+        required=False,
+    )
+    model = forms.ChoiceField(
+        label=pgettext_lazy(
+            "Automatic suggestion service configuration",
+            "Anthropic model",
+        ),
+        initial="claude-sonnet-4-5",
+        choices=MODEL_CHOICES,
+    )
+    custom_model = forms.CharField(
+        label=pgettext_lazy(
+            "Anthropic model selection",
+            "Custom model name",
+        ),
+        help_text=gettext_lazy("Only needed when model is set to 'Custom model'"),
+        required=False,
+    )
+    max_tokens = forms.IntegerField(
+        label=pgettext_lazy(
+            "Automatic suggestion service configuration",
+            "Max tokens",
+        ),
+        help_text=gettext_lazy("Maximum number of tokens to generate in the response."),
+        initial=4096,
+        min_value=1,
+        max_value=64000,
+    )
+
+    def clean(self) -> None:
+        """Validate custom_model and model fields."""
+        has_custom_model = bool(self.cleaned_data.get("custom_model"))
+        model = self.cleaned_data.get("model")
+        if model == "custom" and not has_custom_model:
+            raise ValidationError(
+                {"custom_model": gettext("Missing custom model name.")}
+            )
+        if model != "custom" and has_custom_model:
+            raise ValidationError(
+                {"model": gettext("Choose custom model here to enable it.")}
+            )
+        super().clean()

@@ -4,18 +4,25 @@
 
 """Simple mathematical captcha."""
 
+from __future__ import annotations
+
 import ast
 import base64
 import json
 import operator
 import time
 import urllib.parse
+from functools import cache
 from random import SystemRandom
+from typing import TYPE_CHECKING, Literal
 
-from altcha import Challenge, Solution, solve_challenge
+from altcha import solve_challenge
 from django.utils.html import format_html
 
 from weblate.utils.templatetags.icons import icon
+
+if TYPE_CHECKING:
+    from altcha import Challenge, Solution
 
 TIMEDELTA = 600
 
@@ -23,11 +30,26 @@ TIMEDELTA = 600
 OPERATORS = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul}
 
 
+class InvalidOperatorError(ValueError):
+    """Invalid operator for display."""
+
+
+@cache
+def operator_display(name: Literal["+", "-", "*"]) -> str:
+    match name:
+        case "+":
+            return icon("plus.svg")
+        case "-":
+            return icon("minus.svg")
+        case "*":
+            return icon("close.svg")
+    raise InvalidOperatorError
+
+
 class MathCaptcha:
     """Simple match captcha object."""
 
     operators = ("+", "-", "*")
-    operators_display = {}
     interval = (1, 10)
 
     def __init__(self, question=None, timestamp=None) -> None:
@@ -39,12 +61,6 @@ class MathCaptcha:
             self.timestamp = time.time()
         else:
             self.timestamp = timestamp
-        if not self.operators_display:
-            self.operators_display = {
-                "+": icon("plus.svg"),
-                "-": icon("minus.svg"),
-                "*": icon("close.svg"),
-            }
 
     def generate_question(self):
         """Generate random question."""
@@ -57,7 +73,7 @@ class MathCaptcha:
         if operation == "-":
             first += self.interval[1]
 
-        return str(first) + " " + operation + " " + str(second)
+        return f"{first!s} {operation} {second!s}"
 
     @staticmethod
     def unserialize(value):
@@ -81,9 +97,7 @@ class MathCaptcha:
     def display(self):
         """Get unicode for display."""
         parts = self.question.split()
-        return format_html(
-            "{} {} {}", parts[0], self.operators_display[parts[1]], parts[2]
-        )
+        return format_html("{} {} {}", parts[0], operator_display(parts[1]), parts[2])
 
 
 def eval_expr(expr):

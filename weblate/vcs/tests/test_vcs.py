@@ -9,7 +9,10 @@ import os.path
 import re
 import shutil
 import tempfile
-from typing import Any, NoReturn
+from os import utime
+from pathlib import Path
+from time import time
+from typing import TYPE_CHECKING, Any, ClassVar, NoReturn
 from unittest.mock import patch
 
 import responses
@@ -20,7 +23,7 @@ from responses import matchers
 
 from weblate.trans.models import Component, Project
 from weblate.trans.tests.utils import RepoTestMixin, TempDirMixin
-from weblate.vcs.base import Repository, RepositoryError
+from weblate.vcs.base import RepositoryError
 from weblate.vcs.git import (
     AzureDevOpsRepository,
     BitbucketCloudRepository,
@@ -36,6 +39,9 @@ from weblate.vcs.git import (
     SubversionRepository,
 )
 from weblate.vcs.mercurial import HgRepository
+
+if TYPE_CHECKING:
+    from weblate.vcs.base import Repository
 
 
 class AzureDevOpsFakeRepository(AzureDevOpsRepository):
@@ -123,7 +129,7 @@ class VCSGitTest(TestCase, RepoTestMixin, TempDirMixin):
     _class: type[Repository] = GitRepository
     _vcs = "git"
     _sets_push = True
-    _remote_branches = ["main", "translations"]
+    _remote_branches: ClassVar[list[str]] = ["main", "translations"]
     _remote_branch = "main"
 
     def setUp(self) -> None:
@@ -165,7 +171,9 @@ class VCSGitTest(TestCase, RepoTestMixin, TempDirMixin):
             repo = self._class(
                 tempdir, branch=self._remote_branch, component=self.get_fake_component()
             )
+            self.assertFalse(repo.is_valid())
             with repo.lock:
+                repo.clone_from(self.get_remote_repo_url())
                 repo.configure_remote(
                     self.get_remote_repo_url(),
                     "",
@@ -198,8 +206,9 @@ class VCSGitTest(TestCase, RepoTestMixin, TempDirMixin):
                 else:
                     filename = "testfile" if conflict else "test2"
                     # Create test file
-                    with open(os.path.join(tempdir, filename), "w") as handle:
-                        handle.write("SECOND TEST FILE\n")
+                    Path(os.path.join(tempdir, filename)).write_text(
+                        "SECOND TEST FILE\n", encoding="utf-8"
+                    )
                     filenames = [filename]
 
                 # Commit it
@@ -325,7 +334,9 @@ class VCSGitTest(TestCase, RepoTestMixin, TempDirMixin):
 
     def test_needs_commit(self) -> None:
         self.assertFalse(self.repo.needs_commit())
-        with open(os.path.join(self.tempdir, "README.md"), "a") as handle:
+        with open(
+            os.path.join(self.tempdir, "README.md"), "a", encoding="utf-8"
+        ) as handle:
             handle.write("CHANGE")
         self.assertTrue(self.repo.needs_commit())
         self.assertTrue(self.repo.needs_commit(["README.md"]))
@@ -377,8 +388,7 @@ class VCSGitTest(TestCase, RepoTestMixin, TempDirMixin):
         with self.repo.lock:
             self.repo.set_committer(committer, "foo@example.net")
         # Create test file
-        with open(os.path.join(self.tempdir, "testfile"), "wb") as handle:
-            handle.write(b"TEST FILE\n")
+        Path(os.path.join(self.tempdir, "testfile")).write_bytes(b"TEST FILE\n")
 
         oldrev = self.repo.last_revision
         # Commit it
@@ -494,18 +504,6 @@ class VCSGitTest(TestCase, RepoTestMixin, TempDirMixin):
         self.assertIn("msgid", self.repo.get_file("po/cs.po", self.repo.last_revision))
 
     def test_remote_branches(self) -> None:
-        # The initial setup clones just single branch
-        self.assertEqual(
-            [self._remote_branch] if self._remote_branches else [],
-            self.repo.list_remote_branches(),
-        )
-
-        # Full configure adds all other branches
-        with self.repo.lock:
-            self.repo.configure_remote(
-                self.get_remote_repo_url(), "", self.repo.branch, fast=False
-            )
-            self.repo.update_remote()
         self.assertEqual(self._remote_branches, self.repo.list_remote_branches())
 
     def test_remote_branch(self) -> None:
@@ -517,6 +515,14 @@ class VCSGitForcePushTest(VCSGitTest):
 
 
 class VCSGitUpstreamTest(VCSGitTest):
+    _repo_override: str = ""
+
+    def setUp(self) -> None:
+        super().setUp()
+        # Set repo URL to match configured credentials
+        if self._repo_override:
+            self.repo.component.repo = self._repo_override
+
     def add_remote_commit(self, conflict=False, rename=False) -> None:
         # Use Git to create changed upstream repo
         backup = self._class
@@ -534,6 +540,7 @@ class VCSGiteaTest(VCSGitUpstreamTest):
     _class = GiteaFakeRepository
     _vcs = "git"
     _sets_push = False
+    _repo_override = "https://try.gitea.io/WeblateOrg/test.git"
 
     def mock_responses(self, pr_response, pr_status=200) -> None:
         """
@@ -627,8 +634,6 @@ class VCSGiteaTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_push(self, branch: str = "") -> None:
-        self.repo.component.repo = "https://try.gitea.io/WeblateOrg/test.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -645,8 +650,6 @@ class VCSGiteaTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_pull_request_error(self, branch: str = "") -> None:
-        self.repo.component.repo = "https://try.gitea.io/WeblateOrg/test.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -664,8 +667,6 @@ class VCSGiteaTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_pull_request_exists(self, branch: str = "") -> None:
-        self.repo.component.repo = "https://try.gitea.io/WeblateOrg/test.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -703,13 +704,10 @@ class VCSAzureDevOpsTest(VCSGitUpstreamTest):
     _vcs = "git"
     _sets_push = False
     _mock_push_to_fork = None
+    _repo_override = "https://dev.azure.com/organization/WeblateOrg/test.git"
 
     def setUp(self) -> None:
         super().setUp()
-        self.repo.component.repo = (
-            "https://dev.azure.com/organization/WeblateOrg/test.git"
-        )
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -1063,6 +1061,7 @@ class VCSGitHubTest(VCSGitUpstreamTest):
     _class = GithubFakeRepository
     _vcs = "git"
     _sets_push = False
+    _repo_override = "https://github.com/WeblateOrg/test.git"
 
     def mock_responses(self, pr_response, pr_status=200) -> None:
         """
@@ -1076,7 +1075,13 @@ class VCSGitHubTest(VCSGitUpstreamTest):
             json={
                 "ssh_url": "git@github.com:test/test.git",
                 "clone_url": "https://github.com/test/test.git",
+                "url": "https://api.github.com/repos/test/test",
             },
+        )
+        responses.add(
+            responses.PUT,
+            "https://api.github.com/repos/test/test/actions/permissions",
+            status=204,
         )
         responses.add(
             responses.POST,
@@ -1164,8 +1169,6 @@ class VCSGitHubTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_push(self, branch: str = "") -> None:
-        self.repo.component.repo = "https://github.com/WeblateOrg/test.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -1182,8 +1185,6 @@ class VCSGitHubTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_pull_request_error(self, branch: str = "") -> None:
-        self.repo.component.repo = "https://github.com/WeblateOrg/test.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -1201,8 +1202,6 @@ class VCSGitHubTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_pull_request_exists(self, branch: str = "") -> None:
-        self.repo.component.repo = "https://github.com/WeblateOrg/test.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -1243,6 +1242,7 @@ class VCSGitLabTest(VCSGitUpstreamTest):
     _class = GitLabFakeRepository
     _vcs = "git"
     _sets_push = False
+    _repo_override = "https://gitlab.com/WeblateOrg/test.git"
 
     def mock_fork_responses(self, get_forks, repo_state=200) -> None:
         if repo_state == 409:
@@ -1467,8 +1467,6 @@ class VCSGitLabTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_push(self, branch: str = "") -> None:
-        self.repo.component.repo = "https://gitlab.com/WeblateOrg/test.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -1488,8 +1486,6 @@ class VCSGitLabTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_push_with_existing_fork(self, branch: str = "") -> None:
-        self.repo.component.repo = "https://gitlab.com/WeblateOrg/test.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -1523,8 +1519,6 @@ class VCSGitLabTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_push_duplicate_repo_name(self, branch: str = "") -> None:
-        self.repo.component.repo = "https://gitlab.com/WeblateOrg/test.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -1552,8 +1546,6 @@ class VCSGitLabTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_push_rejected(self, branch: str = "") -> None:
-        self.repo.component.repo = "https://gitlab.com/WeblateOrg/test.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -1582,8 +1574,6 @@ class VCSGitLabTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_pull_request_error(self, branch: str = "") -> None:
-        self.repo.component.repo = "https://gitlab.com/WeblateOrg/test.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -1600,8 +1590,6 @@ class VCSGitLabTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_pull_request_exists(self, branch: str = "") -> None:
-        self.repo.component.repo = "https://gitlab.com/WeblateOrg/test.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -1618,6 +1606,56 @@ class VCSGitLabTest(VCSGitUpstreamTest):
         super().test_push(branch)
         mock_push_to_fork.stop()
 
+    def test_count_outgoing_after_merge(self) -> None:
+        """Test that count_outgoing correctly detects no pending changes after merge."""
+        # Make a commit locally
+        self.test_commit()
+
+        # Verify there are outgoing commits before any push/merge
+        initial_count = self.repo.count_outgoing()
+        self.assertGreater(initial_count, 0)
+
+        # Scenario 1: Simulate the commit being pushed to fork
+        # The fork branch name is from get_fork_branch_name() method
+        credentials = self.repo.get_credentials()
+        fork_branch_name = self.repo.get_fork_branch_name()
+        fork_ref = f"refs/remotes/{credentials['username']}/{fork_branch_name}"
+        self.repo.execute(["update-ref", fork_ref, "HEAD"], needs_lock=False)
+
+        # count_outgoing should now be 0 since fork has our commits
+        # (even though origin doesn't yet - MR is pending)
+        self.assertEqual(self.repo.count_outgoing(), 0)
+
+        # Scenario 2: Simulate the merge request being merged to origin
+        # In a real scenario, after a merge request is merged and git fetch is done,
+        # origin/{branch} would contain the local commits
+        origin_ref = f"refs/remotes/origin/{self.repo.branch}"
+        self.repo.execute(["update-ref", origin_ref, "HEAD"], needs_lock=False)
+
+        # count_outgoing should still return 0 since origin has our commits
+        self.assertEqual(self.repo.count_outgoing(), 0)
+
+        # Verify with explicit branch parameter
+        self.assertEqual(self.repo.count_outgoing(self.repo.branch), 0)
+
+    def test_count_outgoing_non_default_branch(self) -> None:
+        """Test count_outgoing with non-default branch doesn't check fork."""
+        # Make a commit locally
+        self.test_commit()
+
+        # When called with a different branch than self.branch,
+        # should_use_fork() returns False, so fork checking is skipped
+        # Create a different branch name
+        different_branch = "develop" if self.repo.branch != "develop" else "feature"
+
+        # Update origin ref for the different branch
+        origin_ref = f"refs/remotes/origin/{different_branch}"
+        self.repo.execute(["update-ref", origin_ref, "HEAD"], needs_lock=False)
+
+        # count_outgoing with different branch should return 0
+        # (commits are in origin for that branch, fork not checked)
+        self.assertEqual(self.repo.count_outgoing(different_branch), 0)
+
 
 @override_settings(
     PAGURE_CREDENTIALS={"pagure.io": {"username": "test", "token": "token"}}
@@ -1626,6 +1664,7 @@ class VCSPagureTest(VCSGitUpstreamTest):
     _class = PagureFakeRepository
     _vcs = "git"
     _sets_push = False
+    _repo_override = "https://pagure.io/testrepo.git"
 
     def mock_responses(self, pr_response: dict, existing_response: dict) -> None:
         """Mock response helper function."""
@@ -1656,8 +1695,6 @@ class VCSPagureTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_push(self, branch: str = "") -> None:
-        self.repo.component.repo = "https://pagure.io/testrepo.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -1676,8 +1713,6 @@ class VCSPagureTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_push_with_existing_fork(self, branch: str = "") -> None:
-        self.repo.component.repo = "https://pagure.io/testrepo.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -1705,8 +1740,6 @@ class VCSPagureTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_push_with_existing_request(self, branch: str = "") -> None:
-        self.repo.component.repo = "https://pagure.io/testrepo.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -1743,8 +1776,7 @@ class VCSGerritTest(VCSGitUpstreamTest):
         # Create commit-msg hook, so that git-review doesn't try
         # to create one
         hook = os.path.join(repo.path, ".git", "hooks", "commit-msg")
-        with open(hook, "w") as handle:
-            handle.write("#!/bin/sh\nexit 0\n")
+        Path(hook).write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
         os.chmod(hook, 0o755)  # noqa: S103, nosec
 
     def test_set_gitreview_username_git(self) -> None:
@@ -1781,7 +1813,7 @@ class VCSGerritTest(VCSGitUpstreamTest):
 class VCSSubversionTest(VCSGitTest):
     _class = SubversionRepository
     _vcs = "subversion"
-    _remote_branches = []
+    _remote_branches: ClassVar[list[str]] = []
     _remote_branch = "master"
 
     def test_clone(self) -> None:
@@ -1832,7 +1864,7 @@ class VCSHgTest(VCSGitTest):
 
     _class = HgRepository
     _vcs = "mercurial"
-    _remote_branches = []
+    _remote_branches: ClassVar[list[str]] = []
     _remote_branch = "default"
 
     def test_configure_remote(self) -> None:
@@ -1871,7 +1903,7 @@ class VCSLocalTest(VCSGitTest):
 
     _class = LocalRepository
     _vcs = "local"
-    _remote_branches = []
+    _remote_branches: ClassVar[list[str]] = []
     _remote_branch = "main"
 
     @classmethod
@@ -1916,6 +1948,36 @@ class VCSLocalTest(VCSGitTest):
     def test_configure_remote_no_push(self) -> NoReturn:
         self.skipTest("Not supported")
 
+    def test_should_retry_popen(self) -> None:
+        # This really belongs to the Git class, but we want to test it just once
+        tempdir = Path(tempfile.mkdtemp())
+        try:
+            gitdir = tempdir / ".git"
+            gitdir.mkdir()
+            lockfile = gitdir / "HEAD.lock"
+            lockfile.touch()
+            past_timestamp = time() - 7200
+            utime(lockfile, (past_timestamp, past_timestamp))
+            self.assertFalse(
+                self.repo.should_retry_popen(f"""
+fatal: cannot lock ref 'HEAD': Unable to create '/nonexisting/{lockfile}': File exists.
+""")
+            )
+
+            self.assertTrue(
+                self.repo.should_retry_popen(f"""
+fatal: cannot lock ref 'HEAD': Unable to create '{lockfile}': File exists.
+
+Another git process seems to be running in this repository, e.g.
+an editor opened by 'git commit'. Please make sure all processes
+are terminated then try again. If it still fails, a git process
+may have crashed in this repository earlier:
+remove the file manually to continue.
+""")
+            )
+        finally:
+            shutil.rmtree(tempdir)
+
 
 @override_settings(
     BITBUCKETSERVER_CREDENTIALS={
@@ -1928,8 +1990,11 @@ class VCSBitbucketServerTest(VCSGitUpstreamTest):
     _sets_push = False
 
     _bbhost = "https://api.selfhosted.com"
-    _bb_api_error_stub = {"errors": [{"context": "<string>", "message": "<string>"}]}
-    _bb_fork_stub = {
+    _repo_override = f"{_bbhost}/bb_pk/bb_repo.git"
+    _bb_api_error_stub: ClassVar[dict] = {
+        "errors": [{"context": "<string>", "message": "<string>"}]
+    }
+    _bb_fork_stub: ClassVar[dict] = {
         "id": "222",
         "slug": "bb_fork",
         "project": {"key": "bb_fork_pk"},
@@ -2096,8 +2161,6 @@ class VCSBitbucketServerTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_default_reviewers_repo_error(self) -> None:
-        self.repo.component.repo = f"{self._bbhost}/bb_pk/bb_repo.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -2118,8 +2181,6 @@ class VCSBitbucketServerTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_default_reviewers_error(self) -> None:
-        self.repo.component.repo = f"{self._bbhost}/bb_pk/bb_repo.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -2142,8 +2203,6 @@ class VCSBitbucketServerTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_push(self, branch: str = "") -> None:
-        self.repo.component.repo = f"{self._bbhost}/bb_pk/bb_repo.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -2161,8 +2220,6 @@ class VCSBitbucketServerTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_push_with_existing_pr(self, branch: str = "") -> None:
-        self.repo.component.repo = f"{self._bbhost}/bb_pk/bb_repo.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -2180,8 +2237,6 @@ class VCSBitbucketServerTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_push_pr_error_response(self, branch: str = "") -> None:
-        self.repo.component.repo = f"{self._bbhost}/bb_pk/bb_repo.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -2200,8 +2255,6 @@ class VCSBitbucketServerTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_push_with_existing_fork(self, branch: str = "") -> None:
-        self.repo.component.repo = f"{self._bbhost}/bb_pk/bb_repo.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -2220,8 +2273,6 @@ class VCSBitbucketServerTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_create_fork_unexpected_fail(self, branch: str = "") -> None:
-        self.repo.component.repo = f"{self._bbhost}/bb_pk/bb_repo.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -2237,8 +2288,6 @@ class VCSBitbucketServerTest(VCSGitUpstreamTest):
 
     @responses.activate
     def test_existing_fork_not_found(self, branch: str = "") -> None:
-        self.repo.component.repo = f"{self._bbhost}/bb_pk/bb_repo.git"
-
         # Patch push_to_fork() function because we don't want to actually
         # make a git push request
         mock_push_to_fork_patcher = patch(
@@ -2269,6 +2318,7 @@ class VCSBitbucketCloudTest(VCSGitUpstreamTest):
     _vcs = "git"
     _sets_push = False
     _apihost = "bitbucket.org"
+    _repo_override = "git@bitbucket.org:WeblateOrg/test.git"
 
     def mock_responses(self) -> None:
         """
@@ -2354,7 +2404,6 @@ class VCSBitbucketCloudTest(VCSGitUpstreamTest):
     @responses.activate
     def test_push(self, branch: str = "") -> None:
         """Test push to bitbucket cloud."""
-        self.repo.component.repo = "git@bitbucket.org:WeblateOrg/test.git"
         self.mock_responses()
         with patch("weblate.vcs.git.GitMergeRequestBase.push_to_fork", return_value=""):
             super().test_push(branch)
@@ -2362,7 +2411,6 @@ class VCSBitbucketCloudTest(VCSGitUpstreamTest):
     @responses.activate
     def test_push_with_http(self, branch: str = "") -> None:
         """Test push to bitbucket cloud with HTTP repo link."""
-        self.repo.component.repo = "https://bitbucket.org/WeblateOrg/test.git"
         self.mock_responses()
         with patch("weblate.vcs.git.GitMergeRequestBase.push_to_fork", return_value=""):
             super().test_push(branch)
@@ -2370,8 +2418,6 @@ class VCSBitbucketCloudTest(VCSGitUpstreamTest):
     @responses.activate
     def test_push_with_missing_permission(self, branch: str = "") -> None:
         """Test push with missing permission for App Password."""
-        self.repo.component.repo = "git@bitbucket.org:WeblateOrg/test.git"
-
         self.mock_responses()
         responses.replace(
             responses.POST,
@@ -2397,7 +2443,6 @@ class VCSBitbucketCloudTest(VCSGitUpstreamTest):
     @responses.activate
     def test_default_reviewers_error(self, branch: str = "") -> None:
         """Test default reviewers error, push expected to be successful."""
-        self.repo.component.repo = "git@bitbucket.org:WeblateOrg/test.git"
         self.mock_responses()
 
         responses.replace(
@@ -2421,7 +2466,6 @@ class VCSBitbucketCloudTest(VCSGitUpstreamTest):
     @responses.activate
     def test_paginated_reviewers_list(self, branch: str = "") -> None:
         """Test the 'build_full_paginated_result' with default reviewers list."""
-        self.repo.component.repo = "git@bitbucket.org:WeblateOrg/test.git"
         self.mock_responses()
 
         responses.replace(
@@ -2472,7 +2516,6 @@ class VCSBitbucketCloudTest(VCSGitUpstreamTest):
     @responses.activate
     def test_push_nothing_to_merge(self, branch: str = "") -> None:
         """Test push to bitbucket cloud with no changes to be merged."""
-        self.repo.component.repo = "git@bitbucket.org:WeblateOrg/test.git"
         self.mock_responses()
 
         responses.replace(
@@ -2491,7 +2534,6 @@ class VCSBitbucketCloudTest(VCSGitUpstreamTest):
     @responses.activate
     def test_fork_already_exists(self, branch: str = "") -> None:
         """Test push to bitbucket cloud with HTTP repo link."""
-        self.repo.component.repo = "git@bitbucket.org:WeblateOrg/test.git"
         self.mock_responses()
 
         responses.replace(
@@ -2529,7 +2571,6 @@ class VCSBitbucketCloudTest(VCSGitUpstreamTest):
     @responses.activate
     def test_fork_name_already_taken(self, branch: str = "") -> None:
         """Test push to bitbucket cloud with HTTP repo link."""
-        self.repo.component.repo = "git@bitbucket.org:WeblateOrg/test.git"
         responses.add(
             responses.POST,
             "https://api.bitbucket.org/2.0/repositories/WeblateOrg/test/forks",
@@ -2551,7 +2592,6 @@ class VCSBitbucketCloudTest(VCSGitUpstreamTest):
     @responses.activate
     def test_fork_error(self, branch: str = "") -> None:
         """Test push to bitbucket cloud with HTTP repo link."""
-        self.repo.component.repo = "git@bitbucket.org:WeblateOrg/test.git"
         self.mock_responses()
         responses.replace(
             responses.POST,

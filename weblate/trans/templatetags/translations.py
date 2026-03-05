@@ -6,20 +6,20 @@ from __future__ import annotations
 import json
 import re
 from collections import defaultdict
-from collections.abc import Iterable
 from datetime import date, datetime
 from html import escape as html_escape
 from typing import TYPE_CHECKING
 
-from django import forms, template
+from django import template
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.humanize.templatetags.humanize import intcomma
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.formats import date_format
 from django.utils.formats import number_format as django_number_format
 from django.utils.html import escape, format_html, format_html_join, linebreaks, urlize
-from django.utils.safestring import SafeString, mark_safe
+from django.utils.safestring import mark_safe
 from django.utils.translation import gettext, gettext_lazy, ngettext, pgettext
 from siphashc import siphash
 
@@ -32,12 +32,9 @@ from weblate.lang.models import Language
 from weblate.trans.filter import FILTERS, get_filter_choice
 from weblate.trans.forms import FieldDocsMixin
 from weblate.trans.models import (
-    Alert,
     Announcement,
     Category,
-    Change,
     Component,
-    ComponentList,
     ContributorAgreement,
     Project,
     Translation,
@@ -58,7 +55,6 @@ from weblate.utils.stats import (
     CategoryLanguage,
     GhostCategoryLanguageStats,
     GhostProjectLanguageStats,
-    GhostStats,
     ProjectLanguage,
 )
 from weblate.utils.templatetags.icons import icon
@@ -67,12 +63,21 @@ from weblate.utils.views import SORT_CHOICES
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable
 
+    from django import forms
     from django.db.models import Model, QuerySet
-    from django.forms.boundfield import BoundField
     from django.template.context import Context
+    from django.utils.safestring import SafeString
     from django_stubs_ext import StrOrPromise
 
     from weblate.metrics.wrapper import MetricsWrapper
+    from weblate.trans.models import (
+        Alert,
+        Change,
+        ComponentList,
+    )
+    from weblate.utils.stats import (
+        GhostStats,
+    )
 
 register = template.Library()
 
@@ -171,6 +176,8 @@ class Formatter:
                 # Rearrange space highlighting
                 move_space = False
                 start_space = -1
+                start_nl = -1
+                append_end = True
                 if offset in self.tags:
                     for pos, tag in enumerate(self.tags[offset]):
                         if tag == SPACE_MIDDLE_2:
@@ -179,6 +186,9 @@ class Formatter:
                             break
                         if tag == SPACE_START:
                             start_space = pos
+                            break
+                        if tag == SPACE_NL_START:
+                            start_nl = pos
                             break
 
                 if start_space != -1:
@@ -200,11 +210,21 @@ class Formatter:
                     if start_space != -1 and last_middle is not None:
                         self.tags[tagoffset][pos] = SPACE_MIDDLE_1
 
+                elif start_nl != -1:
+                    # The line break is always one char wide, so we do not
+                    # need the complex logic used for generic whitespace
+                    start_tag = self.tags[offset].pop(start_nl)
+                    self.tags[end].insert(0, "<ins>")
+                    self.tags[end].insert(1, start_tag)
+                    self.tags[end].append("</ins>")
+                    append_end = False
+
                 else:
                     self.tags[offset].append("<ins>")
                 if move_space:
                     self.tags[offset].append(SPACE_START)
-                self.tags[end].append("</ins>")
+                if append_end:
+                    self.tags[end].append("</ins>")
                 if start_space != -1:
                     self.tags[end].append(SPACE_START)
 
@@ -667,19 +687,7 @@ def documentation(context: Context, page, anchor=""):
     return get_doc_url(page, anchor, user=user)
 
 
-def render_documentation_icon(doc_url: str | None, *, right: bool = False) -> str:
-    if not doc_url:
-        return ""
-    return format_html(
-        """<a class="{} doc-link" href="{}" title="{}" target="_blank" rel="noopener" tabindex="-1">{}</a>""",
-        "pull-right flip" if right else "",
-        doc_url,
-        gettext("Documentation"),
-        icon("info.svg"),
-    )
-
-
-def render_documentation_icon5(doc_url: str, *, right: bool = False):
+def render_documentation_icon(doc_url: str, *, right: bool = False):
     if not doc_url:
         return ""
     return format_html(
@@ -694,15 +702,8 @@ def render_documentation_icon5(doc_url: str, *, right: bool = False):
 @register.simple_tag(takes_context=True)
 def documentation_icon(
     context: Context, page: str, anchor: str = "", right: bool = False
-) -> str:
-    return render_documentation_icon(documentation(context, page, anchor), right=right)
-
-
-@register.simple_tag(takes_context=True)
-def documentation_icon5(
-    context: Context, page: str, anchor: str = "", right: bool = False
 ):
-    return render_documentation_icon5(documentation(context, page, anchor), right=right)
+    return render_documentation_icon(documentation(context, page, anchor), right=right)
 
 
 @register.simple_tag(takes_context=True)
@@ -725,118 +726,8 @@ def show_message(tags, message):
     return {"tags": " ".join(final), "task_id": task_id, "message": message}
 
 
-def naturaltime_past(value, now):
-    """Convert past dates to natural time."""
-    delta = now - value
-
-    if delta.days >= 365:
-        count = delta.days // 365
-        if count == 1:
-            return gettext("a year ago")
-        return ngettext("%(count)s year ago", "%(count)s years ago", count) % {
-            "count": count
-        }
-    if delta.days >= 30:
-        count = delta.days // 30
-        if count == 1:
-            return gettext("a month ago")
-        return ngettext("%(count)s month ago", "%(count)s months ago", count) % {
-            "count": count
-        }
-    if delta.days >= 14:
-        count = delta.days // 7
-        return ngettext("%(count)s week ago", "%(count)s weeks ago", count) % {
-            "count": count
-        }
-    if delta.days > 0:
-        if delta.days == 7:
-            return gettext("a week ago")
-        if delta.days == 1:
-            return gettext("yesterday")
-        return ngettext("%(count)s day ago", "%(count)s days ago", delta.days) % {
-            "count": delta.days
-        }
-    if delta.seconds == 0:
-        return gettext("now")
-    if delta.seconds < 60:
-        if delta.seconds == 1:
-            return gettext("a second ago")
-        return ngettext(
-            "%(count)s second ago", "%(count)s seconds ago", delta.seconds
-        ) % {"count": delta.seconds}
-    if delta.seconds // 60 < 60:
-        count = delta.seconds // 60
-        if count == 1:
-            return gettext("a minute ago")
-        return ngettext("%(count)s minute ago", "%(count)s minutes ago", count) % {
-            "count": count
-        }
-    count = delta.seconds // 60 // 60
-    if count == 1:
-        return gettext("an hour ago")
-    return ngettext("%(count)s hour ago", "%(count)s hours ago", count) % {
-        "count": count
-    }
-
-
-def naturaltime_future(value, now):
-    """Convert future dates to natural time."""
-    delta = value - now
-
-    if delta.days >= 365:
-        count = delta.days // 365
-        if count == 1:
-            return gettext("a year from now")
-        return ngettext(
-            "%(count)s year from now", "%(count)s years from now", count
-        ) % {"count": count}
-    if delta.days >= 30:
-        count = delta.days // 30
-        if count == 1:
-            return gettext("a month from now")
-        return ngettext(
-            "%(count)s month from now", "%(count)s months from now", count
-        ) % {"count": count}
-    if delta.days >= 14:
-        count = delta.days // 7
-        return ngettext(
-            "%(count)s week from now", "%(count)s weeks from now", count
-        ) % {"count": count}
-    if delta.days > 0:
-        if delta.days == 1:
-            return gettext("tomorrow")
-        if delta.days == 7:
-            return gettext("a week from now")
-        return ngettext(
-            "%(count)s day from now", "%(count)s days from now", delta.days
-        ) % {"count": delta.days}
-    if delta.seconds == 0:
-        return gettext("now")
-    if delta.seconds < 60:
-        if delta.seconds == 1:
-            return gettext("a second from now")
-        return ngettext(
-            "%(count)s second from now", "%(count)s seconds from now", delta.seconds
-        ) % {"count": delta.seconds}
-    if delta.seconds // 60 < 60:
-        count = delta.seconds // 60
-        if count == 1:
-            return gettext("a minute from now")
-        return ngettext(
-            "%(count)s minute from now", "%(count)s minutes from now", count
-        ) % {"count": count}
-    count = delta.seconds // 60 // 60
-    if count == 1:
-        return gettext("an hour from now")
-    return ngettext("%(count)s hour from now", "%(count)s hours from now", count) % {
-        "count": count
-    }
-
-
 @register.filter(is_safe=True)
-def naturaltime(
-    value: float | datetime, microseconds: bool = False, *, now: datetime | None = None
-):
+def naturaltime(value: float | datetime, microseconds: bool = False) -> SafeString:
     """
     Heavily based on Django's django.contrib.humanize implementation of naturaltime.
 
@@ -850,23 +741,15 @@ def naturaltime(
     if not isinstance(value, date):
         return value
 
-    # Default to current timestamp
-    if now is None:
-        now = timezone.now()
-
-    if value < now:
-        text = naturaltime_past(value, now)
-    else:
-        text = naturaltime_future(value, now)
-
     # Strip microseconds
     if isinstance(value, datetime) and not microseconds:
         value = value.replace(microsecond=0)
 
     return format_html(
-        '<span title="{}">{}</span>',
+        '<span title="{}" data-datetime="{}" class="naturaltime">{}</span>',
+        date_format(value, "SHORT_DATETIME_FORMAT"),
         timezone.localtime(value).isoformat(),
-        text,
+        date_format(value, "SHORT_DATE_FORMAT"),
     )
 
 
@@ -905,13 +788,15 @@ def translation_progress_render(
     if approved_percent > 0.1:
         approved_tag = format_html(
             """
-            <div class="progress-bar"
-                role="progressbar"
-                aria-valuenow="{approved}"
-                aria-valuemin="0"
-                aria-valuemax="100"
-                style="width: {approved}%"
-                title="{title}"></div>
+            <div class="progress"
+                 role="progressbar"
+                 aria-valuenow="{approved}"
+                 aria-valuemin="0"
+                 aria-valuemax="100"
+                 style="width: {approved}%"
+                 title="{title}">
+                    <div class="progress-bar"></div>
+            </div>
             """,
             approved=f"{approved_percent:.1f}",
             title=gettext("Approved"),
@@ -919,20 +804,22 @@ def translation_progress_render(
     if good_percent > 0.1:
         good_tag = format_html(
             """
-            <div class="progress-bar progress-bar-success"
-                role="progressbar"
-                aria-valuenow="{good}"
-                aria-valuemin="0"
-                aria-valuemax="100"
-                style="width: {good}%"
-                title="{title}"></div>
+            <div class="progress"
+                 role="progressbar"
+                 aria-valuenow="{good}"
+                 aria-valuemin="0"
+                 aria-valuemax="100"
+                 style="width: {good}%"
+                 title="{title}">
+                    <div class="progress-bar progress-bar-success"></div>
+            </div>
             """,
             good=f"{good_percent:.1f}",
             title=gettext("Translated without any problems"),
         )
 
     return format_html(
-        """<div class="progress" title="{}">{}{}</div>""",
+        """<div class="progress-stacked" title="{}">{}{}</div>""",
         gettext("Needs attention"),
         approved_tag,
         good_tag,
@@ -993,26 +880,19 @@ def unit_state_title(unit) -> str:
     checks = unit.active_checks
     if checks:
         state.append(
-            "{} {}".format(
-                pgettext("String state", "Failing checks:"),
-                format_html_join_comma(
-                    "{}",
-                    list_to_tuples(checks),
-                ),
-            )
+            f"{pgettext('String state', 'Failing checks:')} {format_html_join_comma('{}', list_to_tuples(checks))}"
         )
     checks = unit.dismissed_checks
     if checks:
         state.append(
-            "{} {}".format(
-                pgettext("String state", "Dismissed checks:"),
-                format_html_join_comma("{}", list_to_tuples(checks)),
-            )
+            f"{pgettext('String state', 'Dismissed checks:')} {format_html_join_comma('{}', list_to_tuples(checks))}"
         )
     if unit.has_comment:
         state.append(pgettext("String state", "Commented"))
     if unit.has_suggestion:
         state.append(pgettext("String state", "Suggested"))
+    if unit.automatically_translated:
+        state.append(pgettext("String state", "Automatically translated"))
     if "forbidden" in unit.all_flags:
         state.append(gettext("This translation is forbidden."))
     return "; ".join(state)
@@ -1088,7 +968,10 @@ def announcements(context: Context, project=None, component=None, language=None)
                         "message": render_markdown(announcement.message),
                         "announcement": announcement,
                         "can_delete": user.has_perm(
-                            "announcement.delete", announcement
+                            "announcement.delete",
+                            announcement.component
+                            if announcement.component is not None
+                            else announcement.project,
                         ),
                     },
                 ),
@@ -1108,9 +991,8 @@ def active_tab(context: Context, slug):
 
 @register.simple_tag(takes_context=True)
 def active_link(context: Context, slug):
-    if slug == context["active_tab_slug"]:
-        return mark_safe('class="active"')
-    return ""
+    active = "active" if slug == context["active_tab_slug"] else ""
+    return format_html('class="nav-link {}"', active)
 
 
 def _needs_agreement(component, user: User) -> bool:
@@ -1182,7 +1064,7 @@ def init_unique_row_id(context) -> str:
 @register.simple_tag(takes_context=True)
 def get_unique_row_id(context: Context, obj):
     """Get unique row ID for multiline tables."""
-    return "{}-{}".format(context["row_uuid"], obj.pk)
+    return f"{context['row_uuid']}-{obj.pk}"
 
 
 @register.simple_tag
@@ -1217,7 +1099,7 @@ def component_alerts(
         yield (
             "state/alert.svg",
             gettext("Fix this component to clear its alerts."),
-            component.get_absolute_url() + "#alerts",
+            f"{component.get_absolute_url()}#alerts",
         )
 
     if component.locked:
@@ -1227,8 +1109,7 @@ def component_alerts(
         yield (
             "state/update.svg",
             gettext("Updating translation component…"),
-            reverse("show_progress", kwargs={"path": component.get_url_path()})
-            + "?info=1",
+            f"{reverse('show_progress', kwargs={'path': component.get_url_path()})}?info=1",
         )
 
 
@@ -1324,7 +1205,7 @@ def indicate_alerts(
     project: Project | None = None
     project_language: ProjectLanguage | None = None
 
-    if isinstance(obj, Translation | GhostTranslation):
+    if isinstance(obj, (Translation, GhostTranslation)):
         translation = obj
         component = obj.component
         project = component.project
@@ -1382,30 +1263,6 @@ def indicate_alerts(
 @register.filter(is_safe=True)
 def markdown(text: str) -> str:
     return format_html('<div class="markdown">{}</div>', render_markdown(text))
-
-
-@register.filter
-def choiceval(boundfield: BoundField) -> str:
-    """
-    Get literal value from a field's choices.
-
-    Empty value is returned if value is not selected or invalid.
-    """
-    value = boundfield.value()
-    if value is None:
-        return ""
-    if value is True:
-        return gettext("enabled")
-    if not hasattr(boundfield.field, "choices"):
-        return value
-    choices: dict[str, str] = {
-        str(choice): value for choice, value in boundfield.field.choices
-    }
-    if isinstance(value, list):
-        return format_html_join_comma(
-            "{}", list_to_tuples(choices.get(val, val) for val in value)
-        )
-    return choices.get(value, value)
 
 
 @register.filter
@@ -1511,7 +1368,7 @@ def urlize_ugc(value: str, autoescape: bool = True) -> str:
 def get_glossary_badge(component: Component | GhostStats) -> StrOrPromise:
     if isinstance(component, Component) and component.is_glossary:
         return format_html(
-            '<span class="label label-{}">{}</span>',
+            '<span class="badge label-{}">{}</span>',
             component.glossary_color,
             gettext("Glossary"),
         )
@@ -1598,7 +1455,9 @@ def get_breadcrumbs(  # noqa: C901
 @register.simple_tag
 def path_object_breadcrumbs(path_object, flags: bool = True):
     return format_html_join(
-        "\n", '<li><a href="{}">{}</a></li>', get_breadcrumbs(path_object, flags=flags)
+        "\n",
+        '<li class="breadcrumb-item"><a href="{}">{}</a></li>',
+        get_breadcrumbs(path_object, flags=flags),
     )
 
 
@@ -1638,7 +1497,9 @@ def list_objects_number(
     url_end: str | SafeString
     url_start = url_end = ""
     if value == 0 and not show_zero:
-        value_formatted = format_html("""<span class="sr-only">{}</span>""", value)
+        value_formatted = format_html(
+            """<span class="visually-hidden">{}</span>""", value
+        )
     else:
         if search_url or translate_url:
             url_start = format_html(
@@ -1825,3 +1686,21 @@ def format_last_changes_content(
         "search_url": search_url,
         "offset": offset,
     }
+
+
+@register.simple_tag
+def get_git_export_example_url() -> str:
+    url = reverse(
+        "git-export",
+        kwargs={
+            "path": ["PROJECT", "COMPONENT"],
+            "git_request": "info/refs",
+        },
+    )
+    # Strip trailing info/refs part:
+    return url[:-9]
+
+
+@register.filter(is_safe=True)
+def object_link(obj) -> str:
+    return format_html('<a href="{}">{}</a>', obj.get_absolute_url(), str(obj))

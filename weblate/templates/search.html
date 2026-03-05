@@ -5,11 +5,11 @@
 {% block breadcrumbs %}
   {% if path_object %}
     {% path_object_breadcrumbs path_object %}
-    <li>
+    <li class="breadcrumb-item">
       <a href="{{ back_url }}#search">{% translate "Search" %}</a>
     </li>
   {% else %}
-    <li>
+    <li class="breadcrumb-item">
       <a href="{% url 'search' %}">{% translate "Search" %}</a>
     </li>
   {% endif %}

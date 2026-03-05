@@ -6,8 +6,9 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
+import regex
 from django.utils.translation import gettext_lazy
 
 from weblate.checks.base import CountingCheck, TargetCheck, TargetCheckParametrized
@@ -20,21 +21,21 @@ if TYPE_CHECKING:
 
     from weblate.trans.models import Unit
 
+    from .base import FixupType
+
 FRENCH_PUNCTUATION_NBSP = {":"}
 FRENCH_PUNCTUATION_NNBSP = {";", "?", "!"}
 FRENCH_PUNCTUATION = FRENCH_PUNCTUATION_NBSP.union(FRENCH_PUNCTUATION_NNBSP)
 FRENCH_PUNCTUATION_SPACING = {"Zs", "Ps", "Pe"}
-FRENCH_PUNCTUATION_FIXUP_RE_NBSP = "([ \u2009\u202f])([{}])".format(
-    "".join(FRENCH_PUNCTUATION_NBSP)
+FRENCH_PUNCTUATION_FIXUP_RE_NBSP = (
+    f"([ \u2009\u202f])([{''.join(FRENCH_PUNCTUATION_NBSP)}])"
 )
-FRENCH_PUNCTUATION_FIXUP_RE_NNBSP = "([ \u00a0\u2009])([{}])".format(
-    "".join(FRENCH_PUNCTUATION_NNBSP)
+FRENCH_PUNCTUATION_FIXUP_RE_NNBSP = (
+    f"([ \xa0\u2009])([{''.join(FRENCH_PUNCTUATION_NNBSP)}])"
 )
-FRENCH_PUNCTUATION_MISSING_RE_NBSP = "([^\u00a0])([{}])".format(
-    "".join(FRENCH_PUNCTUATION_NBSP)
-)
-FRENCH_PUNCTUATION_MISSING_RE_NNBSP = "([^\u202f])([{}])".format(
-    "".join(FRENCH_PUNCTUATION_NNBSP)
+FRENCH_PUNCTUATION_MISSING_RE_NBSP = f"([^\xa0])([{''.join(FRENCH_PUNCTUATION_NBSP)}])"
+FRENCH_PUNCTUATION_MISSING_RE_NNBSP = (
+    f"([^\u202f])([{''.join(FRENCH_PUNCTUATION_NNBSP)}])"
 )
 MY_QUESTION_MARK = "\u1038\u104b"
 INTERROBANGS = ("?!", "!?", "？！", "！？", "⁈", "⁉")
@@ -92,12 +93,12 @@ class BeginSpaceCheck(TargetCheck):
         # Compare numbers
         return source_space != target_space
 
-    def get_fixup(self, unit: Unit):
+    def get_fixup(self, unit: Unit) -> Iterable[FixupType] | None:
         source = unit.source_string
         stripped_source = source.lstrip(" ")
         spaces = len(source) - len(stripped_source)
         replacement = source[:spaces] if spaces else ""
-        return [("^ *", replacement, "u")]
+        return [("regex", "^ *", replacement, "u")]
 
 
 class KabyleCharactersCheck(TargetCheck):
@@ -109,7 +110,7 @@ class KabyleCharactersCheck(TargetCheck):
         "Use standardized Latin Kabyle characters (e.g. ɣ instead of Greek γ; ɛ instead of ε)."
     )
 
-    confusable_to_standard = {
+    confusable_to_standard: ClassVar[dict[str, str]] = {
         "\u03b3": "\u0263",
         "\u0393": "\u0194",
         "\u03b5": "\u025b",
@@ -128,9 +129,9 @@ class KabyleCharactersCheck(TargetCheck):
         # by now we know it's Kabyle, so just look for confusables
         return any(char in target for char in self.confusable_to_standard)
 
-    def get_fixup(self, unit: Unit) -> Iterable[tuple[str, str, str]]:
+    def get_fixup(self, unit: Unit) -> Iterable[FixupType] | None:
         return [
-            (re.escape(confusable), standard, "gu")
+            ("regex", re.escape(confusable), standard, "gu")
             for confusable, standard in self.confusable_to_standard.items()
         ]
 
@@ -163,12 +164,12 @@ class EndSpaceCheck(TargetCheck):
         # Compare numbers
         return source_space != target_space
 
-    def get_fixup(self, unit: Unit):
+    def get_fixup(self, unit: Unit) -> Iterable[FixupType] | None:
         source = unit.source_string
         stripped_source = source.rstrip(" ")
         spaces = len(source) - len(stripped_source)
         replacement = source[-spaces:] if spaces else ""
-        return [(" *$", replacement, "u")]
+        return [("regex", " *$", replacement, "u")]
 
 
 class DoubleSpaceCheck(TargetCheck):
@@ -189,8 +190,8 @@ class DoubleSpaceCheck(TargetCheck):
         # Check if target contains double space
         return "  " in target
 
-    def get_fixup(self, unit: Unit):
-        return [(" {2,}", " ")]
+    def get_fixup(self, unit: Unit) -> Iterable[FixupType] | None:
+        return [("regex", " {2,}", " ", "u")]
 
 
 class EndStopCheck(TargetCheck):
@@ -450,8 +451,8 @@ class ZeroWidthSpaceCheck(TargetCheck):
             return False
         return "\u200b" in target
 
-    def get_fixup(self, unit: Unit):
-        return [("\u200b", "", "gu")]
+    def get_fixup(self, unit: Unit) -> Iterable[FixupType] | None:
+        return [("regex", "\u200b", "", "gu")]
 
 
 class MaxLengthCheck(TargetCheckParametrized):
@@ -462,9 +463,7 @@ class MaxLengthCheck(TargetCheckParametrized):
     description = gettext_lazy("Translation should not exceed given length.")
     default_disabled = True
 
-    @property
-    def param_type(self):
-        return single_value_flag(int)
+    param_type = single_value_flag(int)
 
     def check_target_params(
         self, sources: list[str], targets: list[str], unit: Unit, value
@@ -507,8 +506,8 @@ class KashidaCheck(TargetCheck):
     def check_single(self, source: str, target: str, unit: Unit):
         return self.kashida_re.search(target)
 
-    def get_fixup(self, unit: Unit):
-        return [(self.kashida_regex, "", "gu")]
+    def get_fixup(self, unit: Unit) -> Iterable[FixupType] | None:
+        return [("regex", self.kashida_regex, "", "gu")]
 
 
 class PunctuationSpacingCheck(TargetCheck):
@@ -552,28 +551,52 @@ class PunctuationSpacingCheck(TargetCheck):
                     return True
         return False
 
-    def get_fixup(self, unit: Unit) -> Iterable[tuple[str, str, str]] | None:
+    def get_fixup(self, unit: Unit) -> Iterable[FixupType] | None:
         return [
             # First fix possibly wrong whitespace
             (
+                "regex",
                 FRENCH_PUNCTUATION_FIXUP_RE_NBSP,
                 "\u00a0$2",
                 "gu",
             ),
             (
+                "regex",
                 FRENCH_PUNCTUATION_FIXUP_RE_NNBSP,
                 "\u202f$2",
                 "gu",
             ),
             # Then add missing ones
             (
+                "regex",
                 FRENCH_PUNCTUATION_MISSING_RE_NBSP,
                 "$1\u00a0$2",
                 "gu",
             ),
             (
+                "regex",
                 FRENCH_PUNCTUATION_MISSING_RE_NNBSP,
                 "$1\u202f$2",
                 "gu",
             ),
         ]
+
+
+class MultipleCapitalCheck(TargetCheck):
+    """Multiple capitals check."""
+
+    check_id = "multiple_capital"
+    name = gettext_lazy("Multiple capitals")
+    description = gettext_lazy(
+        "Translation contains words with multiple misplaced capital letters."
+    )
+
+    # matches sequences of 2+ uppercase letters in *any language*
+    UPPERCASE_SEQ = regex.compile(r"\p{Lu}{2,}")
+
+    def check_single(self, source: str, target: str, unit: Unit) -> bool:
+        # Flag if any uppercase sequence is present in target and not present in the source
+        return (
+            self.UPPERCASE_SEQ.search(target) is not None
+            and not self.UPPERCASE_SEQ.search(source) is not None
+        )

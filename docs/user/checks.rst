@@ -724,6 +724,26 @@ JavaScript format
    * :ref:`check-formats`
    * `JavaScript formatting strings <https://www.gnu.org/software/gettext/manual/html_node/javascript_002dformat.html>`_
 
+.. _check-laravel-format:
+
+Laravel format
+**************
+
+
+:Summary: Laravel format string does not match source.
+:Scope: translated strings
+:Check class: ``weblate.checks.format.LaravelFormatCheck``
+:Check identifier: ``laravel_format``
+:Trigger: This check needs to be enabled using a flag.
+:Flag to enable: ``laravel-format``
+:Flag to ignore: ``ignore-laravel-format``
+:Named format string example: ``The :attribute must be :value``
+
+.. seealso::
+
+   * :ref:`check-formats`
+   * `Laravel translation formatting <https://laravel.com/docs/localization#replacing-parameters-in-translation-strings>`_
+
 .. _check-lua-format:
 
 Lua format
@@ -1084,6 +1104,7 @@ reStructuredText term references or other markup do not match source, the typica
 * Space between inline tag and backticks.
 * The reference name is not being translated.
 * Using quotes instead of backticks.
+* Mismatched substitutions or footnote references.
 
 .. seealso::
 
@@ -1130,7 +1151,7 @@ Markdown links do not match source.
 
 .. seealso::
 
-   `Markdown links`_
+   `Markdown links <https://spec.commonmark.org/0.31.2/#links>`_
 
 
 .. _check-md-reflink:
@@ -1455,6 +1476,25 @@ Specifics on how each plural form is used can be found in the string definition.
 Failing to fill in plural forms will in some cases lead to displaying nothing when
 the plural form is in use.
 
+.. _check-multiple-capital:
+
+Multiple capitals
+~~~~~~~~~~~~~~~~~
+
+.. versionadded:: 5.16
+
+:Summary: Translation contains words with multiple misplaced capital letters.
+:Scope: translated strings
+:Check class: ``weblate.checks.chars.MultipleCapitalCheck``
+:Check identifier: ``multiple_capital``
+:Trigger: This check is always enabled but can be ignored using a flag.
+:Flag to ignore: ``ignore-multiple-capital``
+
+Checks for misplaced capitalization by detecting words that contain consecutive
+uppercase letters in otherwise lowercase or normally capitalized text (for
+example, ``HEllo`` or ``CAmelCase``). Strings that contain capitalization in the
+source string are allowed to contain capitalization in the translation.
+
 .. _check-kabyle-characters:
 
 Non‑standard characters in Kabyle
@@ -1597,6 +1637,10 @@ The matching also supports Unicode codepoint properties, including scripts and b
 .. code-block:: text
 
    regex:^[-_\p{L}\p{N}\p{sc=Deva}\p{sc=Thai}]{1,32}$
+
+.. hint::
+
+   Use :ref:`check-placeholders` for detecting missing placeholders in the string.
 
 .. seealso::
 
@@ -1846,7 +1890,29 @@ The check is automatically enabled for XML like strings. You might need to add
    This check is disabled by the ``safe-html`` flag as the HTML cleanup done by
    it can produce HTML markup which is not valid XML.
 
+.. _check-xml-chars-around-tags:
+
+XML surrounding characters
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+:Summary: Characters surrounding XML tags in translation do not align with source.
+:Scope: translated strings
+:Check class: ``weblate.checks.markup.XMLCharsAroundTagsCheck``
+:Check identifier: ``xml-chars-around-tags``
+:Trigger: This check is always enabled but can be ignored using a flag.
+:Flag to ignore: ``ignore-xml-chars-around-tags``
+
+Checks that the characters surrounding an XML tag are consistent between both
+source and translation. Ensures letters are not replaced with non-letters, and vice versa.
+
+.. note::
+
+   This check is disabled by the ``safe-html`` flag as the HTML cleanup done by
+   it can produce HTML markup which is not valid XML.
+
 .. _check-xml-invalid:
+
 
 XML syntax
 ~~~~~~~~~~
@@ -2185,5 +2251,19 @@ For example with Gettext in Python it could be:
 
     print(ngettext("Selected %d file", "Selected %d files", files) % files)
 
+
+.. _placeables-mt:
+
+Placeables in automatic suggestion
+----------------------------------
+
+Checks for placeables expose information on current placeables and this can be
+used to instruct automatic suggestion engines to keep them. The support for
+this varies in different services and in many cases there is no way to enforce
+keeping placeables intact.
+
+.. seealso::
+
+   :doc:`/admin/machine`
 
 .. _reStructuredText Primer: https://www.sphinx-doc.org/en/master/usage/restructuredtext/basics.html

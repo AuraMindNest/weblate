@@ -9,8 +9,6 @@ from django.utils.translation import gettext_lazy
 from weblate.checks.flags import Flags
 from weblate.utils.colors import ColorChoices
 
-TRANSLATION_LABELS = {"Automatically translated"}
-
 
 class Label(models.Model):
     project = models.ForeignKey(
@@ -33,13 +31,15 @@ class Label(models.Model):
 
     class Meta:
         app_label = "trans"
-        unique_together = [("project", "name")]
+        unique_together = [("project", "name")]  # noqa: RUF012
         verbose_name = "label"
         verbose_name_plural = "label"
 
     def __str__(self) -> str:
         return format_html(
-            '<span class="label label-{}">{}</span>', self.color, self.name
+            '<span class="align-middle badge label label-{}">{}</span>',
+            self.color,
+            self.name,
         )
 
     @property

@@ -14,8 +14,12 @@ from __future__ import annotations
 
 import re
 import sys
+from typing import TYPE_CHECKING
 
-from translate.storage.pypo import pofile, pounit
+from translate.storage.pypo import pofile
+
+if TYPE_CHECKING:
+    from translate.storage.pypo import pounit
 
 EXCLUDE_RE = re.compile(
     r"""
@@ -33,6 +37,12 @@ EXCLUDE_RE = re.compile(
         :(ref|doc|setting|envvar):`[^<`]+`          # Unlabeled references
         |
         /[a-z_./-]+                                 # File names
+        |
+        Django
+        |
+        Translate\ Toolkit
+        |
+        `([a-z0-9_-]*)\ <[^>]*>`_                    # Product links
     )$
     """,
     re.VERBOSE,

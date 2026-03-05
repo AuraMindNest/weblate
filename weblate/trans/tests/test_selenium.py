@@ -11,6 +11,7 @@ import time
 import warnings
 from contextlib import contextmanager
 from datetime import timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast, overload
 
 from django.conf import settings
@@ -20,6 +21,7 @@ from django.urls import reverse
 from django.utils.functional import cached_property
 from selenium import webdriver
 from selenium.common.exceptions import (
+    ElementClickInterceptedException,
     ElementNotVisibleException,
     NoSuchElementException,
     WebDriverException,
@@ -27,18 +29,18 @@ from selenium.common.exceptions import (
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.remote.remote_connection import RemoteConnection
 from selenium.webdriver.support.expected_conditions import (
     presence_of_element_located,
     staleness_of,
 )
 from selenium.webdriver.support.ui import Select, WebDriverWait
 
-from weblate.fonts.tests.utils import FONT
+from weblate.auth.models import User
+from weblate.fonts.tests.utils import FONT, FONT_SOURCE
 from weblate.lang.models import Language
 from weblate.screenshots.views import ensure_tesseract_language
 from weblate.trans.actions import ActionEvents
-from weblate.trans.models import Change, Component, Project, Translation, Unit
+from weblate.trans.models import Change, Component, Project, Unit
 from weblate.trans.tests.test_models import BaseLiveServerTestCase
 from weblate.trans.tests.test_views import RegistrationTestMixin
 from weblate.trans.tests.utils import (
@@ -58,7 +60,7 @@ if TYPE_CHECKING:
     from selenium.webdriver.remote.webdriver import WebDriver
     from selenium.webdriver.remote.webelement import WebElement
 
-    from weblate.auth.models import User
+    from weblate.trans.models import Translation
 
 TEST_BACKENDS = (
     "social_core.backends.email.EmailAuth",
@@ -70,17 +72,6 @@ TEST_BACKENDS = (
     "social_core.backends.fedora.FedoraOpenId",
     "social_core.backends.facebook.FacebookOAuth2",
     "weblate.accounts.auth.WeblateUserBackend",
-)
-
-SOURCE_FONT = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-    "static",
-    "js",
-    "vendor",
-    "fonts",
-    "font-source",
-    "TTF",
-    "SourceSans3-Bold.ttf",
 )
 
 
@@ -140,6 +131,9 @@ class SeleniumTests(
             cls._driver_error = str(error)
             if "CI_SELENIUM" in os.environ:
                 raise
+        else:
+            # Increase webdriver timeout to avoid occasional errors in CI
+            cls._driver.command_executor.client_config.timeout = 300
 
         # Restore custom fontconfig settings
         if backup_fc is not None:
@@ -151,11 +145,6 @@ class SeleniumTests(
             os.environ["LANG"] = backup_lang
 
         if cls._driver is not None:
-            # Increase webdriver timeout to avoid occasssional errors
-            # in macos CI
-            if isinstance(cls._driver.command_executor, RemoteConnection):
-                cls._driver.command_executor.set_timeout(240)
-
             cls._driver.implicitly_wait(5)
 
         # Configure verbose logging to be shown in case of the test failure
@@ -177,7 +166,7 @@ class SeleniumTests(
 
     def setUp(self) -> None:
         super().setUp()
-        self.driver.get("{}{}".format(self.live_server_url, reverse("home")))
+        self.driver.get(f"{self.live_server_url}{reverse('home')}")
         self.driver.set_window_size(1200, 1024)
         self.site_domain = settings.SITE_DOMAIN
         settings.SITE_DOMAIN = f"{self.host}:{self.server_thread.port}"
@@ -206,8 +195,9 @@ class SeleniumTests(
         self.driver.set_window_size(max(1200, scroll_width), scroll_height + 180)
         time.sleep(0.2)
         # Get screenshot
-        with open(os.path.join(self.image_path, name), "wb") as handle:
-            handle.write(self.driver.get_screenshot_as_png())
+        Path(os.path.join(self.image_path, name)).write_bytes(
+            self.driver.get_screenshot_as_png()
+        )
 
     def click(self, element: WebElement | str = "", htmlid: str | None = None) -> None:
         """Click on element and scroll it into view."""
@@ -225,15 +215,33 @@ class SeleniumTests(
         except ElementNotVisibleException:
             self.actions.move_to_element(element).perform()
             element.click()
+        except ElementClickInterceptedException:
+            wait = WebDriverWait(self.driver, timeout=2)
+            wait.until(lambda _: element.is_displayed())
+            self.actions.move_to_element(element).perform()
+            element.click()
 
-    def upload_file(self, element: WebElement, filename: str) -> None:
-        filename = os.path.abspath(filename)
-        if not os.path.exists(filename):
+    def upload_file(self, element: WebElement, filename: str | Path) -> None:
+        name: str
+        exists: bool
+        if isinstance(filename, Path):
+            name = filename.as_posix()
+            exists = filename.exists()
+        else:
+            name = os.path.abspath(filename)
+            exists = os.path.exists(filename)
+        if not exists:
             msg = f"Test file not found: {filename}"
             raise ValueError(msg)
-        element.send_keys(filename)
+        element.send_keys(name)
 
-    def do_login(self, *, create: bool = True, superuser: bool = False) -> User:
+    @overload
+    def do_login(self, *, create: Literal[False], superuser: bool = False) -> None: ...
+    @overload
+    def do_login(
+        self, *, create: Literal[True] = True, superuser: bool = False
+    ) -> User: ...
+    def do_login(self, *, create=True, superuser=False):
         # login page
         with self.wait_for_page_load():
             self.click(htmlid="login-button")
@@ -765,8 +773,15 @@ class SeleniumTests(
             self.click("Users")
         element = self.driver.find_element(By.ID, "id_user")
         element.send_keys("testuser")
+        Select(self.driver.find_element(By.ID, "id_group")).select_by_index(1)
         with self.wait_for_page_load():
             element.submit()
+        user = User.objects.get(username="testuser")
+        self.assertTrue(
+            user.invitation_set.filter(
+                group__defining_project__name="WeblateOrg"
+            ).exists()
+        )
         with self.wait_for_page_load():
             self.click("Access control")
         self.screenshot("manage-users.png")
@@ -1080,7 +1095,7 @@ class SeleniumTests(
 
         # Upload font
         element = self.driver.find_element(By.ID, "id_font")
-        self.upload_file(element, FONT.as_posix())
+        self.upload_file(element, FONT)
         with self.wait_for_page_load():
             self.click(htmlid="upload_font_submit")
 
@@ -1091,7 +1106,7 @@ class SeleniumTests(
 
         # Upload second font
         element = self.driver.find_element(By.ID, "id_font")
-        self.upload_file(element, SOURCE_FONT)
+        self.upload_file(element, FONT_SOURCE)
         with self.wait_for_page_load():
             self.click(htmlid="upload_font_submit")
 
@@ -1158,8 +1173,12 @@ class SeleniumTests(
     def test_manage(self) -> None:
         self.open_manage()
         self.screenshot("support.png")
-        self.click("Appearance")
+        with self.wait_for_page_load():
+            self.click("Appearance")
         self.screenshot("appearance-settings.png")
+        with self.wait_for_page_load():
+            self.click("Performance report")
+        self.screenshot("performance-report.png")
 
     def test_explanation(self) -> None:
         project = self.create_component()

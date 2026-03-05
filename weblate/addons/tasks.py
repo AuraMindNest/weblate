@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 from datetime import timedelta
+from pathlib import Path
 
 from celery.schedules import crontab
 from django.conf import settings
@@ -17,14 +18,14 @@ from django.utils.timezone import now
 from lxml import html
 
 from weblate.addons.events import AddonEvent
-from weblate.addons.models import Addon, handle_addon_event
+from weblate.addons.models import Addon, AddonActivityLog, handle_addon_event
 from weblate.lang.models import Language
 from weblate.trans.exceptions import FileParseError
 from weblate.trans.models import Change, Component, Project
 from weblate.utils.celery import app
 from weblate.utils.hash import calculate_checksum
 from weblate.utils.lock import WeblateLockTimeoutError
-from weblate.utils.requests import request
+from weblate.utils.requests import http_request
 
 IGNORED_TAGS = {"script", "style"}
 
@@ -46,11 +47,12 @@ def cdn_parse_html(addon_id: int, component_id: int) -> None:
         filename = filename.strip()
         try:
             if filename.startswith(("http://", "https://")):
-                with request("get", filename) as handle:
+                with http_request("get", filename) as handle:
                     content = handle.text
             else:
-                with open(os.path.join(component.full_path, filename)) as handle:
-                    content = handle.read()
+                content = Path(os.path.join(component.full_path, filename)).read_text(
+                    encoding="utf-8"
+                )
         except OSError as error:
             errors.append({"filename": filename, "error": str(error)})
             continue
@@ -60,7 +62,7 @@ def cdn_parse_html(addon_id: int, component_id: int) -> None:
         for element in document.cssselect(addon.configuration["css_selector"]):
             text = element.text
             if (
-                element.getchildren()
+                len(element)  # has children
                 or element.tag in IGNORED_TAGS
                 or not text
                 or not text.strip()
@@ -94,7 +96,10 @@ def cdn_parse_html(addon_id: int, component_id: int) -> None:
 )
 @transaction.atomic
 def language_consistency(
-    addon_id: int, language_ids: list[int], project_id: int
+    addon_id: int,
+    language_ids: list[int],
+    project_id: int,
+    activity_log_id: int | None = None,
 ) -> None:
     try:
         addon = Addon.objects.get(pk=addon_id)
@@ -102,8 +107,8 @@ def language_consistency(
         return
     project = Project.objects.get(pk=project_id)
     languages = Language.objects.filter(id__in=language_ids)
-    request = HttpRequest()
-    request.user = addon.addon.user
+    fake_request = HttpRequest()
+    fake_request.user = addon.addon.user
 
     # Filter components with missing translation
     components = project.component_set.annotate(
@@ -112,40 +117,55 @@ def language_consistency(
         )
     ).exclude(translation_count=languages.count())
 
-    for component in components.iterator():
-        # Avoid two language consistency add-ons working at same on a single component
-        with component.lock:
-            missing = languages.exclude(
-                Q(translation__component=component) | Q(component=component)
-            )
-            if not missing:
-                continue
-            component.commit_pending("language consistency", None)
-            for language in missing:
-                new_lang = component.add_new_language(
-                    language,
-                    request,
-                    send_signal=False,
-                    create_translations=False,
+    log_result: list[str] = []
+
+    try:
+        for component in components.iterator():
+            # Avoid two language consistency add-ons working at same on a single component
+            with component.lock:
+                missing = languages.exclude(
+                    Q(translation__component=component) | Q(component=component)
                 )
-                if new_lang is None:
-                    component.log_warning(
-                        "could not add %s language for language consistency: %s",
+                if not missing:
+                    continue
+                component.commit_pending("language consistency", None)
+                for language in missing:
+                    component.refresh_lock()
+                    new_lang = component.add_new_language(
                         language,
-                        component.new_lang_error_message,
+                        fake_request,
+                        send_signal=False,
+                        create_translations=False,
                     )
-                else:
-                    new_lang.log_info("added for language consistency")
-            try:
-                component.create_translations_immediate()
-            except FileParseError as error:
-                component.log_error("could not parse translation files: %s", error)
+                    if new_lang is None:
+                        log_result.append(
+                            f"{component.full_slug}: {addon.addon.verbose}: Could not add {language}: {component.new_lang_error_message}"
+                        )
+                    else:
+                        log_result.append(
+                            f"{component.full_slug}: {addon.addon.verbose}: Added {language}"
+                        )
+                try:
+                    component.create_translations_immediate()
+                except FileParseError as error:
+                    log_result.append(
+                        f"{component.full_slug}: {addon.addon.verbose}: Could not parse translation files: {error}"
+                    )
+    except Exception as error:
+        log_result.append(f"{addon.addon.verbose}: failed: {error}")
+        raise
+
+    finally:
+        if activity_log_id and log_result:
+            update_addon_activity_log(activity_log_id, "\n".join(log_result))
 
 
 @app.task(trail=False)
 def daily_addons(modulo: bool = True) -> None:
-    def daily_callback(addon: Addon, component: Component) -> None:
-        addon.addon.daily(component)
+    def daily_callback(
+        addon: Addon, component: Component, *, activity_log_id: int | None = None
+    ) -> None:
+        addon.addon.daily(component, activity_log_id=activity_log_id)
 
     today = timezone.now()
     addons = Addon.objects.filter(event__event=AddonEvent.EVENT_DAILY)
@@ -159,11 +179,21 @@ def daily_addons(modulo: bool = True) -> None:
     )
 
 
+def update_addon_activity_log(
+    pk: int, result: str = "", error_occurred: bool = False, pending: bool | None = None
+) -> None:
+    addon_activity_log = AddonActivityLog.objects.select_for_update().get(id=pk)
+    addon_activity_log.details["error"] = error_occurred
+    if result:
+        addon_activity_log.update_result(result)
+    if pending is not None:
+        addon_activity_log.pending = pending
+    addon_activity_log.save(update_fields=["details", "pending"])
+
+
 @app.task(trail=False)
 def cleanup_addon_activity_log() -> None:
     """Cleanup old add-on activity log entries."""
-    from weblate.addons.models import AddonActivityLog
-
     AddonActivityLog.objects.filter(
         created__lt=now() - timedelta(days=settings.ADDON_ACTIVITY_LOG_EXPIRY)
     ).delete()
@@ -204,12 +234,14 @@ def addon_change(change_ids: list[int], **kwargs) -> None:
     )
 
     for change in Change.objects.filter(pk__in=change_ids).prefetch_for_render():
+        change.fill_in_prefetched()
         # Filter addons for this change
         change_addons = [
             addon
             for addon in addons
             if (not addon.component or addon.component == change.component)
             and (not addon.project or addon.project == change.project)
+            and addon.addon.check_change_action(change)
         ]
         if change_addons:
             handle_addon_event(

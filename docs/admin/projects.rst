@@ -237,7 +237,8 @@ Enable review workflow for translations, see :ref:`reviews`.
 
 .. seealso::
 
-   :ref:`workflow-customization`
+   * :setting:`DEFAULT_TRANSLATION_REVIEW`
+   * :ref:`workflow-customization`
 
 .. _project-source_review:
 
@@ -248,13 +249,14 @@ Enable review workflow for source strings, see :ref:`source-reviews`.
 
 .. seealso::
 
+   * :setting:`DEFAULT_SOURCE_REVIEW`
    * :ref:`report-source`
    * :ref:`user-comments`
 
 .. _project-commit_policy:
 
-Commit Policy
-+++++++++++++
+Translation quality filter
+++++++++++++++++++++++++++
 
 .. versionadded:: 5.13
 
@@ -265,7 +267,7 @@ supports the following options:
 * **Commit all translations regardless of quality**: All translations will be committed,
   including those marked as needing editing or not reviewed.
 * **Skip translations marked as needing editing**: Only translations that don't have the
-  "needs editing" flag will be committed.
+  "needs editing", "needs rewriting" or "needs checking" state will be committed.
 * **Only include approved translations**: Only translations that have been approved by a
   reviewer will be committed. This option requires :ref:`project-translation_review`
   to be enabled.
@@ -623,6 +625,13 @@ File format
 
 Translation file format, see also :ref:`formats`.
 
+.. _component-file_format_params:
+
+File format parameters
+++++++++++++++++++++++
+
+Parameters used to configure how translation files are processed, see also :ref:`file_format_params`.
+
 .. _component-report_source_bugs:
 
 Source string bug reporting address
@@ -633,6 +642,24 @@ notification about any source string comments made in Weblate.
 
 With the :ref:`gettext` format, this address is also saved by Weblate in the
 :mailheader:`Report-Msgid-Bugs-To` header of the file.
+
+.. _component-hide_glossary_matches:
+
+Do not show glossary matches
+++++++++++++++++++++++++++++
+
+Hides the glossary panel and its matches in the translation editor for this component.
+When enabled, glossary suggestions for this component are not computed, and the Glossary
+panel (including its “Add term to glossary” action) is hidden in the editor.
+
+.. note::
+
+   Glossary self-references are always excluded from matches even when this option is disabled.
+
+.. seealso::
+
+   * :ref:`glossary`
+   * :ref:`component-is_glossary`
 
 .. _component-allow_translation_propagation:
 

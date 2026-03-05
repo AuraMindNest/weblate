@@ -6,11 +6,8 @@
 
 from __future__ import annotations
 
-import datetime
-
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
-from django.utils.html import format_html
 
 from weblate.auth.models import User
 from weblate.checks.flags import Flags
@@ -21,60 +18,21 @@ from weblate.trans.templatetags.translations import (
     format_translation,
     get_location_links,
     naturaltime,
+    translation_progress_render,
 )
+from weblate.trans.templatetags.upload_methods import get_upload_method_help
 from weblate.trans.tests.test_views import FixtureTestCase
-
-TEST_DATA = (
-    (0, "now"),
-    (1, "a second from now"),
-    (-1, "a second ago"),
-    (2, "2 seconds from now"),
-    (-2, "2 seconds ago"),
-    (60, "a minute from now"),
-    (-60, "a minute ago"),
-    (120, "2 minutes from now"),
-    (-120, "2 minutes ago"),
-    (3600, "an hour from now"),
-    (-3600, "an hour ago"),
-    (3600 * 2, "2 hours from now"),
-    (-3600 * 2, "2 hours ago"),
-    (3600 * 24, "tomorrow"),
-    (-3600 * 24, "yesterday"),
-    (3600 * 24 * 2, "2 days from now"),
-    (-3600 * 24 * 2, "2 days ago"),
-    (3600 * 24 * 7, "a week from now"),
-    (-3600 * 24 * 7, "a week ago"),
-    (3600 * 24 * 14, "2 weeks from now"),
-    (-3600 * 24 * 14, "2 weeks ago"),
-    (3600 * 24 * 30, "a month from now"),
-    (-3600 * 24 * 30, "a month ago"),
-    (3600 * 24 * 60, "2 months from now"),
-    (-3600 * 24 * 60, "2 months ago"),
-    (3600 * 24 * 365, "a year from now"),
-    (-3600 * 24 * 365, "a year ago"),
-    (3600 * 24 * 365 * 2, "2 years from now"),
-    (-3600 * 24 * 365 * 2, "2 years ago"),
-)
+from weblate.utils.files import FileUploadMethod
 
 
 class NaturalTimeTest(SimpleTestCase):
     """Testing of natural time conversion."""
 
     def test_natural(self) -> None:
-        now = timezone.now()
-        for diff, expected in TEST_DATA:
-            testdate = now + datetime.timedelta(seconds=diff)
-            result = naturaltime(testdate, now=now)
-            expected = format_html(
-                '<span title="{}">{}</span>',
-                testdate.replace(microsecond=0).isoformat(),
-                expected,
-            )
-            self.assertEqual(
-                expected,
-                result,
-                f"naturaltime({testdate}) {result!r} != {expected!r}",
-            )
+        result = naturaltime(timezone.now())
+        self.assertIn('title="', result)
+        self.assertIn('data-datetime="', result)
+        self.assertIn('class="naturaltime"', result)
 
 
 class LocationLinksTest(TestCase):
@@ -270,6 +228,29 @@ class TranslationFormatTestCase(FixtureTestCase):
             """,
         )
 
+    def test_diff_change_newlinse(self) -> None:
+        self.assertHTMLEqual(
+            """
+            $(^NameDA) is installed both for all users and for
+            <ins>the<span class="hlspace"><span class="space-space"> </span></span></ins>
+            current user.
+            <del>$\\r$\\n</del>
+            <ins>
+ <span class="hlspace">
+            <span class="space-nl">
+            </span></span><br>
+            </ins>
+            Select which installation to remove.
+            """,
+            format_translation(
+                [
+                    "$(^NameDA) is installed both for all users and for the current user.\nSelect which installation to remove."
+                ],
+                self.component.source_language,
+                diff="$(^NameDA) is installed both for all users and for current user.$\\r$\\nSelect which installation to remove.",
+            )["items"][0]["content"],
+        )
+
     def test_diff_github_9821(self) -> None:
         unit = Unit(translation=self.translation)
         unit.all_flags = Flags("python-brace-format")
@@ -359,6 +340,26 @@ class TranslationFormatTestCase(FixtureTestCase):
                 <span class="hlspace">
                     <span class="space-space"> </span>
                 </span>
+            </ins>
+            world
+            """,
+        )
+        self.assertHTMLEqual(
+            format_translation(
+                ["Hello\nworld"],
+                self.component.source_language,
+                diff="Hello world",
+            )["items"][0]["content"],
+            """Hello
+            <del>
+                <span class="hlspace">
+                    <span class="space-space"></span>
+                </span>
+            </del>
+            <ins>
+                <span class="hlspace">
+                    <span class="space-nl"></span>
+                </span><br />
             </ins>
             world
             """,
@@ -814,4 +815,47 @@ class DiffTestCase(SimpleTestCase):
                 ["Hello world!"], MockLanguage("en"), search_match="hello"
             )["items"][0]["content"],
             '<span class="hlmatch">Hello</span> world!',
+        )
+
+
+class UploadMethodsHelpTestCase(SimpleTestCase):
+    def test_all_exist(self) -> None:
+        for method in FileUploadMethod:
+            self.assertIsInstance(get_upload_method_help(method), str)
+
+    def test_invalid(self) -> None:
+        with self.assertRaises(ValueError):
+            get_upload_method_help("")
+
+
+class ProgressTestCase(SimpleTestCase):
+    def test_review(self):
+        self.assertHTMLEqual(
+            """
+<div class="progress-stacked" title="Needs attention">
+    <div aria-valuemax="100" aria-valuemin="0" aria-valuenow="100.0" class="progress" role="progressbar" style="width: 100.0%" title="Translated without any problems">
+        <div class="progress-bar progress-bar-success">
+        </div>
+    </div>
+</div>
+            """,
+            translation_progress_render(60, 0, 0, 60, True),
+        )
+
+    def test_review_checks(self):
+        self.assertHTMLEqual(
+            """
+<div class="progress-stacked" title="Needs attention">
+</div>
+            """,
+            translation_progress_render(60, 0, 0, 0, True),
+        )
+
+    def test_empty(self):
+        self.assertHTMLEqual(
+            """
+<div class="progress-stacked" title="Needs attention">
+</div>
+            """,
+            translation_progress_render(60, 0, 0, 0, False),
         )

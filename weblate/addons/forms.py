@@ -13,13 +13,14 @@ from django import forms
 from django.http import QueryDict
 from django.utils.functional import cached_property
 from django.utils.translation import gettext, gettext_lazy
+from fedora_messaging.exceptions import ConfigurationException
 from lxml.cssselect import CSSSelector
 
 from weblate.formats.models import FILE_FORMATS
 from weblate.trans.actions import ActionEvents
 from weblate.trans.discovery import ComponentDiscovery
 from weblate.trans.forms import AutoForm, BulkEditForm
-from weblate.trans.models import Component, Project, Translation
+from weblate.trans.models import Translation
 from weblate.utils.forms import (
     CachedModelChoiceField,
     ContextDiv,
@@ -28,13 +29,16 @@ from weblate.utils.forms import (
 )
 from weblate.utils.render import validate_render, validate_render_translation
 from weblate.utils.validators import (
-    validate_base64_encoded_string,
+    DomainOrIPValidator,
     validate_filename,
     validate_re,
+    validate_re_nonempty,
+    validate_webhook_secret_string,
 )
 
 if TYPE_CHECKING:
     from weblate.auth.models import User
+    from weblate.trans.models import Component, Project
 
 
 class BaseAddonForm(forms.Form):
@@ -231,7 +235,7 @@ class DiscoveryForm(BaseAddonForm):
         label=gettext_lazy("Language filter"),
         max_length=200,
         initial="^[^.]+$",
-        validators=[validate_re],
+        validators=[validate_re_nonempty],
         help_text=gettext_lazy(
             "Regular expression to filter "
             "translation files against when scanning for file mask."
@@ -586,19 +590,106 @@ class BaseWebhooksAddonForm(ChangeBaseAddonForm):
         required=True,
     )
 
-    field_order = ["webhook_url", "events"]
+    field_order = [  # noqa: RUF012
+        "webhook_url",
+        "events",
+    ]
 
 
 class WebhooksAddonForm(BaseWebhooksAddonForm):
     """Form for webhook add-on configuration."""
 
     secret = forms.CharField(
-        label=gettext_lazy("Secret"),
+        label=gettext_lazy("Webhook secret"),
         validators=[
-            validate_base64_encoded_string,
+            validate_webhook_secret_string,
         ],
         required=False,
-        help_text=gettext_lazy("A Base64 encoded string"),
+        help_text=gettext_lazy(
+            "The Standard Webhooks secret is a base64 encoded string."
+        ),
     )
 
-    field_order = ["webhook_url", "secret", "events"]
+    field_order = [  # noqa: RUF012
+        "webhook_url",
+        "secret",
+        "events",
+    ]
+
+
+class FedoraMessagingAddonForm(ChangeBaseAddonForm):
+    amqp_host = forms.CharField(
+        label=gettext_lazy("AMQP broker host"),
+        help_text=gettext_lazy("The AMQP broker to connect to."),
+        validators=[DomainOrIPValidator()],
+    )
+    amqp_ssl = forms.BooleanField(
+        label=gettext_lazy("Use SSL for AMQP connection"),
+        required=False,
+    )
+    ca_cert = forms.CharField(
+        widget=forms.Textarea(),
+        label=gettext_lazy("CA certificates"),
+        help_text=gettext_lazy(
+            "Bundle of PEM encoded CA certificates used to validate the certificate presented by the server."
+        ),
+        required=False,
+    )
+    client_key = forms.CharField(
+        widget=forms.Textarea(),
+        label=gettext_lazy("Client SSL key"),
+        help_text=gettext_lazy("PEM encoded client private SSL key."),
+        required=False,
+    )
+
+    client_cert = forms.CharField(
+        widget=forms.Textarea(),
+        label=gettext_lazy("Client SSL certificates"),
+        help_text=gettext_lazy("PEM encoded client SSL certificate."),
+        required=False,
+    )
+
+    def clean(self) -> None:
+        from .fedora_messaging import FedoraMessagingAddon
+
+        amqp_ssl = self.cleaned_data.get("amqp_ssl")
+        if amqp_ssl is not None:
+            if amqp_ssl:
+                if (
+                    not self.cleaned_data.get("ca_cert")
+                    or not self.cleaned_data.get("client_key")
+                    or not self.cleaned_data.get("client_cert")
+                ):
+                    raise forms.ValidationError(
+                        {
+                            "amqp_ssl": gettext(
+                                "The SSL certificates have to be provided for SSL connection."
+                            )
+                        }
+                    )
+
+            elif (
+                self.cleaned_data.get("ca_cert")
+                or self.cleaned_data.get("client_key")
+                or self.cleaned_data.get("client_cert")
+            ):
+                raise forms.ValidationError(
+                    {
+                        "amqp_ssl": gettext(
+                            "The SSL certificates are not used without a SSL connection."
+                        )
+                    }
+                )
+
+        if amqp_host := self.cleaned_data.get("amqp_host"):
+            try:
+                FedoraMessagingAddon.configure_fedora_messaging(
+                    amqp_host=amqp_host,
+                    amqp_ssl=self.cleaned_data.get("amqp_ssl", False),
+                    ca_cert=self.cleaned_data.get("ca_cert"),
+                    client_key=self.cleaned_data.get("client_key"),
+                    client_cert=self.cleaned_data.get("client_cert"),
+                    force_update=True,
+                )
+            except ConfigurationException as error:
+                raise forms.ValidationError(error.message) from error

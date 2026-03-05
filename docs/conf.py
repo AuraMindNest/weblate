@@ -16,9 +16,11 @@
 #
 import os
 import sys
+from importlib import resources
 from pathlib import Path
 
 import sphinx.builders.gettext
+import weblate_fonts
 from matplotlib import font_manager
 from sphinx.util.tags import Tags
 
@@ -26,8 +28,9 @@ from sphinx.util.tags import Tags
 
 file_dir = Path(__file__).parent.resolve()
 font_locations = (
-    "weblate/static/js/vendor/fonts/font-source/",
-    "weblate/static/vendor/font-kurinto/",
+    "static/weblate_fonts/source-sans/ttf",
+    "static/weblate_fonts/source-code/ttf",
+    "static/weblate_fonts/kurinto/ttf",
 )
 
 weblate_dir = file_dir.parent
@@ -57,8 +60,10 @@ def setup(app) -> None:
 
     font_dirs: list[str] = []
 
+    package_dir = resources.files(weblate_fonts)
+
     for font_location in font_locations:
-        font_dir = weblate_dir / font_location
+        font_dir = package_dir / font_location
         if not font_dir.is_dir():
             msg = f"Font directory not found: {font_dir}"
             raise NotADirectoryError(msg)
@@ -77,7 +82,7 @@ project_copyright = "Michal Čihař"
 author = "Michal Čihař"
 
 # The full version, including alpha/beta/rc tags
-release = "5.13.3"
+release = "5.16.1"
 
 # -- General configuration ---------------------------------------------------
 
@@ -173,8 +178,8 @@ html_theme_options = {
 }
 
 html_css_files = [
-    "https://weblate.org/static/vendor/font-source/source-sans-3.css",
-    "https://weblate.org/static/vendor/font-source/source-code-pro.css",
+    "https://weblate.org/static/weblate_fonts/source-sans-3.css",
+    "https://weblate.org/static/weblate_fonts/source-code-pro.css",
 ]
 
 # -- Options for HTMLHelp output ---------------------------------------------
@@ -328,14 +333,11 @@ intersphinx_mapping = {
         None,
     ),
     "amagama": ("https://docs.translatehouse.org/projects/amagama/en/latest/", None),
-    "virtaal": ("https://docs.translatehouse.org/projects/virtaal/en/latest/", None),
     "ldap": ("https://django-auth-ldap.readthedocs.io/en/latest/", None),
     "celery": ("https://docs.celeryq.dev/en/stable/", None),
     "sphinx": (sphinx_doc_url, None),
     "rtd": ("https://docs.readthedocs.io/en/latest/", None),
-    "venv": ("https://virtualenv.pypa.io/en/stable/", None),
     "borg": ("https://borgbackup.readthedocs.io/en/stable/", None),
-    "pip": ("https://pip.pypa.io/en/stable/", None),
     "compressor": ("https://django-compressor.readthedocs.io/en/stable/", None),
     "drf-standardized-error": (
         "https://drf-standardized-errors.readthedocs.io/en/latest/",
@@ -383,18 +385,23 @@ linkcheck_ignore = [
     "https://platform.openai.com/api-keys",
     "https://platform.openai.com/docs/models",
     "https://translate.systran.net/en/account",
+    "https://api.sap.com/api/translationhub/overview",
+    # Protected by Anubis
+    "https://anubis.techaro.lol/",
     # Seems unstable
     "https://pagure.io/",
     "https://azure.microsoft.com/en-us/products/ai-services/ai-translator",
     "https://wiki.gnupg.org/",
     "https://www.bis.doc.gov/",
     "https://www.libravatar.org/",
-    "https://akismet.com/",
+    "https://glosbe.com/",
     # These seems to block bots/GitHub
     "https://docs.github.com/",
     "https://translate.yandex.com/",
     "https://www.gnu.org/",
     "https://dev.mysql.com/",
+    # Responds with HTTP 418 I'm a teapot
+    "https://www.freedesktop.org/",
 ]
 
 # HTTP docs
@@ -451,4 +458,5 @@ redirects = {
     "devel/thirdparty": "third-party.html",  # codespell:ignore thirdparty
     "contributing/security": "security/index.html",
     "formats/moko": "formats/moko-resources.html",
+    "legal": "security/index.html",
 }

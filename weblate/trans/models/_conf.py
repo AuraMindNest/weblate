@@ -3,6 +3,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # mypy: disable-error-code="var-annotated"
+from __future__ import annotations
+
+from typing import ClassVar
 
 from appconf import AppConf
 
@@ -13,9 +16,6 @@ class WeblateConf(AppConf):
 
     # Cache directory
     CACHE_DIR = None
-
-    # Akismet API key
-    AKISMET_API_KEY = None
 
     # Title of site to use
     SITE_TITLE = "Weblate"
@@ -84,6 +84,9 @@ class WeblateConf(AppConf):
     # Hiding repository credentials
     HIDE_REPO_CREDENTIALS = True
 
+    # Hiding shared glossary components
+    HIDE_SHARED_GLOSSARY_COMPONENTS = False
+
     CREATE_GLOSSARIES = True
 
     # Default committer
@@ -97,6 +100,8 @@ class WeblateConf(AppConf):
     DEFAULT_RESTRICTED_COMPONENT = False
     DEFAULT_SHARED_TM = True
     DEFAULT_AUTOCLEAN_TM = False
+    DEFAULT_TRANSLATION_REVIEW = False
+    DEFAULT_SOURCE_REVIEW = False
 
     DEFAULT_PUSH_ON_COMMIT = True
     DEFAULT_AUTO_LOCK_ERROR = True
@@ -163,14 +168,14 @@ Current translation status:
     AUTH_PASSWORD_DAYS = 180
 
     # Mail customization
-    ADMINS_CONTACT = []
-    ADMINS_HOSTING = []
-    ADMINS_BILLING = []
+    ADMINS_CONTACT: ClassVar[list] = []
+    ADMINS_HOSTING: ClassVar[list] = []
+    ADMINS_BILLING: ClassVar[list] = []
 
     # Special chars for visual keyboard
     SPECIAL_CHARS = ("\t", "\n", "\u00a0", "…")
 
-    DEFAULT_ADDONS = {}
+    DEFAULT_ADDONS: ClassVar[dict] = {}
 
     SUGGESTION_CLEANUP_DAYS = None
     COMMENT_CLEANUP_DAYS = None
@@ -179,7 +184,7 @@ Current translation status:
     BACKGROUND_TASKS = "monthly"
 
     SINGLE_PROJECT = False
-    LICENSE_EXTRA = []
+    LICENSE_EXTRA: ClassVar[list] = []
     LICENSE_FILTER = None
     LICENSE_REQUIRED = False
     WEBSITE_REQUIRED = True
@@ -189,7 +194,7 @@ Current translation status:
 
     EXTRA_HTML_HEAD = ""
 
-    IP_ADDRESSES = []
+    IP_ADDRESSES: ClassVar[list] = []
 
     class Meta:
         prefix = ""

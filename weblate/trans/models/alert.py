@@ -73,7 +73,7 @@ class Alert(models.Model):
     details = models.JSONField(default=dict)
 
     class Meta:
-        unique_together = [("component", "name")]
+        unique_together = [("component", "name")]  # noqa: RUF012
         verbose_name = "component alert"
         verbose_name_plural = "component alerts"
 
@@ -416,13 +416,7 @@ class MissingLicense(BaseAlert):
 
     @staticmethod
     def check_component(component: Component) -> bool | dict | None:
-        return (
-            component.project.access_control == component.project.ACCESS_PUBLIC
-            and settings.LICENSE_REQUIRED
-            and not component.license
-            and not settings.LOGIN_REQUIRED_URLS
-            and (settings.LICENSE_FILTER is None or settings.LICENSE_FILTER)
-        )
+        return component.project.needs_license() and not component.license
 
 
 @register
@@ -626,7 +620,7 @@ class NoLibreConditions(BaseAlert):
     def check_component(component: Component) -> bool | dict | None:
         return (
             settings.OFFER_HOSTING
-            and component.project.billings
+            and bool(component.project.billings)
             and component.project.billing.plan.price == 0
             and not component.project.billing.valid_libre
         )

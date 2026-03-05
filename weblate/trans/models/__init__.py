@@ -1,9 +1,12 @@
 # Copyright © Michal Čihař <michal@weblate.org>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
+from __future__ import annotations
 
 import os
+from contextlib import suppress
 from functools import partial
+from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.db.models.signals import m2m_changed, post_delete, post_save, pre_delete
@@ -30,6 +33,9 @@ from weblate.trans.signals import user_pre_delete
 from weblate.utils.decorators import disable_for_loaddata
 from weblate.utils.files import remove_tree
 
+if TYPE_CHECKING:
+    from weblate.auth.models import User
+
 __all__ = [
     "Alert",
     "Announcement",
@@ -53,7 +59,7 @@ __all__ = [
 ]
 
 
-def delete_object_dir(instance) -> None:
+def delete_object_dir(instance: Project | Component) -> None:
     """Remove path if it exists."""
     project_path = instance.full_path
     if os.path.exists(project_path):
@@ -61,7 +67,7 @@ def delete_object_dir(instance) -> None:
 
 
 @receiver(post_delete, sender=Project)
-def project_post_delete(sender, instance, **kwargs) -> None:
+def project_post_delete(sender, instance: Project, **kwargs) -> None:
     """
     Project deletion hook.
 
@@ -77,13 +83,13 @@ def project_post_delete(sender, instance, **kwargs) -> None:
 
 
 @receiver(pre_delete, sender=Component)
-def component_pre_delete(sender, instance, **kwargs) -> None:
+def component_pre_delete(sender, instance: Component, **kwargs) -> None:
     # Collect list of stats to update, this can't be done after removal
     instance.stats.collect_update_objects()
 
 
 @receiver(post_delete, sender=Component)
-def component_post_delete(sender, instance, **kwargs) -> None:
+def component_post_delete(sender, instance: Component, **kwargs) -> None:
     """
     Component deletion hook.
 
@@ -100,14 +106,14 @@ def component_post_delete(sender, instance, **kwargs) -> None:
 
 
 @receiver(post_delete, sender=Translation)
-def translation_post_delete(sender, instance, **kwargs) -> None:
+def translation_post_delete(sender, instance: Translation, **kwargs) -> None:
     """Delete translation stats on translation deletion."""
     transaction.on_commit(instance.stats.delete)
 
 
 @receiver(m2m_changed, sender=Component.links.through)
 @disable_for_loaddata
-def update_project_stats_link(sender, instance, action, pk_set, **kwargs) -> None:
+def component_links_updated(sender, instance, action, pk_set, **kwargs) -> None:
     from weblate.utils.tasks import update_project_stats_link
 
     if action in {"post_add", "post_remove", "post_clear"}:
@@ -130,7 +136,7 @@ def change_labels(sender, instance, action, pk_set, **kwargs) -> None:
 
 
 @receiver(pre_delete, sender=Label)
-def label_pre_delete(sender, instance, **kwargs) -> None:
+def label_pre_delete(sender, instance: Label, **kwargs) -> None:
     instance.project.collect_label_cleanup(instance)
 
 
@@ -143,7 +149,7 @@ def label_post_delete(sender, instance, **kwargs) -> None:
 
 
 @receiver(user_pre_delete)
-def user_commit_pending(sender, instance, **kwargs) -> None:
+def user_commit_pending(sender, instance: User, **kwargs) -> None:
     """Commit pending changes for user on account removal."""
     # All user changes
     all_changes = Change.objects.last_changes(instance).filter(user=instance)
@@ -195,11 +201,9 @@ def auto_component_list(sender, instance, **kwargs) -> None:
 @disable_for_loaddata
 def post_delete_linked(sender, instance, **kwargs) -> None:
     # When removing project, the linked component might be already deleted now
-    try:
+    with suppress(Component.DoesNotExist):
         if instance.linked_component:
             instance.linked_component.update_alerts()
-    except Component.DoesNotExist:
-        pass
 
 
 @receiver(post_save, sender=Comment)

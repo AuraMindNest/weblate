@@ -8,7 +8,6 @@ from weblate.utils.rst import format_table
 
 GROUP_NAMES = {
     "announcement": "Announcements",
-    "billing": "Billing (see :ref:`billing`)",
     "change": "Changes",
     "comment": "Comments",
     "component": "Component",
@@ -33,8 +32,34 @@ PERMISSION_NAMES.update(PERMISSIONS)
 class Command(BaseCommand):
     help = "List permissions"
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--sections",
+            nargs="*",
+            choices=["acl", "perms", "roles", "teams"],
+            help="Filter output by section. Can specify multiple sections. "
+            "If not specified, all sections are shown.",
+        )
+
     def handle(self, *args, **options) -> None:
         """List permissions."""
+        sections = set(options.get("sections", []) or [])
+        show_all = not sections
+
+        if show_all or "acl" in sections:
+            self.write_acl()
+
+        if show_all or "perms" in sections:
+            self.write_perms()
+
+        if show_all or "roles" in sections:
+            self.write_roles()
+
+        if show_all or "teams" in sections:
+            self.write_teams()
+
+    def write_acl(self) -> None:
+        """Write access control section."""
         self.stdout.write("""
 Managing per-project access control
 -----------------------------------
@@ -47,6 +72,8 @@ Managing per-project access control
         for name in ACL_GROUPS:
             self.stdout.write(f"`{name}`\n\n\n")
 
+    def write_perms(self) -> None:
+        """Write permissions section."""
         self.stdout.write("""
 List of privileges
 ++++++++++++++++++
@@ -105,11 +132,9 @@ List of privileges
         self.stdout.writelines(
             format_table(table, ["Scope", "Permission", "Built-in roles"])
         )
-        self.stdout.write("""
-.. note::
 
-""")
-
+    def write_roles(self) -> None:
+        """Write roles section."""
         self.stdout.write("""
 List of built-in roles
 ++++++++++++++++++++++
@@ -119,9 +144,10 @@ List of built-in roles
 
 """)
 
-        self.stdout.write(".. list-table::\n\n")
+        self.stdout.write(".. list-table::\n")
 
         for name, permissions in ROLES:
+            self.stdout.write("\n")
             self.stdout.write(f"   * - `{name}`")
             self.stdout.write("     - ", ending="")
             self.stdout.write(
@@ -131,6 +157,8 @@ List of built-in roles
                 )
             )
 
+    def write_teams(self) -> None:
+        """Write teams section."""
         self.stdout.write("""
 List of teams
 +++++++++++++

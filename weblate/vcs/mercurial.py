@@ -6,13 +6,12 @@
 
 from __future__ import annotations
 
-import os
 import os.path
 import re
 from configparser import RawConfigParser
 from pathlib import Path
 from shutil import which
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from django.utils.translation import gettext_lazy
 
@@ -24,13 +23,24 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from datetime import datetime
 
+    from django_stubs_ext import StrOrPromise
+
+
+VERSION_RE = re.compile(r".*\(version ([^)]*)\).*")
+
 
 class HgRepository(Repository):
     """Repository implementation for Mercurial."""
 
-    _cmd = "rhg" if which("rhg") is not None else "hg"
-    _cmd_last_revision = ["log", "--limit", "1", "--template", "{node}"]
-    _cmd_last_remote_revision = [
+    _cmd: ClassVar[str] = "rhg" if which("rhg") is not None else "hg"
+    _cmd_last_revision: ClassVar[list[str]] = [
+        "log",
+        "--limit",
+        "1",
+        "--template",
+        "{node}",
+    ]
+    _cmd_last_remote_revision: ClassVar[list[str]] = [
         "log",
         "--limit",
         "1",
@@ -39,19 +49,24 @@ class HgRepository(Repository):
         "--branch",
         ".",
     ]
-    _cmd_list_changed_files = ["status", "--rev"]
-    _version = None
+    _cmd_list_changed_files: ClassVar[list[str]] = ["status", "--rev"]
+    _version: ClassVar[str | None] = None
 
-    name = "Mercurial"
-    push_label = gettext_lazy(
+    name: ClassVar[StrOrPromise] = "Mercurial"
+    push_label: ClassVar[StrOrPromise] = gettext_lazy(
         "This will push changes to the upstream Mercurial repository."
     )
-    req_version = "6.8"
-    default_branch = "default"
-    ref_to_remote = "head() and branch(.) and not closed() - ."
-    ref_from_remote = "outgoing()"
+    req_version: ClassVar[str] = "6.8"
+    default_branch: ClassVar[str] = "default"
+    ref_to_remote: ClassVar[str] = "head() and branch(.) and not closed() - ."
+    ref_from_remote: ClassVar[str] = "outgoing()"
 
-    VERSION_RE = re.compile(r".*\(version ([^)]*)\).*")
+    @staticmethod
+    def sanitize_error_message(errormessage: str) -> str:
+        match = re.match(r"(.*does not appear to be an hg repository):.*", errormessage)
+        if match:
+            return match[1]
+        return errormessage
 
     def is_valid(self):
         """Check whether this is a valid repository."""
@@ -105,7 +120,7 @@ class HgRepository(Repository):
             config.set(section, option, value)
             changed = True
         if changed:
-            with open(filename, "w") as handle:
+            with open(filename, "w", encoding="utf-8") as handle:
                 config.write(handle)
 
     def set_committer(self, name, mail) -> None:
@@ -269,7 +284,7 @@ class HgRepository(Repository):
     def _get_version(cls):
         """Return VCS program version."""
         output = cls._popen(["version", "-q"], merge_err=False)
-        matches = cls.VERSION_RE.match(output)
+        matches = VERSION_RE.match(output)
         if matches is None:
             msg = f"Could not parse version string: {output}"
             raise OSError(msg)
@@ -385,7 +400,11 @@ class HgRepository(Repository):
             ["cat", "--rev", revision, path], needs_lock=False, merge_err=False
         )
 
-    def cleanup(self) -> None:
+    def remove_stale_branches(self) -> None:
+        """Remove stale branches and tags from the repository."""
+        return
+
+    def cleanup_files(self) -> None:
         """Remove not tracked files from the repository."""
         self.set_config_values(("extensions", "purge", ""))
         self.execute(["purge"])

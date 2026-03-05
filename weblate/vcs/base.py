@@ -11,6 +11,8 @@ import logging
 import os
 import os.path
 import subprocess
+from contextlib import suppress
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self, TypedDict
 
 from dateutil import parser
@@ -22,6 +24,7 @@ from packaging.version import Version
 from weblate.trans.util import get_clean_env, path_separator
 from weblate.utils.data import data_path
 from weblate.utils.errors import add_breadcrumb
+from weblate.utils.files import is_excluded
 from weblate.utils.lock import WeblateLock
 from weblate.vcs.ssh import SSH_WRAPPER
 
@@ -58,29 +61,32 @@ class RepositoryError(Exception):
         return self.get_message()
 
 
+class RepositorySymlinkError(ValueError):
+    """Raised when symlink resolution fails due to links outside the repository tree or excessive symlink depth."""
+
+
 class Repository:
     """Basic repository object."""
 
-    _cmd = "false"
-    _cmd_last_revision: list[str]
-    _cmd_last_remote_revision: list[str]
-    _cmd_status = ["status"]
-    _cmd_list_changed_files: list[str]
+    _cmd: ClassVar[str] = "false"
+    _cmd_last_revision: ClassVar[list[str]]
+    _cmd_last_remote_revision: ClassVar[list[str]]
+    _cmd_status: ClassVar[list[str]] = ["status"]
+    _cmd_list_changed_files: ClassVar[list[str]]
 
-    name: StrOrPromise = ""
-    identifier: str = ""
-    req_version: str | None = None
-    default_branch: str = ""
-    needs_push_url: bool = True
-    supports_push: bool = True
+    name: ClassVar[StrOrPromise] = ""
+    identifier: ClassVar[str] = ""
+    req_version: ClassVar[str | None] = None
+    default_branch: ClassVar[str] = ""
+    needs_push_url: ClassVar[bool] = True
+    supports_push: ClassVar[bool] = True
     pushes_to_different_location: ClassVar[bool] = False
-    push_label: StrOrPromise = gettext_lazy(
+    push_label: ClassVar[StrOrPromise] = gettext_lazy(
         "This will push changes to the upstream repository."
     )
-    ref_to_remote: str
-    ref_from_remote: str
-
-    _version = None
+    ref_to_remote: ClassVar[str]
+    ref_from_remote: ClassVar[str]
+    _version: ClassVar[str | None] = None
 
     @classmethod
     def get_identifier(cls) -> str:
@@ -93,9 +99,8 @@ class Repository:
         branch: str | None = None,
         component: Component | None = None,
         local: bool = False,
-        skip_init: bool = False,
     ) -> None:
-        self.path = path
+        self.path: str = path
         if branch is None:
             self.branch = self.default_branch
         else:
@@ -114,12 +119,9 @@ class Repository:
         )
         self._config_updated = False
         self.local = local
+        # Create ssh wrapper for possible use
         if not local:
-            # Create ssh wrapper for possible use
             SSH_WRAPPER.create()
-            if not skip_init and not self.is_valid():
-                with self.lock:
-                    self.create_blank_repository(self.path)
 
     @classmethod
     def get_remote_branch(cls, repo: str) -> str:  # noqa: ARG003
@@ -176,12 +178,20 @@ class Repository:
 
         if not real_path.startswith(repository_path):
             msg = "Too many symlinks or link outside tree"
-            raise ValueError(msg)
+            raise RepositorySymlinkError(msg)
+
+        if is_excluded(real_path):
+            msg = "Link to a restricted location"
+            raise RepositorySymlinkError(msg)
 
         return real_path[len(repository_path) :].lstrip("/")
 
     @staticmethod
-    def _getenv(environment: dict[str, str] | None = None) -> dict[str, str]:
+    def _getenv(
+        environment: dict[str, str] | None = None,
+        *,
+        cwd: str | None = None,
+    ) -> dict[str, str]:
         """Generate environment for process execution."""
         base: dict[str, str] = {
             # Avoid prompts from Git
@@ -189,9 +199,11 @@ class Repository:
             # Avoid Git traversing outside the data dir
             "GIT_CEILING_DIRECTORIES": data_path("vcs").as_posix(),
             # Use ssh wrapper
-            "GIT_SSH": SSH_WRAPPER.filename.as_posix(),
+            "GIT_SSH_COMMAND": SSH_WRAPPER.filename.as_posix(),
             "SVN_SSH": SSH_WRAPPER.filename.as_posix(),
         }
+        if cwd:
+            base["GIT_DIR"] = os.path.join(cwd, ".git")
         if environment:
             base.update(environment)
         return get_clean_env(base, extra_path=SSH_WRAPPER.path.as_posix())
@@ -208,6 +220,7 @@ class Repository:
         local: bool = False,
         stdin: str | None = None,
         environment: dict[str, str] | None = None,
+        retry: bool = True,
     ):
         """Execute the command using popen."""
         if args is None:
@@ -227,7 +240,7 @@ class Repository:
             process = subprocess.run(
                 args=args,
                 cwd=cwd,
-                env=environment or {} if local else cls._getenv(environment),
+                env=environment or {} if local else cls._getenv(environment, cwd=cwd),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT if merge_err else subprocess.PIPE,
                 text=not raw,
@@ -259,10 +272,32 @@ class Repository:
             cwd=cwd,
         )
         if process.returncode:
-            raise RepositoryError(
-                process.returncode, process.stdout + (process.stderr or "")
+            errormessage: str = cls.sanitize_error_message(
+                process.stdout + (process.stderr or "")
             )
+            if retry and cls.should_retry_popen(errormessage):
+                return cls._popen(
+                    args,
+                    cwd=cwd,
+                    merge_err=merge_err,
+                    fullcmd=fullcmd,
+                    raw=raw,
+                    local=local,
+                    stdin=stdin,
+                    environment=environment,
+                    retry=False,
+                )
+
+            raise RepositoryError(process.returncode, errormessage)
         return process.stdout
+
+    @staticmethod
+    def sanitize_error_message(errormessage: str) -> str:
+        return errormessage
+
+    @staticmethod
+    def should_retry_popen(errormessage: str) -> bool:  # noqa: ARG004
+        return False
 
     def execute(
         self,
@@ -299,11 +334,9 @@ class Repository:
         return self.last_output
 
     def log_status(self, error: str | RepositoryError) -> None:
-        try:
+        with suppress(RepositoryError):
             self.log(f"failure {error}")
             self.log(self.status())
-        except RepositoryError:
-            pass
 
     def clean_revision_cache(self) -> None:
         if "last_revision" in self.__dict__:
@@ -331,14 +364,18 @@ class Repository:
         """Clone repository."""
         raise NotImplementedError
 
+    def clone_from(self, source: str) -> None:
+        """Clone repository into current one."""
+        self._clone(source, self.path, self.branch)
+
     @classmethod
     def clone(
         cls, source: str, target: str, branch: str, component: Component | None = None
     ) -> Self:
         """Clone repository and return object for cloned repository."""
-        repo = cls(target, branch=branch, component=component, skip_init=True)
+        repo = cls(target, branch=branch, component=component)
         with repo.lock:
-            cls._clone(source, target, branch)
+            repo.clone_from(source)
         return repo
 
     def update_remote(self) -> None:
@@ -486,8 +523,7 @@ class Repository:
             data = os.readlink(filename).encode()
         else:
             objtype = "blob"
-            with open(filename, "rb") as handle:
-                data = handle.read()
+            data = Path(filename).read_bytes()
         if extra:
             objhash.update(extra.encode())
         objhash.update(f"{objtype} {len(data)}\0".encode("ascii"))
@@ -561,9 +597,25 @@ class Repository:
             return None
         return merge_driver
 
-    def cleanup(self) -> None:
+    def remove_stale_branches(self) -> None:
+        """Remove stale branches and tags from the repository."""
+        raise NotImplementedError
+
+    def cleanup_files(self) -> None:
         """Remove not tracked files from the repository."""
         raise NotImplementedError
+
+    def cleanup(self) -> None:
+        """Cleanup repository status."""
+        # Recover from failed merge/rebase
+        with suppress(RepositoryError):
+            self.merge(abort=True)
+        with suppress(RepositoryError):
+            self.rebase(abort=True)
+        # Remove stale branches
+        self.remove_stale_branches()
+        # Cleanup files
+        self.cleanup_files()
 
     def log_revisions(self, refspec: str) -> list[str]:
         """
@@ -598,7 +650,7 @@ class Repository:
     def get_remote_branch_name(self, branch: str | None = None) -> str:
         return f"origin/{self.branch if branch is None else branch}"
 
-    def list_remote_branches(self):
+    def list_remote_branches(self) -> list[str]:
         return []
 
     def compact(self) -> None:
@@ -606,3 +658,7 @@ class Repository:
 
     def show(self, revision: str) -> str:
         raise NotImplementedError
+
+    def maintenance(self) -> None:
+        self.remove_stale_branches()
+        self.compact()

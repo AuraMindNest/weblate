@@ -51,6 +51,7 @@ def report_error(
     This can be used for store exceptions in error reporting solutions as rollbar while
     handling error gracefully and giving user cleaner message.
     """
+    # pylint: disable-next=unused-variable
     __traceback_hide__ = True  # noqa: F841
     if HAS_ROLLBAR and hasattr(settings, "ROLLBAR"):
         rollbar.report_exc_info(level=level)
@@ -137,7 +138,7 @@ def init_sentry() -> None:
 
 
 def init_rollbar() -> None:
-    rollbar.init(**settings.ROLLBAR)
+    rollbar.init(**settings.ROLLBAR)  # type: ignore[misc]
     rollbar.BASE_DATA_HOOK = celery_base_data_hook
     LOGGER.info("configured Rollbar error collection")
 

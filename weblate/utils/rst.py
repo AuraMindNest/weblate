@@ -4,12 +4,22 @@
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from itertools import zip_longest
 from typing import TYPE_CHECKING, cast
 
+PARAM_RE = re.compile(r"(?:(?<=\s)|^)(--[a-z-]+)(?=\s|$)")
+PROGRAM_RE = re.compile(r"'([a-z]+ --[a-z-]+)'")
+
 if TYPE_CHECKING:
     from collections.abc import Generator
+
+    from django_stubs_ext import StrOrPromise
+
+
+def format_rst_string(text: StrOrPromise) -> str:
+    return PROGRAM_RE.sub(r"``\1``", PARAM_RE.sub(r"``\1``", str(text)))
 
 
 def get_cell_length(text: str) -> int:
@@ -59,7 +69,6 @@ def generate_table_cells(
     for row in table:
         row_output: list[str | None] = []
         for column, value in enumerate(row):
-            value = row[column]
             if isinstance(value, str):
                 row_output.append(value)
             else:

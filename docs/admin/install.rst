@@ -102,7 +102,7 @@ Architecture overview
             label=Services,
             style=filled
          ];
-         redis [label="Redis\nTask queue\nCache",
+         redis [label="Datastore\nTask queue\nCache",
             shape=cylinder];
          db [label="PostgreSQL\nDatabase",
             shape=cylinder];
@@ -143,8 +143,8 @@ Database
    PostgreSQL database server for storing all the content, see :ref:`database-setup`.
 
    Use dedicated database node for sites with hundreds of millions of hosted words.
-Redis
-   Redis server for cache and tasks queue, see :ref:`celery`.
+Datastore
+   Key/value datastore such as Valkey or Redis server for cache and tasks queue, see :ref:`celery`.
 
    Use dedicated node when scaling Weblate horizontally.
 File system
@@ -156,7 +156,7 @@ E-mail server
 
 .. hint::
 
-   :doc:`/admin/install/docker` includes PostgreSQL and Redis, making the installation easier.
+   :doc:`/admin/install/docker` includes PostgreSQL and Valkey, making the installation easier.
 
 .. _requirements:
 
@@ -182,7 +182,7 @@ Python dependencies
 +++++++++++++++++++
 
 Weblate is written in `Python <https://www.python.org/>`_ and supports Python
-3.11 or newer. You can install dependencies using pip or from your
+3.12 or newer. You can install dependencies using pip or from your
 distribution packages, full list is available in :file:`requirements.txt`.
 
 Most notable dependencies:
@@ -217,10 +217,6 @@ Django REST Framework
      * - ``amazon``
        - | `boto3 <https://pypi.org/project/boto3>`_
        - :ref:`mt-aws`
-
-     * - ``antispam``
-       - | `python-akismet <https://pypi.org/project/python-akismet>`_
-       - :ref:`spam-protection`
 
      * - ``gelf``
        - | `logging-gelf <https://pypi.org/project/logging-gelf>`_
@@ -304,19 +300,9 @@ Troubleshooting pip install
 
 ``ERROR: Dependency 'gobject-introspection-2.0' is required but not found.``
    The installed ``PyGobject`` package cannot find a matching GObject
-   Introspection library. Before the 3.52 release, it required
-   ``gobject-introspection-1.0`` and since then, it requires
-   ``gobject-introspection-2.0``.
+   Introspection library - ``gobject-introspection-2.0``.
 
-   In case your operating system provides both, it is recommended to install
-   the newer version and retry the installation.
-
-   When the newer version is not available, please install the older release of
-   PyGobject before installing Weblate:
-
-   .. code-block:: sh
-
-      uv pip install 'PyGobject<3.52'
+   Older versions are no longer supported by Weblate.
 
 ``ffi_prep_closure(): bad user_data (it seems that the version of the libffi library seen at runtime is different from the 'ffi.h' file seen at compile-time)``
    This is caused by incompatibility of binary packages distributed via PyPI
@@ -352,8 +338,6 @@ Pango, Cairo and related header files and GObject introspection data
     https://git-scm.com/docs/git-svn
 ``tesseract`` (needed only if :program:`tesserocr` binary wheels are not available for your system)
     https://github.com/tesseract-ocr/tesseract
-``licensee`` (optional for detecting license when creating component)
-    https://github.com/licensee/licensee
 
 Build-time dependencies
 +++++++++++++++++++++++
@@ -380,6 +364,9 @@ with development files and GObject introspection data.
    * :doc:`install/venv-suse`
    * :doc:`install/venv-redhat`
    * :doc:`install/venv-macos`
+
+
+.. _hardware:
 
 .. include:: install/steps/hw.rst
 
@@ -441,7 +428,7 @@ PostgreSQL 13 and higher is supported. PostgreSQL 15 or newer is recommended.
 
 :ref:`mysql` is supported, but not recommended for new installs.
 
-
+.. include:: /snippets/mysql-warning.rst
 
 .. note::
 
@@ -580,6 +567,8 @@ role Weblate should alter during the database migration.
 
 MySQL and MariaDB
 +++++++++++++++++
+
+.. include:: /snippets/mysql-warning.rst
 
 .. warning::
 
@@ -732,8 +721,11 @@ Several features in Weblate rely on correct HTTP headers being passed to
 Weblate. When using reverse proxy, please make sure that the needed information
 is correctly passed.
 
+To debug this configuration, you can look at :guilabel:`HTTP environment` in
+:ref:`manage-performance`.
+
 Client IP address
-   This is needed for :ref:`rate-limit`, :ref:`spam-protection` or :ref:`audit-log`.
+   This is needed for :ref:`rate-limit` or :ref:`audit-log`.
 
    Weblate parses IP address from the ``REMOTE_ADDR``, which is set by the WSGI
    handler. This might be empty (when using socket for WSGI) or contain a
@@ -757,6 +749,11 @@ Server host name
    reverse proxy (for example use ``ProxyPreserveHost On`` for Apache or
    ``proxy_set_header Host $host;`` with nginx).
 
+   .. hint::
+
+      CSRF verification failed errors are often caused by a mismatch between
+      the :http:header:`Host` header and configured :setting:`SITE_DOMAIN`.
+
 Client protocol
    Not passing correct protocol may cause Weblate to end up in redirection
    loop trying to upgrade client to HTTPS. Make sure it is correctly exposed by
@@ -769,8 +766,8 @@ Client protocol
    .. important::
 
       The header value is case-sensitive in the configuration, so
-      ``WEBLATE_SECURE_PROXY_SSL_HEADER=HTTP_X_CUSTOM_PROTO,https`` and
-      ``WEBLATE_SECURE_PROXY_SSL_HEADER=HTTP_X_CUSTOM_PROTO,HTTPS`` are not
+      ``WEBLATE_SECURE_PROXY_SSL_HEADER=HTTP_X_FORWARDED_PROTO,https`` and
+      ``WEBLATE_SECURE_PROXY_SSL_HEADER=HTTP_X_FORWARDED_PROTO,HTTPS`` are not
       interchangeable.
 
    .. hint::
@@ -792,7 +789,6 @@ Client protocol
 .. seealso::
 
    * :ref:`docker-ssl-proxy`
-   * :ref:`spam-protection`
    * :ref:`rate-limit`
    * :ref:`audit-log`
    * :ref:`nginx-granian`
@@ -886,7 +882,7 @@ options:
     :command:`weblate clearsessions` to remove stale session data from the
     database.
 
-    If you are using Redis as cache (see :ref:`production-cache`) it is
+    If you are using Valkey or Redis as cache (see :ref:`production-cache`) it is
     recommended to use it for sessions as well:
 
     .. code-block:: python
@@ -1106,6 +1102,8 @@ sets the :ref:`django:http-strict-transport-security` header on all responses th
 Use a powerful database engine
 ++++++++++++++++++++++++++++++
 
+.. include:: /snippets/mysql-warning.rst
+
 * Please use PostgreSQL for a production environment, see :ref:`database-setup`
   for more info.
 * Use adjacent location for running the database server, otherwise the networking
@@ -1122,11 +1120,11 @@ Use a powerful database engine
 
 .. _production-cache:
 
-Enable caching
-++++++++++++++
+Configure cache
++++++++++++++++
 
-If possible, use Redis from Django by adjusting the ``CACHES`` configuration
-variable, for example:
+If possible, use Valkey or Redis from Django by adjusting the ``CACHES``
+configuration variable, for example:
 
 .. code-block:: python
 
@@ -1146,8 +1144,8 @@ variable, for example:
 
 .. hint::
 
-   In case you change Redis settings for the cache, you might need to adjust
-   them for Celery as well, see :ref:`celery`.
+   In case you change settings for the cache, you might need to adjust them for
+   Celery as well, see :ref:`celery`.
 
 .. seealso::
 
@@ -1451,6 +1449,9 @@ For testing purposes, you can use the built-in web server in Django:
 Serving static files
 ++++++++++++++++++++
 
+.. versionchanged:: 5.15.2
+   :file:`/media/` is no longer used for serving screenshots.
+
 Django needs to collect its static files in a single directory. To do so,
 execute :samp:`weblate collectstatic --noinput`. This will copy the static
 files into a directory specified by the :setting:`django:STATIC_ROOT` setting (this defaults to
@@ -1462,8 +1463,6 @@ use that for the following paths:
 :file:`/static/`
     Serves static files for Weblate and the admin interface
     (from defined by :setting:`django:STATIC_ROOT`).
-:file:`/media/`
-    Used for user media uploads (e.g. screenshots).
 :file:`/favicon.ico`
     Should be rewritten to rewrite a rule to serve :file:`/static/favicon.ico`.
 
@@ -1537,11 +1536,11 @@ Sample configuration for NGINX and uWSGI
 ++++++++++++++++++++++++++++++++++++++++
 
 
-To run production webserver, use the WSGI wrapper installed with Weblate (in
-virtual env case it is installed as
-:file:`~/weblate-env/lib/python3.9/site-packages/weblate/wsgi.py`). Don't
-forget to set the Python search path to your virtualenv as well (for example
-using ``virtualenv = /home/user/weblate-env`` in uWSGI).
+To run production webserver, use the WSGI wrapper installed with Weblate (when
+using a Python environment it is installed as
+:file:`~/weblate-env/lib/python3.14/site-packages/weblate/wsgi.py`). Don't
+forget to set the Python search path to your Python environment as well (for
+example using ``virtualenv = /home/user/weblate-env`` in uWSGI).
 
 The following configuration runs Weblate as uWSGI under the NGINX webserver.
 
@@ -1688,7 +1687,7 @@ for handling following operations (this list is not complete):
 * Offloading expensive operations from the WSGI process.
 * Committing pending changes (see :ref:`lazy-commit`).
 
-A typical setup using Redis as a backend looks like this:
+A typical setup using Valkey or Redis as a backend looks like this:
 
 .. code-block:: python
 
@@ -1842,6 +1841,19 @@ This is especially useful in case of failing Celery tasks, which would
 otherwise only report error to the logs and you won't get notified on them.
 Weblate has support for the following services:
 
+E-mail
+++++++
+
+The default Weblate configuration instruments Django to send e-mails upon
+server errors via :py:class:`django:django.utils.log.AdminEmailHandler`. This
+is the least effort setup, but you should consider other options for privacy
+reasons, as the error e-mails might include sensitive data. You can read more on
+that in :ref:`django:logging-security-implications`.
+
+To disable this behavior, remove ``mail_admins`` from the
+:setting:`django:LOGGING` in Weblate settings, or disable
+:envvar:`WEBLATE_ADMIN_NOTIFY_ERROR` in the Docker environment.
+
 Sentry
 ++++++
 
@@ -1939,4 +1951,4 @@ Other notes
 +++++++++++
 
 Don't forget to move other services Weblate might have been using like
-Redis, Cron jobs or custom authentication backends.
+Valkey, Redis, Cron jobs or custom authentication backends.
