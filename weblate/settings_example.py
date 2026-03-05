@@ -435,6 +435,8 @@ INSTALLED_APPS = [
     "weblate.wladmin",
     "weblate.metrics",
     "weblate",
+    # Boost documentation translation endpoint
+    "weblate.boost_endpoint",
     # Optional: Git exporter
     "weblate.gitexport",
     # Standard Django modules
