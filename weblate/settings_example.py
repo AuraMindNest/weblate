@@ -958,3 +958,6 @@ SENTRY_ENVIRONMENT = SITE_DOMAIN
 
 # Auto batch-translate via openrouter
 AUTO_BATCH_TRANSLATE_VIA_OPENROUTER = False
+
+# Seconds to wait for component/translation to be ready before adding a language in boost endpoint
+BOOST_ENDPOINT_ADD_TRANSLATION_SECONDS = 150

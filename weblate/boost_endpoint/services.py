@@ -50,9 +50,6 @@ TRUNCATE_NAME_SEP = " ... "
 TRUNCATE_SLUG_HEAD = 64
 TRUNCATE_SLUG_TAIL = 35
 TRUNCATE_SLUG_SEP = "-"
-# Seconds to wait after sync so VCS lock can release / repo state can settle
-SYNC_SETTLE_SECONDS = 60
-ADD_TRANSLATION_SECONDS = 150
 
 
 def _submodule_slug(name: str) -> str:
@@ -581,7 +578,7 @@ class BoostComponentService:
             LOGGER.warning("Could not add language %s to %s: %s", self.lang_code, component.name, message)
             return False
 
-        time.sleep(ADD_TRANSLATION_SECONDS)
+        time.sleep(settings.BOOST_ENDPOINT_ADD_TRANSLATION_SECONDS)
 
         LOGGER.info("Added language %s to %s", self.lang_code, component.name)
         return True
