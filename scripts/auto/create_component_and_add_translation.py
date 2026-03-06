@@ -65,7 +65,7 @@ def load_supported_formats(config_path: str) -> set:
         "asciidoc", "po", "json", "yaml", "xliff", "markdown", "txt", "html",
         "odf", "csv", "idml", "ini", "php", "properties", "resx", "ts", "dtd",
         "flatxml", "fluent", "stringsdict", "tbx", "xlsx", "ruby-yaml",
-        "webextension", "arb", "gwt", "winrc", "subtitle",
+        "webextension", "arb", "gwt", "winrc", "subtitle", "quickbook",
     }
     if not config_path or not os.path.isfile(config_path):
         return default_formats

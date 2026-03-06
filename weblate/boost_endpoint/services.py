@@ -357,6 +357,7 @@ class BoostComponentService:
             "suggestion_autoaccept": 0,
             "check_flags": "",
             "language_regex": f"^{self.lang_code}$",
+            "manage_units": False,
         }
 
         try:
@@ -413,38 +414,54 @@ class BoostComponentService:
         """
         component.translations_progress = 0
         component.translations_count = 0
+        # Hold lock all time here to avoid somebody writing between commit
+        # and merge/rebase.
         with component.repository.lock:
             component.store_background_task()
             component.progress_step(0)
             component.configure_repo(pull=False)
+
+            # pull remote
             if not component.update_remote_branch():
                 return False
+
             component.configure_branch()
+
+            # do we have something to merge?
             try:
                 needs_merge = component.repo_needs_merge()
             except RepositoryError:
+                # Not yet configured repository
                 needs_merge = True
+
             if not needs_merge:
                 component.delete_alert("MergeFailure")
                 component.delete_alert("RepositoryOutdated")
-                component.progress_step(100)
-                component.translations_count = None
                 return True
+
+            # commit possible pending changes if needed
             if component.needs_commit_upstream():
                 component.commit_pending(
                     "update", request.user if request else None, skip_push=True
                 )
+
+            # update local branch
             try:
                 result = component.update_branch(request, method=None, skip_push=True)
             except RepositoryError:
                 result = False
+
         if result:
+            # Push after possible merge (create_translations is called by caller)
             component.push_if_needed(do_update=False)
+
         if not component.repo_needs_push():
             component.delete_alert("RepositoryChanges")
+
         component.progress_step(100)
         component.translations_count = None
-        return bool(result)
+
+        return result
 
     def _sync_component_for_translation(
         self, component: Component, request, *, created: bool
@@ -452,20 +469,20 @@ class BoostComponentService:
         """Ensure repo/translations are ready before add_language_to_component. Idempotent."""
         if not component.is_repo_link:
             try:
-                # Git work only (same as do_update but without create_translations).
-                # We then call create_translations_immediate so sync is guaranteed
-                # regardless of CELERY_TASK_ALWAYS_EAGER.
-                result = self._do_update_git_only(component, request)
-                if result:
-                    LOGGER.info(
-                        "%s for %s",
-                        "Initial clone/update for new component"
-                        if created
-                        else "Updated component repository",
-                        component.name,
-                    )
+                # For a newly created repo-owner component the VCS directory does not
+                # exist yet.  sync_git_repo(validate=False) clones when is_valid() is
+                # False, then configures the repo and branch — exactly what the ORM-
+                # save path would do.  For existing components we skip straight to the
+                # lighter _do_update_git_only (fetch + merge only).
+                if created and not component.repository.is_valid():
+                    component.sync_git_repo(skip_push=True)
+                    LOGGER.info("Initial clone completed for new component: %s", component.name)
                 else:
-                    LOGGER.warning("Git update did not succeed for %s", component.name)
+                    result = self._do_update_git_only(component, request)
+                    if result:
+                        LOGGER.info("Updated component repository: %s", component.name)
+                    else:
+                        LOGGER.warning("Git update did not succeed for %s", component.name)
             except Exception as e:
                 LOGGER.warning(
                     "Failed to %s %s: %s",
