@@ -23,9 +23,9 @@ pip install requests
 ### 1. Get Your API Token
 
 1. Log in to Weblate
-2. Go to your profile (click your username → Settings)
-3. Navigate to "API access" tab
-4. Copy your API token (starts with `wlu_` or `wlp_`)
+1. Go to your profile (click your username → Settings)
+1. Navigate to "API access" tab
+1. Copy your API token (starts with `wlu_` or `wlp_`)
 
 ### 2. Create Example Configuration
 
@@ -77,54 +77,57 @@ python scripts/create_weblate_project.py --config config.json --url https://webl
 
 ### Project Configuration
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | Yes | Project display name |
-| `slug` | Yes | URL-friendly project identifier |
-| `web` | Yes | Project website URL |
-| `instructions` | No | Instructions for translators |
-| `access_control` | No | 0=Public, 1=Protected, 100=Private, 200=Custom |
-| `translation_review` | No | Enable translation reviews |
-| `source_review` | No | Enable source reviews |
-| `enable_hooks` | No | Enable VCS hooks |
-| `use_shared_tm` | No | Use shared translation memory |
-| `contribute_shared_tm` | No | Contribute to shared TM |
+| Field                  | Required | Description                                    |
+| ---------------------- | -------- | ---------------------------------------------- |
+| `name`                 | Yes      | Project display name                           |
+| `slug`                 | Yes      | URL-friendly project identifier                |
+| `web`                  | Yes      | Project website URL                            |
+| `instructions`         | No       | Instructions for translators                   |
+| `access_control`       | No       | 0=Public, 1=Protected, 100=Private, 200=Custom |
+| `translation_review`   | No       | Enable translation reviews                     |
+| `source_review`        | No       | Enable source reviews                          |
+| `enable_hooks`         | No       | Enable VCS hooks                               |
+| `use_shared_tm`        | No       | Use shared translation memory                  |
+| `contribute_shared_tm` | No       | Contribute to shared TM                        |
 
 ### Component Configuration
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | Yes | Component display name |
-| `slug` | Yes | URL-friendly component identifier |
-| `vcs` | No | Version control system (default: git) |
-| `repo` | Yes | Repository URL (can be HTTPS or SSH) |
-| `branch` | No | Repository branch (default: main or master) |
-| `push` | **Recommended** | Push URL for committing translations (SSH recommended) |
-| `push_branch` | No | Push branch (if different from `branch`) |
-| `filemask` | Yes | File mask for translations (e.g., `po/*.po`) |
-| `file_format` | Yes | File format (po, json, xliff, asciidoc, etc.) |
-| `template` | No | Template file for monolingual formats |
-| `new_base` | No | Base file for new translations |
-| `license` | No | License identifier |
-| `allow_translation_propagation` | No | Allow translation propagation (default: true) |
-| `enable_suggestions` | No | Enable suggestions (default: true) |
-| `suggestion_voting` | No | Enable suggestion voting (default: false) |
-| `suggestion_autoaccept` | No | Auto-accept threshold (0 = disabled) |
-| `check_flags` | No | Translation check flags (comma-separated) |
+| Field                           | Required        | Description                                            |
+| ------------------------------- | --------------- | ------------------------------------------------------ |
+| `name`                          | Yes             | Component display name                                 |
+| `slug`                          | Yes             | URL-friendly component identifier                      |
+| `vcs`                           | No              | Version control system (default: git)                  |
+| `repo`                          | Yes             | Repository URL (can be HTTPS or SSH)                   |
+| `branch`                        | No              | Repository branch (default: main or master)            |
+| `push`                          | **Recommended** | Push URL for committing translations (SSH recommended) |
+| `push_branch`                   | No              | Push branch (if different from `branch`)               |
+| `filemask`                      | Yes             | File mask for translations (e.g., `po/*.po`)           |
+| `file_format`                   | Yes             | File format (po, json, xliff, asciidoc, etc.)          |
+| `template`                      | No              | Template file for monolingual formats                  |
+| `new_base`                      | No              | Base file for new translations                         |
+| `license`                       | No              | License identifier                                     |
+| `allow_translation_propagation` | No              | Allow translation propagation (default: true)          |
+| `enable_suggestions`            | No              | Enable suggestions (default: true)                     |
+| `suggestion_voting`             | No              | Enable suggestion voting (default: false)              |
+| `suggestion_autoaccept`         | No              | Auto-accept threshold (0 = disabled)                   |
+| `check_flags`                   | No              | Translation check flags (comma-separated)              |
 
 ### VCS Configuration Notes
 
 **Repository URL (`repo`):**
+
 - HTTPS: `https://github.com/user/repo.git` (read-only)
 - SSH: `git@github.com:user/repo.git` (read/write with SSH keys)
 
 **Push URL (`push`):**
+
 - **Required for write access** - Allows Weblate to commit translations back to VCS
 - Should use SSH format: `git@github.com:user/repo.git`
 - Must configure SSH keys in Weblate admin interface
 - Can be same as `repo` if using SSH for both
 
 **Push Branch (`push_branch`):**
+
 - Branch where translations are committed
 - If not set, uses same as `branch`
 - Useful for separate translation branches
@@ -216,6 +219,7 @@ This is the actual configuration used for the Boost Unordered Documentation proj
 ```
 
 **Key points:**
+
 - Uses SSH URLs for both `repo` and `push` (requires SSH keys)
 - Targets specific directory: `doc/modules/ROOT/pages/`
 - Matches 52 .adoc files in that directory
@@ -241,6 +245,7 @@ This is the actual configuration used for the Boost Unordered Documentation proj
 ```
 
 **Note:** This configuration:
+
 - Pulls from `main` branch
 - Pushes translations to `translations` branch
 - Useful for review workflow before merging to main
@@ -269,7 +274,7 @@ Or use the same project, different components:
   }
 }
 
-// component2.json  
+// component2.json
 {
   "project": {"name": "App", "slug": "app", "web": "https://app.com"},
   "component": {
@@ -381,20 +386,23 @@ To enable Weblate to push translations back to your repository, you need to conf
 ### Step 2: Add SSH Key to GitHub/GitLab
 
 **For GitHub:**
+
 1. Go to repository → Settings → Deploy keys
-2. Click "Add deploy key"
-3. Paste Weblate's public SSH key
-4. ✅ Check "Allow write access"
-5. Save
+1. Click "Add deploy key"
+1. Paste Weblate's public SSH key
+1. ✅ Check "Allow write access"
+1. Save
 
 **For GitLab:**
+
 1. Go to repository → Settings → Repository → Deploy Keys
-2. Add key with write access
+1. Add key with write access
 
 **For Personal Account (Multiple Repos):**
+
 1. Go to your GitHub/GitLab profile → Settings → SSH keys
-2. Add Weblate's public SSH key
-3. Grant access to repositories
+1. Add Weblate's public SSH key
+1. Grant access to repositories
 
 ### Step 3: Test SSH Connection
 
@@ -418,17 +426,21 @@ ssh -T git@github.com
 ### Troubleshooting SSH
 
 **Permission Denied:**
+
 ```
 [ERROR] Permission denied (publickey)
 ```
+
 - SSH key not added to GitHub/GitLab
 - Wrong repository permissions
 - SSH key mismatch
 
 **Host Key Verification Failed:**
+
 ```
 [ERROR] Host key verification failed
 ```
+
 - In Weblate admin → SSH keys → Add host key
 - Enter: `github.com` or `gitlab.com`
 - Verify fingerprint
@@ -451,6 +463,7 @@ python scripts/create_weblate_project.py \
 ```
 
 This will create:
+
 - Project: "Boost Unordered Documentation"
 - Component: "BUD 03"
 - Discover ~52 .adoc translation files
@@ -520,4 +533,3 @@ For more details on API endpoints and parameters:
 ## License
 
 This script is part of the Weblate project and follows the same GPL-3.0 license.
-

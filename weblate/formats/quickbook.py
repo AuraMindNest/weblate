@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 
 from django.utils.translation import gettext_lazy
-
 from translate.storage.pypo import pofile
 
 from weblate.formats.convert import ConvertFormat
@@ -30,7 +29,8 @@ if TYPE_CHECKING:
 
 
 class QuickBookFormat(ConvertFormat):
-    """QuickBook (.qbk) documentation file format with built-in PO converter.
+    """
+    QuickBook (.qbk) documentation file format with built-in PO converter.
 
     Uses a pure-Python parser to extract translatable strings (paragraphs,
     headings, sections, admonitions, list blocks, tables, variable lists) and
@@ -70,7 +70,9 @@ class QuickBookFormat(ConvertFormat):
         if template_path is None:
             report_error("QuickBook: cannot determine template file path")
             empty = pofile()
-            empty.updateheader(add=True, x_accelerator_marker=None, x_previous_msgid=None)
+            empty.updateheader(
+                add=True, x_accelerator_marker=None, x_previous_msgid=None
+            )
             return empty
 
         try:
@@ -78,7 +80,9 @@ class QuickBookFormat(ConvertFormat):
         except Exception as exc:
             report_error(f"QuickBook: cannot read template {template_path}: {exc}")
             empty = pofile()
-            empty.updateheader(add=True, x_accelerator_marker=None, x_previous_msgid=None)
+            empty.updateheader(
+                add=True, x_accelerator_marker=None, x_previous_msgid=None
+            )
             return empty
 
         filename = Path(template_path).name
@@ -89,7 +93,11 @@ class QuickBookFormat(ConvertFormat):
         # when given the same file for both master and localized, and is required so
         # that Weblate stores the correct (non-empty) translation for the source
         # language in a monolingual component.
-        storefile_path = getattr(storefile, "name", storefile) if not isinstance(storefile, str) else storefile
+        storefile_path = (
+            getattr(storefile, "name", storefile)
+            if not isinstance(storefile, str)
+            else storefile
+        )
         if storefile_path == template_path:
             for unit in store.units:
                 if not unit.isheader():
@@ -111,7 +119,13 @@ class QuickBookFormat(ConvertFormat):
             report_error(msg)
             raise RuntimeError(msg)
 
-        template_path = storefile.name if hasattr(storefile, "name") else storefile if isinstance(storefile, str) else None
+        template_path = (
+            storefile.name
+            if hasattr(storefile, "name")
+            else storefile
+            if isinstance(storefile, str)
+            else None
+        )
         if not template_path:
             msg = "QuickBook: cannot save: cannot determine template file path"
             report_error(msg)

@@ -5,20 +5,20 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WEB_JSON="${SCRIPT_DIR}/web.json"
-if [[ ! -f "${WEB_JSON}" ]]; then
-  echo "Error: ${WEB_JSON} not found. Create it with weblate_url and api_token." >&2
-  exit 1
+if [[ ! -f ${WEB_JSON} ]]; then
+    echo "Error: ${WEB_JSON} not found. Create it with weblate_url and api_token." >&2
+    exit 1
 fi
-if ! command -v jq &>/dev/null; then
-  echo "Error: jq is required to read web.json. Install jq and retry." >&2
-  exit 1
+if ! command -v jq &> /dev/null; then
+    echo "Error: jq is required to read web.json. Install jq and retry." >&2
+    exit 1
 fi
 
 WEBLATE_URL="$(jq -r '.weblate_url' "${WEB_JSON}")"
 TOKEN="$(jq -r '.api_token' "${WEB_JSON}")"
-if [[ -z "${TOKEN}" || "${TOKEN}" == "null" ]]; then
-  echo "Error: api_token not set in ${WEB_JSON}." >&2
-  exit 1
+if [[ -z ${TOKEN} || ${TOKEN} == "null" ]]; then
+    echo "Error: api_token not set in ${WEB_JSON}." >&2
+    exit 1
 fi
 
 # Request parameters
@@ -28,24 +28,24 @@ ORGANIZATION="CppDigest"
 ADD_OR_UPDATE='{"zh_Hans":["json"]}'
 VERSION="boost-1.90.0"
 # Optional: limit scan to these extensions (Weblate-supported). Use empty [] for no filter.
-EXTENSIONS='[".adoc", ".qbk"]'  # e.g. '[".adoc", ".md"]' or '[]' for all supported
+EXTENSIONS='[".adoc", ".qbk"]' # e.g. '[".adoc", ".md"]' or '[]' for all supported
 
 # Build JSON payload with jq to avoid corruption from special chars in ORGANIZATION/VERSION
 PAYLOAD="$(jq -n \
-  --arg org  "${ORGANIZATION}" \
-  --arg ver  "${VERSION}" \
-  --argjson add "${ADD_OR_UPDATE}" \
-  --argjson ext "${EXTENSIONS}" \
-  '{organization:$org, add_or_update:$add, version:$ver, extensions:$ext}')"
+    --arg org "${ORGANIZATION}" \
+    --arg ver "${VERSION}" \
+    --argjson add "${ADD_OR_UPDATE}" \
+    --argjson ext "${EXTENSIONS}" \
+    '{organization:$org, add_or_update:$add, version:$ver, extensions:$ext}')"
 
 # Trigger API and exit quickly to save CI minutes. Request is sent; we do not wait
 # for the long-running response. Server continues add-or-update after we disconnect.
 # --max-time: stop after this many seconds (curl exits 28 on timeout; || true avoids failing the job).
 curl -X POST "${WEBLATE_URL}/boost-endpoint/add-or-update/" \
-  -H "Authorization: Token ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d "${PAYLOAD}" \
-  --max-time 5 \
-  || true
+    -H "Authorization: Token ${TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "${PAYLOAD}" \
+    --max-time 5 ||
+    true
 
 echo "Trigger sent. Workflow exiting; add-or-update runs on the server."

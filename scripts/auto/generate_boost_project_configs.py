@@ -17,7 +17,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -84,7 +83,16 @@ def paths_to_github_path(paths: str) -> str:
 
 # Extensions considered documentation (from _exts we keep only these).
 DOC_EXTENSIONS = {
-    ".adoc", ".html", ".htm", ".xml", ".qbk", ".rst", ".md", ".dox", ".txt", ".xsl",
+    ".adoc",
+    ".html",
+    ".htm",
+    ".xml",
+    ".qbk",
+    ".rst",
+    ".md",
+    ".dox",
+    ".txt",
+    ".xsl",
 }
 
 EXTENSION_FULLNAMES = {
@@ -228,7 +236,7 @@ def main() -> None:
 
     count = 0
     skipped = 0
-    with open(list_path, "r", encoding="utf-8") as f:
+    with open(list_path, encoding="utf-8") as f:
         for line in f:
             row = parse_list_row(line)
             if row is None:
@@ -239,7 +247,9 @@ def main() -> None:
             if not names.strip():
                 skipped += 1
                 continue
-            github_path = paths_to_github_path(paths) if paths.strip() else args.github_path
+            github_path = (
+                paths_to_github_path(paths) if paths.strip() else args.github_path
+            )
             doc_exts = exts_to_doc_extensions(exts.strip())
             config = build_config(
                 slug,

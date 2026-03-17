@@ -23,13 +23,13 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
-def load_config(config_file: str) -> Optional[Dict[str, Any]]:
+def load_config(config_file: str) -> dict[str, Any] | None:
     """Load project configuration from JSON file. Returns None on error."""
     try:
-        with open(config_file, "r", encoding="utf-8") as f:
+        with open(config_file, encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
         print(f"[ERROR] Config file not found: {config_file}")
@@ -66,10 +66,8 @@ def clone_repository(repo_url: str, branch: str, target_dir: str) -> bool:
 
 
 def find_files_with_extensions(
-    directory: str,
-    extensions: List[str],
-    exclude_patterns: Optional[List[str]] = None
-) -> List[str]:
+    directory: str, extensions: list[str], exclude_patterns: list[str] | None = None
+) -> list[str]:
     """Find all files with given extensions in directory."""
     if exclude_patterns is None:
         exclude_patterns = []
@@ -80,7 +78,7 @@ def find_files_with_extensions(
 
     for root, dirs, files in os.walk(directory):
         # Skip hidden directories
-        dirs[:] = [d for d in dirs if not d.startswith('.')]
+        dirs[:] = [d for d in dirs if not d.startswith(".")]
 
         # Check exclude patterns
         rel_root = os.path.relpath(root, directory)
@@ -107,7 +105,8 @@ def find_files_with_extensions(
 
 
 def generate_component_name(file_path: str, remove_extension: bool = True) -> str:
-    """Generate a component name from file path.
+    """
+    Generate a component name from file path.
 
     Includes directory path for better descriptiveness when files with the same
     name exist in different directories (e.g., "Conversion Overview" vs "DOM Overview").
@@ -128,19 +127,20 @@ def generate_component_name(file_path: str, remove_extension: bool = True) -> st
         # Filter out empty parts
         path_parts = [p for p in path_parts if p]
         # Combine path parts with filename
-        full_name = ' / '.join(path_parts + [filename])
+        full_name = " / ".join(path_parts + [filename])
     else:
         full_name = filename
 
     # Convert to title case and replace underscores/hyphens with spaces
-    name = full_name.replace('_', ' ').replace('-', ' ')
-    name = ' '.join(word.capitalize() for word in name.split())
+    name = full_name.replace("_", " ").replace("-", " ")
+    name = " ".join(word.capitalize() for word in name.split())
 
     return name
 
 
 def generate_component_slug(file_path: str, remove_extension: bool = False) -> str:
-    """Generate a component slug from file path.
+    """
+    Generate a component slug from file path.
 
     Includes directory path and extension to ensure uniqueness when files with
     the same base name but different extensions exist (e.g. doc/intro.adoc vs
@@ -162,15 +162,15 @@ def generate_component_slug(file_path: str, remove_extension: bool = False) -> s
         # Filter out empty parts and normalize
         path_parts = [p for p in path_parts if p]
         # Combine path parts with filename
-        full_name = '-'.join(path_parts + [filename])
+        full_name = "-".join(path_parts + [filename])
     else:
         full_name = filename
 
     # Convert to lowercase; replace extension dot with hyphen (intro.adoc -> intro-adoc)
     slug = full_name.lower()
-    slug = slug.replace('.', '-')
-    slug = re.sub(r'[_\s]+', '-', slug)
-    slug = re.sub(r'[^a-z0-9-]', '', slug)
+    slug = slug.replace(".", "-")
+    slug = re.sub(r"[_\s]+", "-", slug)
+    slug = re.sub(r"[^a-z0-9-]", "", slug)
 
     return slug
 
@@ -221,29 +221,28 @@ def truncate_component_slug(slug: str, max_len: int = MAX_COMPONENT_SLUG_LENGTH)
 
 def generate_component_config(
     file_path: str,
-    project_config: Dict[str, Any],
-    component_defaults: Dict[str, Any],
-    languages: List[str],
+    project_config: dict[str, Any],
+    component_defaults: dict[str, Any],
+    languages: list[str],
     wait_for_ready: bool,
-    trigger_update: bool
-) -> Dict[str, Any]:
+    trigger_update: bool,
+) -> dict[str, Any]:
     """Generate complete component configuration for a file."""
-
     # Generate component-specific values
     component_name = generate_component_name(file_path)
-    project_name = (project_config.get('name') or '').strip()
+    project_name = (project_config.get("name") or "").strip()
     if project_name:
         component_name = f"{project_name} / {component_name}"
     component_name = truncate_component_name(component_name)
     component_slug = generate_component_slug(file_path)
-    project_slug = (project_config.get('slug') or '').strip()
+    project_slug = (project_config.get("slug") or "").strip()
     if project_slug:
         component_slug = f"{project_slug}-{component_slug}"
     component_slug = truncate_component_slug(component_slug)
     filemask = generate_filemask(file_path)
 
     # Use push_branch from component_defaults if specified, otherwise auto-generate
-    if "push_branch" in component_defaults and component_defaults["push_branch"]:
+    if component_defaults.get("push_branch"):
         push_branch = component_defaults["push_branch"]
     else:
         push_branch = generate_push_branch(component_slug)
@@ -251,20 +250,20 @@ def generate_component_config(
     # Determine file format from extension
     ext = os.path.splitext(file_path)[1]
     format_map = {
-        '.adoc': 'asciidoc',
-        '.po': 'po',
-        '.pot': 'po',
-        '.json': 'json',
-        '.yaml': 'yaml',
-        '.yml': 'yaml',
-        '.xliff': 'xliff',
-        '.xlf': 'xliff',
-        '.md': 'markdown',
-        '.txt': 'txt',
-        '.html': 'html',
-        '.qbk': 'quickbook',
+        ".adoc": "asciidoc",
+        ".po": "po",
+        ".pot": "po",
+        ".json": "json",
+        ".yaml": "yaml",
+        ".yml": "yaml",
+        ".xliff": "xliff",
+        ".xlf": "xliff",
+        ".md": "markdown",
+        ".txt": "txt",
+        ".html": "html",
+        ".qbk": "quickbook",
     }
-    file_format = format_map.get(ext.lower(), 'auto')
+    file_format = format_map.get(ext.lower(), "auto")
 
     # Build component configuration
     component = {
@@ -282,7 +281,9 @@ def generate_component_config(
         "edit_template": component_defaults.get("edit_template", False),
         "source_language": component_defaults.get("source_language", "en"),
         "license": component_defaults.get("license", ""),
-        "allow_translation_propagation": component_defaults.get("allow_translation_propagation", True),
+        "allow_translation_propagation": component_defaults.get(
+            "allow_translation_propagation", True
+        ),
         "enable_suggestions": component_defaults.get("enable_suggestions", True),
         "suggestion_voting": component_defaults.get("suggestion_voting", False),
         "suggestion_autoaccept": component_defaults.get("suggestion_autoaccept", 0),
@@ -293,8 +294,7 @@ def generate_component_config(
         # Pattern: 2-3 lowercase letters (language), optional script (_Script), optional region (_REGION)
         # Explicitly allows Chinese: zh, zh_Hans, zh_Hant, zh_CN, zh_TW, zh_Hans_CN, etc.
         "language_regex": component_defaults.get(
-            "language_regex",
-            r"^[a-z]{2,3}(_[A-Z][a-z]{3})?(_[A-Z]{2})?$"
+            "language_regex", r"^[a-z]{2,3}(_[A-Z][a-z]{3})?(_[A-Z]{2})?$"
         ),
         # ConvertFormat-based formats (e.g. quickbook, asciidoc) do not support
         # manage_units; explicitly set false to override the API's auto-injection
@@ -315,12 +315,13 @@ def generate_component_config(
 
 
 def save_component_config(
-    config: Dict[str, Any],
+    config: dict[str, Any],
     output_dir: str,
     component_slug: str,
-    project_slug: Optional[str] = None
+    project_slug: str | None = None,
 ) -> str:
-    """Save component configuration to JSON file.
+    """
+    Save component configuration to JSON file.
     If project_slug is set, filename is setup_{project_slug}-{component_slug}.json.
     """
     name_part = f"{project_slug}-{component_slug}" if project_slug else component_slug
@@ -333,10 +334,8 @@ def save_component_config(
 
 
 def create_components_from_setup_files(
-    setup_files: List[str],
-    setup_script: str,
-    delay_between_components: int = 5
-) -> Dict[str, bool]:
+    setup_files: list[str], setup_script: str, delay_between_components: int = 5
+) -> dict[str, bool]:
     """
     Create components in Weblate using generated setup files.
 
@@ -348,15 +347,16 @@ def create_components_from_setup_files(
         delay_between_components: Delay in seconds between component creations (default: 5)
 
     Returns a dict mapping setup file paths to success status.
+
     """
     results = {}
 
-    print(f"\n{'='*60}")
-    print(f"Creating Components in Weblate (Sequential)")
-    print(f"{'='*60}")
+    print(f"\n{'=' * 60}")
+    print("Creating Components in Weblate (Sequential)")
+    print(f"{'=' * 60}")
     print(f"[INFO] Total components to create: {len(setup_files)}")
     print(f"[INFO] Delay between components: {delay_between_components}s")
-    print(f"[INFO] This ensures proper synchronization and avoids conflicts\n")
+    print("[INFO] This ensures proper synchronization and avoids conflicts\n")
 
     if not os.path.exists(setup_script):
         print(f"[ERROR] Setup script not found: {setup_script}")
@@ -368,25 +368,27 @@ def create_components_from_setup_files(
     failed_components = []
 
     for idx, setup_file in enumerate(setup_files, 1):
-        component_name = os.path.basename(setup_file).replace('setup_', '').replace('.json', '')
+        component_name = (
+            os.path.basename(setup_file).replace("setup_", "").replace(".json", "")
+        )
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"[{idx}/{total}] Component: {component_name}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"[INFO] Config: {setup_file}")
 
         try:
             # Run create_component_and_add_translation.py for this setup file
-            cmd = [sys.executable, setup_script, '--config', setup_file]
+            cmd = [sys.executable, setup_script, "--config", setup_file]
 
-            print(f"[INFO] Starting component creation...")
+            print("[INFO] Starting component creation...")
             start_time = time.time()
 
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=300  # 5 minute timeout per component
+                timeout=300,  # 5 minute timeout per component
             )
 
             elapsed = time.time() - start_time
@@ -398,15 +400,19 @@ def create_components_from_setup_files(
 
                 # Add delay before next component (except for last one)
                 if idx < total:
-                    print(f"[INFO] Waiting {delay_between_components}s before next component...")
+                    print(
+                        f"[INFO] Waiting {delay_between_components}s before next component..."
+                    )
                     time.sleep(delay_between_components)
             else:
-                print(f"[ERROR] Failed to create component (exit code: {result.returncode})")
+                print(
+                    f"[ERROR] Failed to create component (exit code: {result.returncode})"
+                )
                 if result.stdout:
-                    print(f"[ERROR] Output (stdout):")
+                    print("[ERROR] Output (stdout):")
                     print(result.stdout)
                 if result.stderr:
-                    print(f"[ERROR] Details (stderr):")
+                    print("[ERROR] Details (stderr):")
                     print(result.stderr)
 
                 # Retry once after a short backoff (transient lock/timing issues)
@@ -426,10 +432,10 @@ def create_components_from_setup_files(
                 else:
                     print(f"[ERROR] Retry failed (exit code: {retry.returncode})")
                     if retry.stdout:
-                        print(f"[ERROR] Retry Output (stdout):")
+                        print("[ERROR] Retry Output (stdout):")
                         print(retry.stdout)
                     if retry.stderr:
-                        print(f"[ERROR] Retry Details (stderr):")
+                        print("[ERROR] Retry Details (stderr):")
                         print(retry.stderr)
                     results[setup_file] = False
                     failed_count += 1
@@ -437,18 +443,22 @@ def create_components_from_setup_files(
 
                 # Add delay before next component (except for last one)
                 if idx < total:
-                    print(f"[INFO] Waiting {delay_between_components}s before continuing...")
+                    print(
+                        f"[INFO] Waiting {delay_between_components}s before continuing..."
+                    )
                     time.sleep(delay_between_components)
 
         except subprocess.TimeoutExpired:
-            print(f"[ERROR] Timeout - component creation took longer than 5 minutes")
+            print("[ERROR] Timeout - component creation took longer than 5 minutes")
             results[setup_file] = False
             failed_count += 1
             failed_components.append(component_name)
 
             # Add delay after timeout
             if idx < total:
-                print(f"[INFO] Waiting {delay_between_components}s before continuing...")
+                print(
+                    f"[INFO] Waiting {delay_between_components}s before continuing..."
+                )
                 time.sleep(delay_between_components)
 
         except Exception as e:
@@ -459,23 +469,25 @@ def create_components_from_setup_files(
 
             # Add delay after exception
             if idx < total:
-                print(f"[INFO] Waiting {delay_between_components}s before continuing...")
+                print(
+                    f"[INFO] Waiting {delay_between_components}s before continuing..."
+                )
                 time.sleep(delay_between_components)
 
     # Final Summary
-    print(f"\n{'='*60}")
-    print(f"Component Creation Summary")
-    print(f"{'='*60}")
+    print(f"\n{'=' * 60}")
+    print("Component Creation Summary")
+    print(f"{'=' * 60}")
     print(f"  Total:   {total}")
     print(f"  Success: {success_count}")
     print(f"  Failed:  {failed_count}")
 
     if failed_components:
-        print(f"\nFailed components:")
+        print("\nFailed components:")
         for comp in failed_components:
             print(f"  - {comp}")
 
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     return results
 
@@ -483,7 +495,7 @@ def create_components_from_setup_files(
 def create_parser() -> argparse.ArgumentParser:
     """Create argument parser."""
     parser = argparse.ArgumentParser(
-        description='Auto-generate Weblate component setup files from repository',
+        description="Auto-generate Weblate component setup files from repository",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -543,7 +555,7 @@ Notes:
                  If omitted, scans the entire repository root.
   - extensions: List of file extensions to search for (e.g., [".adoc", ".md"])
   - exclude_patterns: Directories/patterns to skip during scanning
-        """
+        """,
     )
 
     parser.add_argument(
@@ -589,8 +601,11 @@ Notes:
     return parser
 
 
-def run_one_config(args: argparse.Namespace, config_path: str, skip_on_clone_failure: bool = False) -> int:
-    """Load one config file and run scan/generate/create.
+def run_one_config(
+    args: argparse.Namespace, config_path: str, skip_on_clone_failure: bool = False
+) -> int:
+    """
+    Load one config file and run scan/generate/create.
     Returns 0 on success, 1 on failure, 2 when skipped (clone failed in directory mode).
     """
     print(f"[INFO] Loading configuration from: {config_path}")
@@ -599,26 +614,26 @@ def run_one_config(args: argparse.Namespace, config_path: str, skip_on_clone_fai
         return 1
 
     # Validate configuration
-    if 'project' not in config:
+    if "project" not in config:
         print("[ERROR] Missing 'project' section in config")
         return 1
 
-    if 'component_defaults' not in config:
+    if "component_defaults" not in config:
         print("[ERROR] Missing 'component_defaults' section in config")
         return 1
 
-    if 'scan' not in config or 'extensions' not in config['scan']:
+    if "scan" not in config or "extensions" not in config["scan"]:
         print("[ERROR] Missing 'scan.extensions' in config")
         return 1
 
-    project_config = config['project']
-    component_defaults = config['component_defaults']
-    scan_config = config['scan']
+    project_config = config["project"]
+    component_defaults = config["component_defaults"]
+    scan_config = config["scan"]
 
     # Get top-level settings
-    languages = config.get('languages', ['zh_Hans'])
-    wait_for_ready = config.get('wait_for_ready', True)
-    trigger_update = config.get('trigger_update', True)
+    languages = config.get("languages", ["zh_Hans"])
+    wait_for_ready = config.get("wait_for_ready", True)
+    trigger_update = config.get("trigger_update", True)
 
     # Determine repository location
     temp_dir_to_remove = None
@@ -627,14 +642,14 @@ def run_one_config(args: argparse.Namespace, config_path: str, skip_on_clone_fai
         print(f"[INFO] Using local repository: {repo_dir}")
     else:
         # Clone repository to temporary directory
-        repo_url = component_defaults.get('repo')
-        branch = component_defaults.get('branch', 'develop')
+        repo_url = component_defaults.get("repo")
+        branch = component_defaults.get("branch", "develop")
 
         if not repo_url:
             print("[ERROR] No repository URL in component_defaults.repo")
             return 1
 
-        temp_dir = tempfile.mkdtemp(prefix='weblate_scan_')
+        temp_dir = tempfile.mkdtemp(prefix="weblate_scan_")
         repo_dir = temp_dir
         temp_dir_to_remove = temp_dir
 
@@ -644,36 +659,46 @@ def run_one_config(args: argparse.Namespace, config_path: str, skip_on_clone_fai
             except OSError as e:
                 print(f"[WARNING] Could not remove temporary directory: {e}")
             if skip_on_clone_failure:
-                print(f"[WARNING] Skipping config (repository not found or no access): {config_path}")
+                print(
+                    f"[WARNING] Skipping config (repository not found or no access): {config_path}"
+                )
                 return 2
             return 1
 
     try:
         # Resolve paths to scan: single string, list of strings, or repo root if omitted
-        raw_paths = scan_config.get('github_path')
+        raw_paths = scan_config.get("github_path")
         if raw_paths is None:
-            paths_to_scan = ['']
+            paths_to_scan = [""]
         elif isinstance(raw_paths, str):
-            paths_to_scan = [p.strip() for p in raw_paths.split(',') if p.strip()]
+            paths_to_scan = [p.strip() for p in raw_paths.split(",") if p.strip()]
             if not paths_to_scan:
-                paths_to_scan = ['']
+                paths_to_scan = [""]
         else:
-            paths_to_scan = [p.strip() if isinstance(p, str) else str(p).strip() for p in raw_paths if p]
+            paths_to_scan = [
+                p.strip() if isinstance(p, str) else str(p).strip()
+                for p in raw_paths
+                if p
+            ]
 
         if not paths_to_scan:
-            paths_to_scan = ['']
+            paths_to_scan = [""]
 
         # Normalize extensions to a list (support single string for backward compatibility)
-        raw_extensions = scan_config['extensions']
-        extensions = [raw_extensions] if isinstance(raw_extensions, str) else list(raw_extensions)
-        exclude_patterns = scan_config.get('exclude_patterns', [])
+        raw_extensions = scan_config["extensions"]
+        extensions = (
+            [raw_extensions]
+            if isinstance(raw_extensions, str)
+            else list(raw_extensions)
+        )
+        exclude_patterns = scan_config.get("exclude_patterns", [])
 
         # Find files in every path with every extension; collect repo-relative paths (no duplicates)
         seen_rel = set()
         files = []
         for path_spec in paths_to_scan:
             scan_dir = os.path.join(repo_dir, path_spec) if path_spec else repo_dir
-            label = path_spec or '(repository root)'
+            label = path_spec or "(repository root)"
             print(f"[INFO] Scanning: {label}")
 
             if not os.path.exists(scan_dir):
@@ -681,7 +706,9 @@ def run_one_config(args: argparse.Namespace, config_path: str, skip_on_clone_fai
                 return 1
 
             found = find_files_with_extensions(scan_dir, extensions, exclude_patterns)
-            subdir_rel = os.path.relpath(scan_dir, repo_dir) if scan_dir != repo_dir else ''
+            subdir_rel = (
+                os.path.relpath(scan_dir, repo_dir) if scan_dir != repo_dir else ""
+            )
             for f in found:
                 rel = os.path.join(subdir_rel, f) if subdir_rel else f
                 rel_norm = os.path.normpath(rel)
@@ -717,17 +744,19 @@ def run_one_config(args: argparse.Namespace, config_path: str, skip_on_clone_fai
                 component_defaults,
                 languages,
                 wait_for_ready,
-                trigger_update
+                trigger_update,
             )
 
-            component_slug = component_config['component']['slug']
+            component_slug = component_config["component"]["slug"]
 
             # Check for duplicate slugs
             if component_slug in seen_slugs:
-                print(f"[WARNING] Duplicate component slug '{component_slug}' detected!")
+                print(
+                    f"[WARNING] Duplicate component slug '{component_slug}' detected!"
+                )
                 print(f"  First file: {seen_slugs[component_slug]}")
                 print(f"  Current file: {file_path}")
-                print(f"  This will cause conflicts when creating components.")
+                print("  This will cause conflicts when creating components.")
                 # Append a counter to make it unique
                 counter = 2
                 original_slug = component_slug
@@ -736,7 +765,7 @@ def run_one_config(args: argparse.Namespace, config_path: str, skip_on_clone_fai
                     counter += 1
                 component_slug = truncate_component_slug(component_slug)
                 print(f"  Using unique slug: {component_slug}")
-                component_config['component']['slug'] = component_slug
+                component_config["component"]["slug"] = component_slug
 
             seen_slugs[component_slug] = file_path
 
@@ -749,42 +778,43 @@ def run_one_config(args: argparse.Namespace, config_path: str, skip_on_clone_fai
             else:
                 # Save configuration (component_slug already includes project_slug when set)
                 output_file = save_component_config(
-                    component_config,
-                    output_dir,
-                    component_slug,
-                    project_slug=None
+                    component_config, output_dir, component_slug, project_slug=None
                 )
                 print(f"[SUCCESS] Created: {output_file}")
                 generated_files.append(output_file)
                 generated_count += 1
 
         # Summary
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         if args.dry_run:
-            print(f"[DRY-RUN] Would generate {len(files)} setup file(s) in: {output_dir}")
+            print(
+                f"[DRY-RUN] Would generate {len(files)} setup file(s) in: {output_dir}"
+            )
             if args.create_components:
                 print(f"[DRY-RUN] Would also create {len(files)} components in Weblate")
         else:
-            print(f"[SUCCESS] Generated {generated_count} setup file(s) in: {output_dir}")
+            print(
+                f"[SUCCESS] Generated {generated_count} setup file(s) in: {output_dir}"
+            )
 
             if not args.create_components:
-                print(f"\nNext steps:")
+                print("\nNext steps:")
                 print(f"  1. Review the generated setup files in {output_dir}/")
-                print(f"  2. Run each setup file:")
+                print("  2. Run each setup file:")
                 print(f"     cd {os.path.dirname(os.path.abspath(__file__))}")
                 print(f"     for file in {output_dir}/setup_*.json; do")
-                print(f"       python3 ./create_component_and_add_translation.py --config \"$file\"")
-                print(f"     done")
-                print(f"  Or run with --create-components to auto-create all components")
-        print(f"{'='*60}")
+                print(
+                    '       python3 ./create_component_and_add_translation.py --config "$file"'
+                )
+                print("     done")
+                print("  Or run with --create-components to auto-create all components")
+        print(f"{'=' * 60}")
 
         # Create components if requested
         if args.create_components and not args.dry_run and generated_files:
-            print(f"\n[INFO] Creating components in Weblate...")
+            print("\n[INFO] Creating components in Weblate...")
             create_components_from_setup_files(
-                generated_files,
-                args.setup_script,
-                delay_between_components=args.delay
+                generated_files, args.setup_script, delay_between_components=args.delay
             )
 
         return 0
@@ -794,7 +824,9 @@ def run_one_config(args: argparse.Namespace, config_path: str, skip_on_clone_fai
                 shutil.rmtree(temp_dir_to_remove)
                 print(f"[INFO] Removed temporary repository: {temp_dir_to_remove}")
             except OSError as e:
-                print(f"[WARNING] Could not remove temporary directory {temp_dir_to_remove}: {e}")
+                print(
+                    f"[WARNING] Could not remove temporary directory {temp_dir_to_remove}: {e}"
+                )
 
 
 def main() -> int:
@@ -811,15 +843,15 @@ def main() -> int:
         exit_code = 0
         for i, config_path in enumerate(config_files, 1):
             config_path_str = str(config_path)
-            print(f"\n{'#'*60}\n[INFO] [{i}/{len(config_files)}] Config: {config_path_str}\n{'#'*60}")
+            print(
+                f"\n{'#' * 60}\n[INFO] [{i}/{len(config_files)}] Config: {config_path_str}\n{'#' * 60}"
+            )
             result = run_one_config(args, config_path_str, skip_on_clone_failure=True)
             if result == 1:
                 exit_code = 1
         return exit_code
-    else:
-        return run_one_config(args, args.config, skip_on_clone_failure=False)
+    return run_one_config(args, args.config, skip_on_clone_failure=False)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())
-

@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from weblate.trans.models import Translation
 
 
-def auto_translate_via_openrouter(translation: "Translation") -> "Translation":
+def auto_translate_via_openrouter(translation: Translation) -> Translation:
     """Auto translation via OpenRouter (modularized)."""
     # 1) Resolve configuration
     api_key, model, config_source = _resolve_openrouter_config(translation)
@@ -23,8 +23,8 @@ def auto_translate_via_openrouter(translation: "Translation") -> "Translation":
 
     try:
         # 2) Collect units and build request
-        units_qs, units_data, unit_map, expected_keys = (
-            _prepare_batch_request(translation)
+        units_qs, units_data, unit_map, expected_keys = _prepare_batch_request(
+            translation
         )
         if not units_qs:
             return translation
@@ -45,18 +45,24 @@ def auto_translate_via_openrouter(translation: "Translation") -> "Translation":
             return translation
 
         # 4) Apply results
-        _apply_batch_translations(translation, translated_data, unit_map, len(units_data))
+        _apply_batch_translations(
+            translation, translated_data, unit_map, len(units_data)
+        )
         return translation
     except Exception as e:
-        translation.log_error("Auto-translation failed for %s: %s", translation.full_slug, e)
+        translation.log_error(
+            "Auto-translation failed for %s: %s", translation.full_slug, e
+        )
         import traceback
+
         translation.log_error("traceback: %s", traceback.format_exc())
         return translation
 
 
-def _resolve_openrouter_config(translation: "Translation"):
-    from weblate.configuration.models import Setting, SettingCategory
+def _resolve_openrouter_config(translation: Translation):
     import os
+
+    from weblate.configuration.models import Setting, SettingCategory
 
     translation.log_info("AUTO-TRANSLATION TRIGGERED for %s", translation.full_slug)
 
@@ -66,19 +72,21 @@ def _resolve_openrouter_config(translation: "Translation"):
 
     try:
         settings = Setting.objects.get_settings_dict(SettingCategory.MT)
-        openai_config = settings.get('openai', {})
+        openai_config = settings.get("openai", {})
         if openai_config:
-            api_key = openai_config.get('key')
-            model = openai_config.get('custom_model')
+            api_key = openai_config.get("key")
+            model = openai_config.get("custom_model")
             if api_key and model:
                 config_source = "Weblate configuration_setting"
-                translation.log_info("Using OpenRouter settings from Weblate configuration")
+                translation.log_info(
+                    "Using OpenRouter settings from Weblate configuration"
+                )
     except Exception as e:
         translation.log_debug("Failed to read Weblate configuration: %s", e)
 
     if not (api_key and model):
-        api_key = os.getenv('OPENROUTER_API_KEY')
-        model = os.getenv('OPENROUTER_MODEL', 'deepseek/deepseek-chat')
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        model = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-chat")
         if api_key and model:
             config_source = "environment variables"
             translation.log_info("Using OpenRouter settings from environment variables")
@@ -96,12 +104,15 @@ def _resolve_openrouter_config(translation: "Translation"):
 
     return api_key, model, config_source
 
-def _prepare_batch_request(translation: "Translation"):
-    from weblate.utils.openrouter_translator import OpenRouterTranslator  # noqa: F401 (import side-effect for types)
-    import json
+
+def _prepare_batch_request(translation: Translation):
+
+    from weblate.utils.openrouter_translator import (
+        OpenRouterTranslator,  # noqa: F401 (import side-effect for types)
+    )
 
     # Collect untranslated units
-    units_qs = translation.unit_set.all().order_by('position')
+    units_qs = translation.unit_set.all().order_by("position")
     if not units_qs.exists():
         return None, None, None, None
 
@@ -117,19 +128,20 @@ def _prepare_batch_request(translation: "Translation"):
 
 
 def _create_chunks(units_data, chunk_size=50):
-        """Split units data into chunks for batch processing."""
-        units_list = list(units_data.items())
-        chunks = []
+    """Split units data into chunks for batch processing."""
+    units_list = list(units_data.items())
+    chunks = []
 
-        for i in range(0, len(units_data), chunk_size):
-            chunk_dict = dict(units_list[i:i + chunk_size])
-            chunks.append(chunk_dict)
+    for i in range(0, len(units_data), chunk_size):
+        chunk_dict = dict(units_list[i : i + chunk_size])
+        chunks.append(chunk_dict)
 
-        return chunks
+    return chunks
+
 
 def _build_system_prompt(source_language, target_language):
-        """Build the system prompt for translation."""
-        return f"""You are a professional technical documentation translator specialized in translating from {source_language} to {target_language}.
+    """Build the system prompt for translation."""
+    return f"""You are a professional technical documentation translator specialized in translating from {source_language} to {target_language}.
 
         CRITICAL REQUIREMENTS:
         1. INPUT: You will receive a JSON object where keys are unit IDs and values are {source_language} source strings
@@ -152,17 +164,25 @@ def _build_system_prompt(source_language, target_language):
         CRITICAL: Return ONLY the raw JSON object. NO code fences, NO explanations, NO extra formatting.
         The response MUST be parseable as valid JSON or the entire batch will fail."""
 
+
 def _build_user_prompt(chunk_json, source_language, target_language):
-        """Build the user prompt for a specific chunk."""
-        return f"""Translate the following strings from {source_language} to {target_language}. This is a chunk from a larger document - maintain consistency with standard technical terminology that would be used across the entire document.
+    """Build the user prompt for a specific chunk."""
+    return f"""Translate the following strings from {source_language} to {target_language}. This is a chunk from a larger document - maintain consistency with standard technical terminology that would be used across the entire document.
 
         Return ONLY a valid JSON object with the same keys but translated values:
         {chunk_json}"""
 
+
 def _translate_chunk_with_retries(
-    translation: "Translation",
-    translator, chunk_json, chunk_keys, chunk_idx, total_chunks,
-    system_prompt, user_prompt, max_retries=3
+    translation: Translation,
+    translator,
+    chunk_json,
+    chunk_keys,
+    chunk_idx,
+    total_chunks,
+    system_prompt,
+    user_prompt,
+    max_retries=3,
 ):
     """Translate a single chunk with retry logic."""
     translation.log_info(
@@ -206,7 +226,9 @@ def _translate_chunk_with_retries(
     return None
 
 
-def _validate_translation_completeness(translation: "Translation", all_translated_data, expected_keys):
+def _validate_translation_completeness(
+    translation: Translation, all_translated_data, expected_keys
+):
     """Validate that all expected keys were translated."""
     translated_keys = set(all_translated_data.keys())
 
@@ -227,15 +249,17 @@ def _validate_translation_completeness(translation: "Translation", all_translate
 
 
 def _translate_with_retries(
-    translation: "Translation",
-    units_data, expected_keys, api_key, model_name
+    translation: Translation, units_data, expected_keys, api_key, model_name
 ):
     """Translate units with chunking and retry logic."""
-    from weblate.utils.openrouter_translator import OpenRouterTranslator
     import json
 
+    from weblate.utils.openrouter_translator import OpenRouterTranslator
+
     # Initialize translator
-    translator = OpenRouterTranslator(api_key=api_key, model=model_name, logger=translation)
+    translator = OpenRouterTranslator(
+        api_key=api_key, model=model_name, logger=translation
+    )
 
     # Create chunks
     chunks = _create_chunks(units_data, chunk_size=50)
@@ -253,9 +277,7 @@ def _translate_with_retries(
     for chunk_idx, chunk_data in enumerate(chunks, 1):
         chunk_json = json.dumps(chunk_data, ensure_ascii=False, indent=2)
         chunk_keys = set(chunk_data.keys())
-        user_prompt = _build_user_prompt(
-            chunk_json, source_language, target_language
-        )
+        user_prompt = _build_user_prompt(chunk_json, source_language, target_language)
 
         chunk_translated = _translate_chunk_with_retries(
             translation=translation,
@@ -273,14 +295,19 @@ def _translate_with_retries(
             all_translated_data.update(chunk_translated)
 
     # Validate completeness
-    if _validate_translation_completeness(translation, all_translated_data, expected_keys):
+    if _validate_translation_completeness(
+        translation, all_translated_data, expected_keys
+    ):
         return all_translated_data
 
-    return all_translated_data if all_translated_data else None
+    return all_translated_data or None
 
 
-def _validate_and_parse_response(translation: "Translation", translated_json, expected_keys):
+def _validate_and_parse_response(
+    translation: Translation, translated_json, expected_keys
+):
     import json
+
     try:
         data = json.loads(translated_json)
     except Exception as e:
@@ -297,7 +324,9 @@ def _validate_and_parse_response(translation: "Translation", translated_json, ex
         missing_keys = expected_keys - translated_keys
         extra_keys = translated_keys - expected_keys
         translation.log_warning(
-            "Key mismatch - Expected %d keys, got %d keys", len(expected_keys), len(translated_keys)
+            "Key mismatch - Expected %d keys, got %d keys",
+            len(expected_keys),
+            len(translated_keys),
         )
         if missing_keys:
             translation.log_debug("Missing keys: %s", list(missing_keys)[:10])
@@ -308,7 +337,9 @@ def _validate_and_parse_response(translation: "Translation", translated_json, ex
     return True, data
 
 
-def _apply_batch_translations(translation: "Translation", translated_data, unit_map, total_units):
+def _apply_batch_translations(
+    translation: Translation, translated_data, unit_map, total_units
+):
     from weblate.utils.state import STATE_FUZZY
 
     translated_count = 0
@@ -334,13 +365,14 @@ def _apply_batch_translations(translation: "Translation", translated_data, unit_
             continue
 
         try:
-            from weblate.trans.models.pending import PendingUnitChange
             from weblate.auth.models import User
             from weblate.trans.models.change import ActionEvents
 
             # Get or create a bot user for autobatch translation
             bot_user = User.objects.get_or_create_bot(
-                scope="weblate", name="Autobatch_translatior", verbose="autobatch_translatior"
+                scope="weblate",
+                name="Autobatch_translatior",
+                verbose="autobatch_translatior",
             )
 
             # Use unit.translate() instead of unit.save() directly
@@ -358,11 +390,20 @@ def _apply_batch_translations(translation: "Translation", translated_data, unit_
 
             if saved:
                 translated_count += 1
-                translation.log_debug("Translated unit %d: %s -> %s", unit.id, unit.source[:30], target[:30])
+                translation.log_debug(
+                    "Translated unit %d: %s -> %s",
+                    unit.id,
+                    unit.source[:30],
+                    target[:30],
+                )
             else:
-                translation.log_warning("Unit %d translation was not saved (no change detected)", unit.id)
+                translation.log_warning(
+                    "Unit %d translation was not saved (no change detected)", unit.id
+                )
         except Exception as e:
-            translation.log_warning("Failed to save translation for unit %d: %s", unit_id, e)
+            translation.log_warning(
+                "Failed to save translation for unit %d: %s", unit_id, e
+            )
             failed_count += 1
 
     translation.log_info(

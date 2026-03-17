@@ -13,6 +13,7 @@ Usage:
 
 import os
 import sys
+
 import django
 
 # Setup Django environment
@@ -21,6 +22,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "weblate.settings")
 django.setup()
 
 from django.db import transaction
+
 from weblate.trans.models import Component, Project
 
 
@@ -99,7 +101,9 @@ def main():
         if sync_component(component):
             success_count += 1
 
-    print(f"\n✓ Successfully initiated sync for {success_count}/{len(components)} components")
+    print(
+        f"\n✓ Successfully initiated sync for {success_count}/{len(components)} components"
+    )
     if not args.foreground:
         print(
             "\nNote: Sync runs asynchronously via Celery. "
@@ -109,4 +113,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -20,10 +20,12 @@ class BoostEndpointInfo(APIView):
 
     def get(self, request, format=None):
         """Return Boost endpoint module info."""
-        return Response({
-            "module": "boost-endpoint",
-            "description": "Boost documentation translation API",
-        })
+        return Response(
+            {
+                "module": "boost-endpoint",
+                "description": "Boost documentation translation API",
+            }
+        )
 
 
 class AddOrUpdateView(APIView):

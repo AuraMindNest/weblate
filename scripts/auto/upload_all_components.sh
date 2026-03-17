@@ -6,7 +6,7 @@
 #   ./upload_all_components.sh --web-config scripts/auto/web.json --pofiles-dir scripts/auto/pofiles
 #   PROJECT=my-project LANGUAGE=en ./upload_all_components.sh
 
-set -e  # Exit on error
+set -e # Exit on error
 
 # Default values
 PROJECT="${PROJECT:-boost-unordered-documentation}"
@@ -19,40 +19,40 @@ UPLOAD_SCRIPT="${SCRIPT_DIR}/upload_translations.py"
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --web-config)
-            WEB_CONFIG="$2"
-            shift 2
-            ;;
-        --project)
-            PROJECT="$2"
-            shift 2
-            ;;
-        --language)
-            LANGUAGE="$2"
-            shift 2
-            ;;
-        --pofiles-dir)
-            POFILES_DIR="$2"
-            shift 2
-            ;;
-        --help|-h)
-            echo "Usage: $0 [OPTIONS]"
-            echo ""
-            echo "Options:"
-            echo "  --web-config PATH    Path to web.json config file (default: web.json)"
-            echo "  --project SLUG       Project slug (default: boost-unordered-documentation)"
-            echo "  --language CODE      Language code (default: zh_Hans)"
-            echo "  --pofiles-dir DIR    Directory containing PO files (default: pofiles)"
-            echo ""
-            echo "Environment variables:"
-            echo "  PROJECT, LANGUAGE, WEB_CONFIG, POFILES_DIR can also be set via environment"
-            exit 0
-            ;;
-        *)
-            echo "Unknown option: $1" >&2
-            echo "Use --help for usage information" >&2
-            exit 1
-            ;;
+    --web-config)
+        WEB_CONFIG="$2"
+        shift 2
+        ;;
+    --project)
+        PROJECT="$2"
+        shift 2
+        ;;
+    --language)
+        LANGUAGE="$2"
+        shift 2
+        ;;
+    --pofiles-dir)
+        POFILES_DIR="$2"
+        shift 2
+        ;;
+    --help | -h)
+        echo "Usage: $0 [OPTIONS]"
+        echo ""
+        echo "Options:"
+        echo "  --web-config PATH    Path to web.json config file (default: web.json)"
+        echo "  --project SLUG       Project slug (default: boost-unordered-documentation)"
+        echo "  --language CODE      Language code (default: zh_Hans)"
+        echo "  --pofiles-dir DIR    Directory containing PO files (default: pofiles)"
+        echo ""
+        echo "Environment variables:"
+        echo "  PROJECT, LANGUAGE, WEB_CONFIG, POFILES_DIR can also be set via environment"
+        exit 0
+        ;;
+    *)
+        echo "Unknown option: $1" >&2
+        echo "Use --help for usage information" >&2
+        exit 1
+        ;;
     esac
 done
 

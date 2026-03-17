@@ -72,5 +72,3 @@ echo -e "    - Celery:  ${YELLOW}tail -f $LOG_DIR/weblate-*.log${NC}"
 echo ""
 echo -e "  To stop Weblate, run: ${YELLOW}./stop-weblate.sh${NC}"
 echo -e "${BLUE}========================================${NC}"
-
-

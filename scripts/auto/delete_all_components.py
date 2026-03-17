@@ -19,16 +19,16 @@ Usage:
 import argparse
 import json
 import sys
-from typing import Any, Dict, List
+from typing import Any
 from urllib.parse import urljoin
 
 import requests
 
 
-def load_web_config(config_path: str = "web.json") -> Dict[str, Any]:
+def load_web_config(config_path: str = "web.json") -> dict[str, Any]:
     """Load Weblate API configuration from JSON file."""
     try:
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
         print(f"[ERROR] Config file not found: {config_path}", flush=True)
@@ -53,7 +53,7 @@ class WeblateDeleter:
             }
         )
 
-    def list_projects(self) -> List[Dict[str, Any]]:
+    def list_projects(self) -> list[dict[str, Any]]:
         """List all projects."""
         all_projects = []
         url = "projects/"
@@ -71,7 +71,7 @@ class WeblateDeleter:
 
         return all_projects
 
-    def list_components(self, project_slug: str) -> List[Dict[str, Any]]:
+    def list_components(self, project_slug: str) -> list[dict[str, Any]]:
         """List all components in a project."""
         all_components = []
         url = f"projects/{project_slug}/components/"
@@ -210,7 +210,10 @@ def main() -> int:
         print(f"\n[INFO] Found {len(projects)} project(s):", flush=True)
         for proj in projects:
             comp_count = len(deleter.list_components(proj["slug"]))
-            print(f"  - {proj['slug']}: {proj['name']} ({comp_count} components)", flush=True)
+            print(
+                f"  - {proj['slug']}: {proj['name']} ({comp_count} components)",
+                flush=True,
+            )
 
         if not args.yes:
             print(
@@ -264,7 +267,7 @@ def main() -> int:
 
         return 0 if (total_projects_failed == 0 and total_components_failed == 0) else 1
 
-    elif args.all_projects:
+    if args.all_projects:
         # Delete all projects
         print("[INFO] Listing all projects...", flush=True)
         projects = deleter.list_projects()
@@ -276,7 +279,10 @@ def main() -> int:
         print(f"\n[INFO] Found {len(projects)} project(s):", flush=True)
         for proj in projects:
             comp_count = len(deleter.list_components(proj["slug"]))
-            print(f"  - {proj['slug']}: {proj['name']} ({comp_count} components)", flush=True)
+            print(
+                f"  - {proj['slug']}: {proj['name']} ({comp_count} components)",
+                flush=True,
+            )
 
         if not args.yes:
             print(
@@ -330,56 +336,57 @@ def main() -> int:
 
         return 0 if (total_projects_failed == 0 and total_components_failed == 0) else 1
 
-    else:
-        # Delete all components in a specific project
-        print(f"[INFO] Listing components in project: {args.project}", flush=True)
-        components = deleter.list_components(args.project)
+    # Delete all components in a specific project
+    print(f"[INFO] Listing components in project: {args.project}", flush=True)
+    components = deleter.list_components(args.project)
 
-        if not components:
-            print("[INFO] No components found in project.", flush=True)
+    if not components:
+        print("[INFO] No components found in project.", flush=True)
+        return 0
+
+    # Show components
+    print(f"\n[INFO] Found {len(components)} component(s):", flush=True)
+    for comp in components:
+        print(f"  - {comp['slug']}: {comp['name']}", flush=True)
+
+    # Confirmation
+    if not args.yes:
+        print(
+            f"\n[WARNING] This will delete ALL {len(components)} components!",
+            flush=True,
+        )
+        confirm = input('Type "DELETE ALL" to confirm: ').strip()
+        if confirm != "DELETE ALL":
+            print("[INFO] Deletion cancelled.", flush=True)
             return 0
 
-        # Show components
-        print(f"\n[INFO] Found {len(components)} component(s):", flush=True)
-        for comp in components:
-            print(f"  - {comp['slug']}: {comp['name']}", flush=True)
+    # Delete components
+    print("\n[INFO] Deleting components...", flush=True)
+    deleted = 0
+    failed = []
 
-        # Confirmation
-        if not args.yes:
-            print(f"\n[WARNING] This will delete ALL {len(components)} components!", flush=True)
-            confirm = input('Type "DELETE ALL" to confirm: ').strip()
-            if confirm != "DELETE ALL":
-                print("[INFO] Deletion cancelled.", flush=True)
-                return 0
+    for comp in components:
+        comp_slug = comp["slug"]
+        if deleter.delete_component(args.project, comp_slug):
+            deleted += 1
+            print(f"  [SUCCESS] Deleted {comp_slug}", flush=True)
+        else:
+            failed.append(comp_slug)
 
-        # Delete components
-        print("\n[INFO] Deleting components...", flush=True)
-        deleted = 0
-        failed = []
+    # Summary
+    print("\n" + "=" * 60, flush=True)
+    print("Deletion Summary", flush=True)
+    print("=" * 60, flush=True)
+    print(f"Total: {len(components)}", flush=True)
+    print(f"Deleted: {deleted}", flush=True)
+    if failed:
+        print(f"Failed: {len(failed)}", flush=True)
+        for comp_slug in failed:
+            print(f"  - {comp_slug}", flush=True)
+    print("=" * 60, flush=True)
 
-        for comp in components:
-            comp_slug = comp["slug"]
-            if deleter.delete_component(args.project, comp_slug):
-                deleted += 1
-                print(f"  [SUCCESS] Deleted {comp_slug}", flush=True)
-            else:
-                failed.append(comp_slug)
-
-        # Summary
-        print("\n" + "=" * 60, flush=True)
-        print("Deletion Summary", flush=True)
-        print("=" * 60, flush=True)
-        print(f"Total: {len(components)}", flush=True)
-        print(f"Deleted: {deleted}", flush=True)
-        if failed:
-            print(f"Failed: {len(failed)}", flush=True)
-            for comp_slug in failed:
-                print(f"  - {comp_slug}", flush=True)
-        print("=" * 60, flush=True)
-
-        return 0 if not failed else 1
+    return 0 if not failed else 1
 
 
 if __name__ == "__main__":
     sys.exit(main())
-

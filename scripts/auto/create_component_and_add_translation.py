@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Weblate Component Setup - Complete Workflow
+Weblate Component Setup - Complete Workflow.
 
 Creates a Weblate component and adds translations in one command.
 This is a convenience wrapper around create_component.py and add_translation.py.
@@ -28,27 +28,30 @@ import os
 import sys
 import time
 import traceback
-from typing import Any, Dict, List
+from typing import Any
 
 # Import the other scripts
 try:
+    from add_translation import (
+        WeblateTranslationCreator,
+        add_translations_batch,
+        parse_language_codes,
+    )
     from create_component import (
         WeblateProjectCreator,
         load_config_from_file,
         load_web_config_auto,
         merge_configs,
-        validate_config,
         setup_project_and_component,
         trigger_and_wait,
-    )
-    from add_translation import (
-        WeblateTranslationCreator,
-        parse_language_codes,
-        add_translations_batch,
+        validate_config,
     )
 except ImportError as e:
     print(f"[ERROR] Failed to import required modules: {e}", flush=True)
-    print("[INFO] Make sure create_component.py and add_translation.py are present", flush=True)
+    print(
+        "[INFO] Make sure create_component.py and add_translation.py are present",
+        flush=True,
+    )
     sys.exit(1)
 
 # Default path for Weblate-supported formats (file_format, file_extensions)
@@ -57,31 +60,60 @@ DEFAULT_FORMATS_CONFIG = os.path.join(_SCRIPT_DIR, "weblate_supported_formats.js
 
 
 def load_supported_formats(config_path: str) -> set:
-    """Load set of supported Weblate file_format ids from JSON config.
+    """
+    Load set of supported Weblate file_format ids from JSON config.
     Config is a list of {"file_format": "...", "file_extensions": [".ext", ...]}.
     Returns set of file_format strings. On missing/invalid file, returns default set.
     """
     default_formats = {
-        "asciidoc", "po", "json", "yaml", "xliff", "markdown", "txt", "html",
-        "odf", "csv", "idml", "ini", "php", "properties", "resx", "ts", "dtd",
-        "flatxml", "fluent", "stringsdict", "tbx", "xlsx", "ruby-yaml",
-        "webextension", "arb", "gwt", "winrc", "subtitle", "quickbook",
+        "asciidoc",
+        "po",
+        "json",
+        "yaml",
+        "xliff",
+        "markdown",
+        "txt",
+        "html",
+        "odf",
+        "csv",
+        "idml",
+        "ini",
+        "php",
+        "properties",
+        "resx",
+        "ts",
+        "dtd",
+        "flatxml",
+        "fluent",
+        "stringsdict",
+        "tbx",
+        "xlsx",
+        "ruby-yaml",
+        "webextension",
+        "arb",
+        "gwt",
+        "winrc",
+        "subtitle",
+        "quickbook",
     }
     if not config_path or not os.path.isfile(config_path):
         return default_formats
     try:
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         print(f"[WARNING] Could not load formats config {config_path}: {e}", flush=True)
         return default_formats
     if not isinstance(data, list):
         return default_formats
-    return {item["file_format"].strip().lower() for item in data
-            if isinstance(item.get("file_format"), str) and item["file_format"].strip()}
+    return {
+        item["file_format"].strip().lower()
+        for item in data
+        if isinstance(item.get("file_format"), str) and item["file_format"].strip()
+    }
 
 
-def is_format_supported(config: Dict[str, Any], supported_formats: set) -> bool:
+def is_format_supported(config: dict[str, Any], supported_formats: set) -> bool:
     """Return True if the component's file_format is in the supported set."""
     component = config.get("component") or {}
     file_format = (component.get("file_format") or "").strip().lower()
@@ -90,7 +122,7 @@ def is_format_supported(config: Dict[str, Any], supported_formats: set) -> bool:
     return file_format in supported_formats
 
 
-def load_setup_config(config_file: str) -> Dict[str, Any]:
+def load_setup_config(config_file: str) -> dict[str, Any]:
     """Load setup configuration with component and languages."""
     config = load_config_from_file(config_file)
 
@@ -102,12 +134,15 @@ def load_setup_config(config_file: str) -> Dict[str, Any]:
     return config
 
 
-def interactive_setup() -> Dict[str, Any]:
+def interactive_setup() -> dict[str, Any]:
     """Interactively gather setup parameters."""
     print("=== Weblate Component Setup - Interactive Mode ===\n", flush=True)
 
     print("[INFO] First, let's create the component...", flush=True)
-    print("[INFO] (If you already have a component.json, press Ctrl+C and use --config)", flush=True)
+    print(
+        "[INFO] (If you already have a component.json, press Ctrl+C and use --config)",
+        flush=True,
+    )
     print()
 
     # Get basic info
@@ -187,22 +222,21 @@ def interactive_setup() -> Dict[str, Any]:
     return config
 
 
-def create_component_wrapper(config: Dict[str, Any]) -> tuple[str, str]:
+def create_component_wrapper(config: dict[str, Any]) -> tuple[str, str]:
     """Create component and return project/component slugs."""
-    print("\n" + "="*60, flush=True)
+    print("\n" + "=" * 60, flush=True)
     print("STEP 1: Creating Component", flush=True)
-    print("="*60 + "\n", flush=True)
+    print("=" * 60 + "\n", flush=True)
 
-    creator = WeblateProjectCreator(
-        config['weblate_url'],
-        config['api_token']
-    )
+    creator = WeblateProjectCreator(config["weblate_url"], config["api_token"])
 
     if not creator.check_connection():
-        raise Exception("Failed to connect to Weblate API")
+        msg = "Failed to connect to Weblate API"
+        raise Exception(msg)
 
-    project, component, project_slug, component_slug = \
-        setup_project_and_component(creator, config)
+    project, component, project_slug, component_slug = setup_project_and_component(
+        creator, config
+    )
 
     # Trigger update and wait for component to be ready
     print("\n[INFO] Waiting for component to be fully initialized...", flush=True)
@@ -214,18 +248,17 @@ def create_component_wrapper(config: Dict[str, Any]) -> tuple[str, str]:
 
     # Verify component is accessible
     if not _verify_component_accessible(creator, project_slug, component_slug):
-        raise Exception("Component not accessible after creation")
+        msg = "Component not accessible after creation"
+        raise Exception(msg)
 
-    print(f"\n[SUCCESS] Component created and ready!", flush=True)
+    print("\n[SUCCESS] Component created and ready!", flush=True)
     print(f"[INFO] URL: {component['web_url']}", flush=True)
 
     return project_slug, component_slug
 
 
 def _verify_component_accessible(
-    creator: WeblateProjectCreator,
-    project_slug: str,
-    component_slug: str
+    creator: WeblateProjectCreator, project_slug: str, component_slug: str
 ) -> bool:
     """Verify component is accessible and ready."""
     try:
@@ -236,32 +269,25 @@ def _verify_component_accessible(
 
 
 def add_translations_wrapper(
-    config: Dict[str, Any],
-    project_slug: str,
-    component_slug: str,
-    languages: List[str]
+    config: dict[str, Any], project_slug: str, component_slug: str, languages: list[str]
 ) -> int:
     """Add translations to the component using add_translation.py logic."""
     if not languages:
-        print("\n[INFO] No languages specified, skipping translation addition", flush=True)
+        print(
+            "\n[INFO] No languages specified, skipping translation addition", flush=True
+        )
         return 0
 
-    print("\n" + "="*60, flush=True)
+    print("\n" + "=" * 60, flush=True)
     print(f"STEP 2: Adding {len(languages)} Translation(s)", flush=True)
-    print("="*60 + "\n", flush=True)
+    print("=" * 60 + "\n", flush=True)
 
     # Create translation creator
-    creator = WeblateTranslationCreator(
-        config['weblate_url'],
-        config['api_token']
-    )
+    creator = WeblateTranslationCreator(config["weblate_url"], config["api_token"])
 
     # Use the shared batch function from add_translation.py
     success_count = add_translations_batch(
-        creator,
-        project_slug,
-        component_slug,
-        languages
+        creator, project_slug, component_slug, languages
     )
 
     return success_count
@@ -270,7 +296,7 @@ def add_translations_wrapper(
 def create_parser() -> argparse.ArgumentParser:
     """Create argument parser."""
     parser = argparse.ArgumentParser(
-        description='Complete Weblate component setup with translations',
+        description="Complete Weblate component setup with translations",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -297,47 +323,31 @@ Setup Config Format (setup.json):
 
 Note:
   Automatically loads web.json from script directory or current directory.
-        """
+        """,
     )
 
+    parser.add_argument("--config", type=str, help="Setup configuration JSON file")
     parser.add_argument(
-        '--config',
+        "--languages",
         type=str,
-        help='Setup configuration JSON file'
+        help="Language codes to add (comma-separated, e.g., fr,de,es)",
     )
     parser.add_argument(
-        '--languages',
+        "--web-config",
         type=str,
-        help='Language codes to add (comma-separated, e.g., fr,de,es)'
+        help="Web configuration JSON file (optional, auto-loads web.json)",
     )
+    parser.add_argument("--interactive", action="store_true", help="Interactive mode")
+    parser.add_argument("--url", type=str, help="Override Weblate base URL")
+    parser.add_argument("--token", type=str, help="Override API token")
     parser.add_argument(
-        '--web-config',
-        type=str,
-        help='Web configuration JSON file (optional, auto-loads web.json)'
-    )
-    parser.add_argument(
-        '--interactive',
-        action='store_true',
-        help='Interactive mode'
-    )
-    parser.add_argument(
-        '--url',
-        type=str,
-        help='Override Weblate base URL'
-    )
-    parser.add_argument(
-        '--token',
-        type=str,
-        help='Override API token'
-    )
-    parser.add_argument(
-        '--formats-config',
+        "--formats-config",
         type=str,
         default=None,
         help=(
             "Weblate supported formats JSON (file_format, extensions). "
             f"Default: {DEFAULT_FORMATS_CONFIG}"
-        )
+        ),
     )
 
     return parser
@@ -356,7 +366,7 @@ def main() -> int:
 
         # Override languages if specified on command line
         if args.languages:
-            config['languages'] = parse_language_codes(args.languages)
+            config["languages"] = parse_language_codes(args.languages)
 
         # Load web config if specified
         if args.web_config:
@@ -369,9 +379,9 @@ def main() -> int:
 
     # Override with command line arguments
     if args.url:
-        config['weblate_url'] = args.url
+        config["weblate_url"] = args.url
     if args.token:
-        config['api_token'] = args.token
+        config["api_token"] = args.token
 
     # Validate configuration
     if not validate_config(config):
@@ -385,16 +395,13 @@ def main() -> int:
         file_format = comp.get("file_format", "auto") or "auto"
         print(
             f"[WARNING] Skipping component (unsupported file format: {file_format!r})",
-            flush=True
+            flush=True,
         )
-        print(
-            f"[INFO] Supported formats from: {formats_path}",
-            flush=True
-        )
+        print(f"[INFO] Supported formats from: {formats_path}", flush=True)
         return 0
 
     # Extract languages (may be in config or empty)
-    languages = config.get('languages', [])
+    languages = config.get("languages", [])
 
     try:
         # Step 1: Create component
@@ -402,20 +409,20 @@ def main() -> int:
 
         # Step 2: Add translations
         success_count = add_translations_wrapper(
-            config,
-            project_slug,
-            component_slug,
-            languages
+            config, project_slug, component_slug, languages
         )
 
         # Final summary
-        print("\n" + "="*60, flush=True)
+        print("\n" + "=" * 60, flush=True)
         print("SETUP COMPLETE!", flush=True)
-        print("="*60, flush=True)
+        print("=" * 60, flush=True)
         print(f"[INFO] Project: {project_slug}", flush=True)
         print(f"[INFO] Component: {component_slug}", flush=True)
         if languages:
-            print(f"[INFO] Translations: {success_count}/{len(languages)} added", flush=True)
+            print(
+                f"[INFO] Translations: {success_count}/{len(languages)} added",
+                flush=True,
+            )
         url_path = f"{config['weblate_url']}/projects/{project_slug}/{component_slug}/"
         print(f"[INFO] URL: {url_path}", flush=True)
         print()
@@ -428,6 +435,5 @@ def main() -> int:
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())
-
