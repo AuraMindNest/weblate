@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         persist-credentials: false
     - name: Get cache tag
@@ -29,20 +29,25 @@ jobs:
         echo "cache_tag=$(/bin/date --utc '+%Y%m')" >> "$GITHUB_OUTPUT"
         echo "previous_cache_tag=$(/bin/date --date='1 month ago' --utc '+%Y%m')" >> "$GITHUB_OUTPUT"
       shell: bash
-    - uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+    - uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
       id: pre-commit-cache
       with:
-        path: ~/.cache/pre-commit
-        key: ${{ runner.os }}-pre-commit-${{ steps.get-date.outputs.cache_tag }}-${{ hashFiles('.pre-commit-config.yaml') }}
+        path: |
+          ~/.cache/prek
+          ~/.cache/kingfisher
+        key: ${{ runner.os }}-prek-${{ steps.get-date.outputs.cache_tag }}-${{ hashFiles('.pre-commit-config.yaml') }}
         restore-keys: |
-          ${{ runner.os }}-pre-commit-${{ steps.get-date.outputs.cache_tag }}
-          ${{ runner.os }}-pre-commit-${{ steps.get-date.outputs.previous_cache_tag }}
-          ${{ runner.os }}-pre-commit-
+          ${{ runner.os }}-prek-${{ steps.get-date.outputs.cache_tag }}
+          ${{ runner.os }}-prek-${{ steps.get-date.outputs.previous_cache_tag }}
+          ${{ runner.os }}-prek-
     - name: Setup Python
-      uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
       with:
-        python-version: '3.13'
-    - uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
+        python-version: '3.14'
+    - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+      with:
+        version: 0.10.6
+        enable-cache: false
     - name: detect method
       id: detect
       run: |
@@ -50,16 +55,14 @@ jobs:
           echo "method=requirements" >> "$GITHUB_OUTPUT"
         elif test -f pyproject.toml && grep -q dependency-groups pyproject.toml ; then
           echo "method=pep735" >> "$GITHUB_OUTPUT"
-        elif test -f pyproject.toml && grep -q dependency-groups pyproject.toml ; then
-          echo "method=pyproject" >> "$GITHUB_OUTPUT"
         else
           echo "method=uvx" >> "$GITHUB_OUTPUT"
         fi
     - name: pre-commit (PEP 735)
       if: steps.detect.outputs.method == 'pep735'
       run: |
-        uv run --only-group pre-commit pre-commit run --all --show-diff-on-failure
-        uv run --only-group pre-commit pre-commit gc
+        uv run --only-group pre-commit prek run --all-files --show-diff-on-failure
+        uv run --only-group pre-commit prek cache gc
       env:
         RUFF_OUTPUT_FORMAT: github
         REUSE_OUTPUT_FORMAT: github
@@ -67,23 +70,18 @@ jobs:
     - name: pre-commit (uvx)
       if: steps.detect.outputs.method == 'uvx'
       run: |
-        uvx pre-commit run --all --show-diff-on-failure
-        uvx pre-commit gc
+        uvx prek run --all-files --show-diff-on-failure
+        uvx prek cache gc
       env:
         RUFF_OUTPUT_FORMAT: github
         REUSE_OUTPUT_FORMAT: github
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    - name: Install dependencies
+    - name: pre-commit (requirements)
       if: steps.detect.outputs.method == 'requirements'
-      run: uv pip install --system -r requirements-lint.txt
-    - name: Install dependencies
-      if: steps.detect.outputs.method == 'pyproject'
-      run: uv pip install --system "$(sed -n 's/.*"\(pre-commit==\([^"]*\)\)".*/\1/p' pyproject.toml)"
-    - name: pre-commit (installed)
-      if: steps.detect.outputs.method == 'requirements' || steps.detect.outputs.method == 'pyproject'
       run: |
-        pre-commit run --all --show-diff-on-failure
-        pre-commit gc
+        uv pip install --system -r requirements-lint.txt
+        prek run --all-files --show-diff-on-failure
+        prek cache gc
       env:
         RUFF_OUTPUT_FORMAT: github
         REUSE_OUTPUT_FORMAT: github

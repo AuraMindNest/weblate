@@ -262,6 +262,7 @@ def generate_component_config(
         '.md': 'markdown',
         '.txt': 'txt',
         '.html': 'html',
+        '.qbk': 'quickbook',
     }
     file_format = format_map.get(ext.lower(), 'auto')
 
@@ -295,6 +296,10 @@ def generate_component_config(
             "language_regex",
             r"^[a-z]{2,3}(_[A-Z][a-z]{3})?(_[A-Z]{2})?$"
         ),
+        # ConvertFormat-based formats (e.g. quickbook, asciidoc) do not support
+        # manage_units; explicitly set false to override the API's auto-injection
+        # which sets it to true whenever a template is present.
+        "manage_units": False,
     }
 
     # Build full setup configuration

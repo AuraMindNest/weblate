@@ -13,15 +13,15 @@
 
 services:
   cache:
-    image: redis:8.2.1-alpine@sha256:987c376c727652f99625c7d205a1cba3cb2c53b92b0b62aade2bd48ee1593232
+    image: redis:8.6.1-alpine@sha256:2afba59292f25f5d1af200496db41bea2c6c816b059f57ae74703a50a03a27d0
     volumes:
     - redis-data:/data
     command: [redis-server, --save, '60', '1']
     restart: always
   database:
-    image: postgres:17.6-alpine@sha256:3406990b6e4c7192317b6fdc5680498744f6142f01f0287f4ee0420d8c74063c
+    image: postgres:18.2-alpine@sha256:035b9ab53cfa147d7202b61f5f7782b939ae815b7d6bc81c96b7b42ff1fca950
     volumes:
-    - postgres-data:/var/lib/postgresql/data
+    - postgres-data:/var/lib/postgresql
     - ./postgres-init:/docker-entrypoint-initdb.d
     env_file:
     - ./environment

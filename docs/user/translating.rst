@@ -42,6 +42,8 @@ to find a specific string or term.
 
 .. image:: /screenshots/strings-to-check.webp
 
+.. _suggestions:
+
 Suggestions
 -----------
 
@@ -51,10 +53,18 @@ Suggestions
 
 Anonymous users (by default) can only forward suggestions. Doing so is still
 available to signed-in users, in cases where uncertainty about a translation
-arises, prompting other translators to review it.
+arises, prompting other translators to review it. Any user can clone an existing
+suggestion into the translation fields, including plural forms, and use it
+as the basis for a new suggestion or translation.
 
 All suggestions are scanned on a daily basis to remove duplicates and
 those matching current translations.
+
+If you have the :guilabel:`Accept suggestions` permission, you can bulk accept
+all suggestions from a specific user by clicking the account check icon next
+to their suggestion. This is useful for quickly processing suggestions from
+trusted contributors. Suggestions failing quality checks are skipped and
+remain for manual review.
 
 .. _user-comments:
 
@@ -128,8 +138,9 @@ Various bits of extra info can be shown on this page, most of which coming from 
 Translation fields for any secondary languages translators select in the preferences will be shown
 (see :ref:`secondary-languages`) above the source string.
 
-Below the translation, translators will find suggestion made by others, to be
-accepted (✓), accepted with changes (✏️), or deleted (🗑).
+Below the translation, translators will find suggestions made by others, to be accepted (✓),
+accepted with changes (✏️), bulk accepted for a specific user (👤✓),
+cloned into the translation fields (📑) or deleted (🗑).
 
 .. _plurals:
 
@@ -294,6 +305,8 @@ This contextual description provides related info about the current string.
 
 String attributes
     Things like message ID, context (``msgctxt``) or location in source code.
+Explanation
+    Further clarification can be provided in Weblate via :ref:`additional-explanation`.
 Screenshots
     Screenshots can be uploaded to Weblate to better inform translators
     of where and how the string is used, see :ref:`screenshots`.
@@ -362,9 +375,12 @@ Automatic translation
 
 You can use automatic translation to bootstrap translation based on external
 sources. This tool is called :guilabel:`Automatic translation` accessible in
-the :guilabel:`Tools` menu, once you have selected a component and a language:
+the :guilabel:`Operations` menu, once you have selected a component and a language:
 
 .. image:: /screenshots/automatic-translation.webp
+
+A similar operation :guilabel:`Batch automatic translation` is available if you have
+selected a project language, a component or a category.
 
 Two modes of operation are possible:
 

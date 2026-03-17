@@ -18,6 +18,7 @@
     this.initTabs();
     this.initChecks();
     this.initGlossary();
+    this.initSuggestions();
 
     /* Copy machinery results */
     this.$editor.on("click", ".js-copy-machinery", (e) => {
@@ -63,7 +64,7 @@
 
       /* Delete Url dialog */
       let $deleteEntriesDialog = null;
-      this.$editor.on("show.bs.modal", "#delete-url-modal", (e) => {
+      this.$editor.on("shown.bs.modal", "#delete-url-modal", (e) => {
         $deleteEntriesDialog = $(e.currentTarget);
         $deleteEntriesDialog.find(".modal-body").html("");
         const text = $el.parent().parent().data("raw").text;
@@ -71,7 +72,7 @@
         $deleteEntriesDialog.find(".modal-body").append(modalBody);
       });
 
-      this.$editor.on("hide.bs.modal", "#delete-url-modal", (_e) => {
+      this.$editor.on("hidden.bs.modal", "#delete-url-modal", (_e) => {
         $deleteEntriesDialog = null;
       });
 
@@ -133,16 +134,16 @@
       return false;
     });
     Mousetrap.bindGlobal("mod+u", (_e) => {
-      $('.nav [href="#comments"]').click();
+      $('.nav [data-bs-target="#comments"]').click();
       $('textarea[name="comment"]').focus();
       return false;
     });
     Mousetrap.bindGlobal("mod+j", (_e) => {
-      $('.nav [href="#nearby"]').click();
+      $('.nav [data-bs-target="#nearby"]').click();
       return false;
     });
     Mousetrap.bindGlobal("mod+m", (_e) => {
-      $('.nav [href="#machinery"]').click();
+      $('.nav [data-bs-target="#machinery"]').click();
       return false;
     });
   }
@@ -154,7 +155,9 @@
 
     /* Report source bug */
     this.$translationForm.on("click", ".bug-comment", () => {
-      $('.translation-tabs a[href="#comments"]').tab("show");
+      bootstrap.Tab.getOrCreateInstance(
+        $('.translation-tabs a[data-bs-target="#comments"]'),
+      ).show();
       $("#id_scope").val("report");
       $([document.documentElement, document.body]).animate(
         {
@@ -207,14 +210,17 @@
 
   FullEditor.prototype.initTabs = function () {
     /* Store active tab in a local storage */
-    $('.translation-tabs a[data-toggle="tab"]').on("shown.bs.tab", function () {
-      const current = localStorage.getItem("translate-tab");
-      const desired = $(this).attr("href");
+    $('.translation-tabs a[data-bs-toggle="tab"]').on(
+      "shown.bs.tab",
+      function () {
+        const current = localStorage.getItem("translate-tab");
+        const desired = $(this).attr("data-bs-target");
 
-      if (current !== desired) {
-        localStorage.setItem("translate-tab", desired);
-      }
-    });
+        if (current !== desired) {
+          localStorage.setItem("translate-tab", desired);
+        }
+      },
+    );
 
     /* Machinery */
     this.isMachineryLoaded = false;
@@ -265,7 +271,7 @@
       url: deleteUrl,
       headers: { "X-CSRFToken": this.csrfToken },
       success: () => {
-        addAlert(gettext("Translation memory entry removed."));
+        addAlert(gettext("Translation memory entry removed."), "success");
       },
       error: (_jqXhr, _textStatus, errorThrown) => {
         addAlert(errorThrown);
@@ -364,7 +370,7 @@
   FullEditor.prototype.initChecks = function () {
     /* Clicking links (e.g. comments, suggestions)
      * This is inside things to checks, but not a check-item */
-    this.$editor.on("click", '.check [data-toggle="tab"]', function (e) {
+    this.$editor.on("click", '.check [data-bs-toggle="tab"]', function (e) {
       const href = $(this).attr("href");
 
       e.preventDefault();
@@ -412,15 +418,49 @@
       return false;
     });
 
+    /* Automatically translated dismissal */
+    this.$editor.on("click", ".dismiss-automatically-translated", (e) => {
+      const $el = $(e.currentTarget);
+      const url = $el.attr("href");
+      const $check = $el.closest(".check");
+
+      $.ajax({
+        type: "POST",
+        url: url,
+        data: {
+          csrfmiddlewaretoken: this.csrfToken,
+        },
+        error: (_jqXhr, _textStatus, errorThrown) => {
+          addAlert(errorThrown);
+        },
+        success: () => {
+          const $listGroup = $check.closest(".list-group");
+          $check.remove();
+
+          // Hide the entire "Things to check" panel if no checks remain
+          if ($listGroup.children(".list-group-item").length === 0) {
+            $listGroup.closest(".panel").remove();
+          }
+        },
+      });
+      return false;
+    });
+
     /* Check fix */
     this.$editor.on("click", "[data-check-fixup]", (e) => {
       const $el = $(e.currentTarget);
       const fixups = $el.data("check-fixup");
-      this.$translationArea.each(function () {
+      this.$translationArea.each(function (plural) {
         const $this = $(this);
-        $.each(fixups, (_key, value) => {
-          const re = new RegExp(value[0], value[2]);
-          $this.replaceValue($this.val().replace(re, value[1]));
+        $.each(fixups, (_idx, value) => {
+          if (value[0] === "regex") {
+            const re = new RegExp(value[1], value[3]);
+            $this.replaceValue($this.val().replace(re, value[2]));
+          } else if (value[0] === "plurals") {
+            $this.replaceValue(value[1][plural]);
+          } else {
+            addAlert(`Unknown fixup: ${value}`);
+          }
         });
       });
       return false;
@@ -551,6 +591,31 @@
     });
   };
 
+  FullEditor.prototype.initSuggestions = function () {
+    /* Clone suggestion to translation */
+    this.$editor.on("click", ".js-copy-suggestion", (e) => {
+      e.preventDefault();
+      const $btn = $(e.currentTarget);
+      const $areas = this.$translationArea;
+
+      // Inject data into translation fields (plural-aware)
+      $areas.each((i, el) => {
+        const text = $btn.attr("data-text-" + i);
+
+        // Prevent overwriting with empty/undefined data
+        if (text !== undefined && text !== "") {
+          $(el).replaceValue(text);
+        }
+      });
+
+      $areas.first().focus();
+
+      if (typeof autosize !== "undefined") {
+        autosize.update($areas);
+      }
+    });
+  };
+
   FullEditor.prototype.insertIntoTranslation = function (text) {
     this.$translationArea.insertAtCaret($.trim(text));
   };
@@ -596,7 +661,7 @@
         $(
           `<td><a class="js-copy-machinery btn btn-warning">${gettext(
             "Clone to translation",
-          )}<span class="mt-number text-info"></span></a></td><td><a class="js-copy-save-machinery btn btn-primary">${gettext(
+          )}<span class="mt-number text-info"></span></a></td><td><a class="js-copy-save-machinery btn btn-info">${gettext(
             "Accept",
           )}</a></td>`,
         ),
@@ -617,7 +682,7 @@
       if (this.state.weblateTranslationMemory.has(el.text)) {
         row.append(
           $(
-            `<td><a class="js-delete-machinery btn btn-danger" data-toggle="modal" data-target="#delete-url-modal">${gettext(
+            `<td><a class="js-delete-machinery btn btn-danger" data-bs-toggle="modal" data-bs-target="#delete-url-modal">${gettext(
               "Delete entry",
             )}</a></td>`,
           ),

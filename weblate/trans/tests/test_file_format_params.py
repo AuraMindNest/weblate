@@ -5,15 +5,24 @@
 
 """Test for File format params."""
 
+from __future__ import annotations
+
+import os.path
+from pathlib import Path
+from typing import TYPE_CHECKING, Unpack
+
 from django.test.utils import override_settings
 from django.urls import reverse
 
 from weblate.addons.gettext import MsgmergeAddon
-from weblate.lang.models import get_default_lang
+from weblate.lang.models import Language, get_default_lang
 from weblate.trans.file_format_params import get_default_params_for_file_format
 from weblate.trans.models import Component
 from weblate.trans.tests.test_views import ViewTestCase
 from weblate.utils.views import get_form_data
+
+if TYPE_CHECKING:
+    from weblate.trans.file_format_params import FileFormatParams
 
 
 class BaseFileFormatsTest(ViewTestCase):
@@ -22,23 +31,24 @@ class BaseFileFormatsTest(ViewTestCase):
         self.user.is_superuser = True
         self.user.save()
 
-    def update_component_file_params(self, **file_param_kwargs) -> None:
-        file_param_kwargs = (
-            get_default_params_for_file_format(self.component.file_format)
-            | file_param_kwargs
+    def update_component_file_params(
+        self, **new_file_param_kwargs: Unpack[FileFormatParams]
+    ) -> None:
+        file_param_kwargs = get_default_params_for_file_format(
+            self.component.file_format
         )
+        file_param_kwargs.update(new_file_param_kwargs)
         url = reverse("settings", kwargs={"path": self.component.get_url_path()})
         response = self.client.get(url)
         data = get_form_data(response.context["form"].initial)
         data.update(
             {f"file_format_params_{k}": v for k, v in file_param_kwargs.items()}
         )
-        self.client.post(url, data, follow=True)
+        response = self.client.post(url, data, follow=True)
+        self.assertContains(response, "Settings saved")
         self.component.refresh_from_db()
 
-
-class ComponentFileFormatsParamsTest(BaseFileFormatsTest):
-    def client_create_component(self, result, **kwargs):
+    def client_create_component(self, result: bool, **kwargs):
         params = {
             "name": "New Component With File Params",
             "slug": "new-component-with-file-params",
@@ -61,6 +71,30 @@ class ComponentFileFormatsParamsTest(BaseFileFormatsTest):
             self.assertEqual(response.status_code, 200)
         return response
 
+    def do_create_with_encoding_test(
+        self, encoding_name: str, encoding: str, success: bool = True
+    ) -> None:
+        kwargs = {f"file_format_params_{encoding_name}": encoding}
+        response = self.client_create_component(
+            success,
+            file_format=self.component.file_format,
+            filemask=self.component.filemask,
+            new_base="",
+            new_lang="contact",
+            **kwargs,
+        )
+        if success:
+            self.assertTrue(
+                Component.objects.filter(slug="new-component-with-file-params").exists()
+            )
+        else:
+            self.assertContains(response, "Could not parse")
+            self.assertFalse(
+                Component.objects.filter(slug="new-component-with-file-params").exists()
+            )
+
+
+class ComponentFileFormatsParamsTest(BaseFileFormatsTest):
     def get_new_component(
         self, slug: str = "new-component-with-file-params"
     ) -> Component:
@@ -106,10 +140,7 @@ class ComponentFileFormatsParamsTest(BaseFileFormatsTest):
             follow=True,
         )
 
-        create_url = (
-            reverse("create-component-vcs")
-            + f"?source_component={self.component.pk}#existing"
-        )
+        create_url = f"{reverse('create-component-vcs')}?source_component={self.component.pk}#existing"
         data = response.context["form"].initial
         data.pop("category", None)
         data["project"] = self.component.project_id
@@ -245,8 +276,8 @@ class YAMLParamsTest(BaseFileFormatsTest):
         commit = self.component.repository.show(self.component.repository.last_revision)
         self.assertIn(f"{expected}try:", commit)
         self.assertIn("cs.yml", commit)
-        with open(self.get_translation().get_filename(), "rb") as handle:
-            self.assertIn(b"\r\n", handle.read())
+        filepath = Path(self.get_translation().get_filename())
+        self.assertIn(b"\r\n", filepath.read_bytes())
 
     def test_customize(self) -> None:
         self.update_component_file_params(
@@ -279,12 +310,61 @@ class XMLParamsTest(BaseFileFormatsTest):
         self.test_closing_tags(closing_tags_active=False)
 
 
+class TSParamsTest(BaseFileFormatsTest):
+    def create_component(self) -> Component:
+        return self.create_ts(name="TS", new_lang="add", new_base="ts/cs.ts")
+
+    def _test_closing_tags(self, closing_tags_active: bool = True) -> None:
+        """Check that effect of xml_closing_tags file format param on the location tag."""
+        units = [
+            u for u in self.translation.store.all_units if "Hello, world!\n" in u.source
+        ]
+        unit = units[0]
+        unit.mainunit.addlocation("main.c:11")
+        file_path = os.path.join(self.component.full_path, self.translation.filename)
+        with open(file_path, "wb") as handle:
+            self.translation.store.save_content(handle)
+        self.edit_unit("Hello, world!\n", "Ahoj svete!\n")
+        translation = self.get_translation()
+
+        translation.commit_pending("test", None)
+        rev = self.component.repository.last_revision
+        commit = self.component.repository.show(rev)
+        if closing_tags_active:
+            self.assertIn('<location filename="main.c" line="11"></location>', commit)
+        else:
+            self.assertIn('<location filename="main.c" line="11"/>', commit)
+            self.assertNotIn("</location>", commit)
+
+        # check that parameter is applied when a new language is added
+        self.component.add_new_language(Language.objects.get(code="de"), None)
+        new_revision = self.component.repository.last_revision
+        self.assertNotEqual(rev, new_revision)
+        new_commit = self.component.repository.show(new_revision)
+        self.assertIn("Added translation using Weblate (German)", new_commit)
+        if closing_tags_active:
+            self.assertIn(
+                '<location filename="main.c" line="11"></location>', new_commit
+            )
+        else:
+            self.assertIn('<location filename="main.c" line="11"/>', new_commit)
+            self.assertNotIn("</location>", new_commit)
+
+    def test_closing_tags(self) -> None:
+        self.update_component_file_params(xml_closing_tags=True)
+        self._test_closing_tags(True)
+
+    def test_closing_tags_off(self) -> None:
+        """Check that closing tags are turned off as default behavior."""
+        self._test_closing_tags(False)
+
+
 class GettextParamsTest(BaseFileFormatsTest):
     def create_component(self):
         return self.create_po_new_base(new_lang="add")
 
     def test_msgmerge(self, wrapped=True) -> None:
-        self.assertTrue(MsgmergeAddon.can_install(self.component, None))
+        self.assertTrue(MsgmergeAddon.can_install(component=self.component))
         rev = self.component.repository.last_revision
         addon = MsgmergeAddon.create(component=self.component)
         self.assertNotEqual(rev, self.component.repository.last_revision)
@@ -342,18 +422,21 @@ class GettextParamsTest(BaseFileFormatsTest):
             po_no_location=True,
             po_line_wrap=77,
         )
-
-        # if Msgmerge addon is not installed, only default parameters are returned
         self.assertEqual(
-            BilingualUpdateMixin.get_msgmerge_args(self.component), ["--previous"]
+            set(BilingualUpdateMixin.get_msgmerge_args(self.component)),
+            {"--no-fuzzy-matching", "--no-location"},
         )
 
-        MsgmergeAddon.create(component=self.component)
-
-        msgmerge_args = BilingualUpdateMixin.get_msgmerge_args(self.component)
-        self.assertNotIn("--previous", msgmerge_args)
-        self.assertIn("--no-fuzzy-matching", msgmerge_args)
-        self.assertIn("--no-location", msgmerge_args)
+        self.update_component_file_params(
+            po_fuzzy_matching=False,
+            po_keep_previous=True,
+            po_no_location=False,
+            po_line_wrap=77,
+        )
+        self.assertEqual(
+            set(BilingualUpdateMixin.get_msgmerge_args(self.component)),
+            {"--no-fuzzy-matching", "--previous"},
+        )
 
         self.update_component_file_params(
             po_fuzzy_matching=False,
@@ -361,6 +444,59 @@ class GettextParamsTest(BaseFileFormatsTest):
             po_no_location=True,
             po_line_wrap=-1,
         )
-        self.assertIn(
-            "--no-wrap", BilingualUpdateMixin.get_msgmerge_args(self.component)
+        self.assertEqual(
+            set(BilingualUpdateMixin.get_msgmerge_args(self.component)),
+            {"--no-fuzzy-matching", "--no-location", "--no-wrap"},
         )
+
+
+class StringsParamsTest(BaseFileFormatsTest):
+    def create_component(self):
+        return self.create_iphone()
+
+    def test_encoding_param(self):
+        self.do_create_with_encoding_test("strings_encoding", "utf-8", success=False)
+        self.do_create_with_encoding_test("strings_encoding", "utf-16", success=True)
+
+    def test_new_file_content(self):
+        from weblate.formats.ttkit import StringsFormat
+
+        self.assertNotEqual(
+            StringsFormat.get_new_file_content("utf-8"),
+            StringsFormat.get_new_file_content("utf-16"),
+        )
+
+
+class JavaPropertiesTest(BaseFileFormatsTest):
+    def create_component(self):
+        return self.create_java()
+
+    def test_encoding_param(self):
+        self.do_create_with_encoding_test(
+            "properties_encoding", "utf-16", success=False
+        )
+        self.do_create_with_encoding_test(
+            "properties_encoding", "iso-8859-1", success=True
+        )
+
+    def test_encoding_param_utf8(self):
+        # Java properties need to be ISO 8859-1, but Translate Toolkit converts
+        # them to UTF-8.
+        self.do_create_with_encoding_test("properties_encoding", "utf-8", success=True)
+
+
+class CSVParamsTest(BaseFileFormatsTest):
+    def create_component(self) -> Component:
+        return self.create_csv_mono()
+
+    def test_encoding_param(self):
+        # both "auto" and "utf-8" are valid for the test CSV files
+        self.do_create_with_encoding_test("csv_encoding", "utf-8", success=True)
+
+
+class CSVSimpleParamsTest(BaseFileFormatsTest):
+    def create_component(self) -> Component:
+        return self.create_csv()
+
+    def test_encoding_param(self):
+        self.do_create_with_encoding_test("csv_simple_encoding", "utf-8", success=True)

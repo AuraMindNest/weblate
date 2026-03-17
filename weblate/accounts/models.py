@@ -9,7 +9,7 @@ import logging
 import re
 from datetime import timedelta
 from ipaddress import IPv6Network, ip_network
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from urllib.parse import urlparse
 
 from appconf import AppConf
@@ -43,10 +43,10 @@ from weblate.accounts.notifications import (
     NotificationScope,
 )
 from weblate.accounts.tasks import notify_auditlog
-from weblate.auth.models import AuthenticatedHttpRequest, User
+from weblate.auth.models import User
 from weblate.lang.models import Language
 from weblate.trans.defines import EMAIL_LENGTH
-from weblate.trans.models import Change, ComponentList, Translation, Unit
+from weblate.trans.models import Change, ComponentList, Translation
 from weblate.trans.models.translation import GhostTranslation
 from weblate.utils import messages
 from weblate.utils.decorators import disable_for_loaddata
@@ -73,6 +73,8 @@ if TYPE_CHECKING:
     from django_otp.models import Device
 
     from weblate.accounts.types import DeviceType
+    from weblate.auth.models import AuthenticatedHttpRequest
+    from weblate.trans.models import Unit
 
 LOGGER = logging.getLogger("weblate.audit")
 
@@ -94,20 +96,21 @@ class WeblateAccountsConf(AppConf):
     REGISTRATION_OPEN = True
 
     # Allow registration from certain backends
-    REGISTRATION_ALLOW_BACKENDS = []
+    REGISTRATION_ALLOW_BACKENDS: ClassVar[list[str]] = []
 
     # Allow rebinding to existing accounts
     REGISTRATION_REBIND = False
 
     # Registration email filter
     REGISTRATION_EMAIL_MATCH = ".*"
+    REGISTRATION_ALLOW_DISPOSABLE_EMAILS = False
 
     # Captcha for registrations
     REGISTRATION_CAPTCHA = True
 
     ALTCHA_MAX_NUMBER = 1_000_000
 
-    REGISTRATION_HINTS = {}
+    REGISTRATION_HINTS: ClassVar[dict[str, str]] = {}
 
     # How long to keep auditlog entries
     AUDITLOG_EXPIRY = 180
@@ -122,6 +125,8 @@ class WeblateAccountsConf(AppConf):
 
     PRIVATE_COMMIT_EMAIL_TEMPLATE = "{username}@users.noreply.{site_domain}"
     PRIVATE_COMMIT_EMAIL_OPT_IN = True
+    PRIVATE_COMMIT_NAME_TEMPLATE = "{site_title} user {user_id}"
+    PRIVATE_COMMIT_NAME_OPT_IN = True
 
     # Auth0 provider default image & title on login page
     SOCIAL_AUTH_AUTH0_IMAGE = "auth0.svg"
@@ -132,7 +137,7 @@ class WeblateAccountsConf(AppConf):
     MAXIMAL_PASSWORD_LENGTH = 72
 
     # Login required URLs
-    LOGIN_REQUIRED_URLS = []
+    LOGIN_REQUIRED_URLS: ClassVar[list[str]] = []
     LOGIN_REQUIRED_URLS_EXCEPTIONS = (
         r"{URL_PREFIX}/accounts/(.*)$",  # Required for login
         r"{URL_PREFIX}/admin/login/(.*)$",  # Required for admin login
@@ -149,6 +154,17 @@ class WeblateAccountsConf(AppConf):
         r"{URL_PREFIX}/site.webmanifest$",  # The request for the manifest is made without credentials
     )
 
+    # Multi-level rate limiting for email notifications
+    # Each tuple contains (max_emails, time_window_seconds)
+    RATELIMIT_NOTIFICATION_LIMITS: ClassVar[list[tuple[int, int]]] = [
+        # Prevent burst sends - 3 emails per 2 minutes
+        (3, 120),
+        # Equalize to avoid getting blocked for too long - 10 emails per hour
+        (10, 3600),
+        # Daily limit: 50 emails per day
+        (50, 86400),
+    ]
+
     class Meta:
         prefix = ""
 
@@ -159,8 +175,9 @@ DOT_ATOM_RE = re.compile(
 )
 
 
-def format_private_email(username: str, user_id: int) -> str:
-    if not settings.PRIVATE_COMMIT_EMAIL_TEMPLATE:
+def format_private_commit_data(template: str, username: str, user_id: int) -> str:
+    """Format private commit data (email or name) using a template."""
+    if not template:
         return ""
     if username:
         if username.endswith(".") or ".." in username:
@@ -173,10 +190,18 @@ def format_private_email(username: str, user_id: int) -> str:
             username = ""
     if not username:
         username = f"user-{user_id}"
-    return settings.PRIVATE_COMMIT_EMAIL_TEMPLATE.format(
+
+    return template.format(
         username=username.lower(),
+        user_id=user_id,
         site_domain=settings.SITE_DOMAIN.rsplit(":", 1)[0],
+        site_title=settings.SITE_TITLE,
     )
+
+
+def get_default_contribute_personal_tm() -> bool:
+    """Return default value for personal TM contribution."""
+    return not settings.DEFAULT_AUTOCLEAN_TM
 
 
 class SubscriptionQuerySet(models.QuerySet["Subscription"]):
@@ -208,7 +233,7 @@ class Subscription(models.Model):
     class Meta:
         verbose_name = "Notification subscription"
         verbose_name_plural = "Notification subscriptions"
-        constraints = [
+        constraints = [  # noqa: RUF012
             models.UniqueConstraint(
                 name="accounts_subscription_notification_unique",
                 fields=("notification", "scope", "project", "component", "user"),
@@ -278,6 +303,10 @@ ACCOUNT_ACTIVITY = {
     "enabled": gettext_lazy("User was enabled by administrator."),
     # Translators: Audit log entry
     "disabled": gettext_lazy("User was disabled by administrator."),
+    # Translators: Audit log entry
+    "disabled-expiry": gettext_lazy(
+        "User was disabled because the access has expired."
+    ),
     # Translators: Audit log entry
     "donate": gettext_lazy("Semiannual support status review was displayed."),
     # Translators: Audit log entry
@@ -383,10 +412,19 @@ class AuditLogManager(models.Manager):
         return not logins.filter(Q(address=address) | Q(user_agent=user_agent)).exists()
 
     def create(  # type: ignore[override]
-        self, user: User, request: HttpRequest | None, activity, **params
+        self, user: User, request: HttpRequest | None, activity: str, **params
     ):
-        address = get_ip_address(request)
-        user_agent = get_user_agent(request)
+        address: str | None = None
+        user_agent: str = ""
+        # Log only address for own actions (unauthenticated or when the request user matches audit user)
+        if request and (
+            not hasattr(request, "user")
+            or not request.user
+            or not request.user.is_authenticated
+            or request.user == user
+        ):
+            address = get_ip_address(request)
+            user_agent = get_user_agent(request)
         if activity == "login" and self.is_new_login(user, address, user_agent):
             activity = "login-new"
         return super().create(
@@ -570,7 +608,7 @@ class VerifiedEmail(models.Model):
     class Meta:
         verbose_name = "Verified e-mail"
         verbose_name_plural = "Verified e-mails"
-        indexes = [
+        indexes = [  # noqa: RUF012
             models.Index(
                 Upper("email"),
                 name="accounts_verifiedemail_email",
@@ -698,7 +736,7 @@ class Profile(models.Model):
     )
     contribute_personal_tm = models.BooleanField(
         verbose_name=gettext_lazy("Contribute to personal translation memory"),
-        default=True,
+        default=get_default_contribute_personal_tm,
         help_text=gettext_lazy(
             "Allow your translations to be added to your personal translation memory."
         ),
@@ -718,7 +756,7 @@ class Profile(models.Model):
         (DASHBOARD_MANAGED, gettext_lazy("Managed projects")),
     )
 
-    DASHBOARD_SLUGS = {
+    DASHBOARD_SLUGS: ClassVar[dict[int, str]] = {
         DASHBOARD_WATCHED: "your-subscriptions",
         DASHBOARD_COMPONENT_LIST: "list",
         DASHBOARD_SUGGESTIONS: "suggestions",
@@ -829,6 +867,17 @@ class Profile(models.Model):
         verbose_name=gettext_lazy("Commit e-mail"),
         blank=True,
         max_length=EMAIL_LENGTH,
+    )
+
+    class CommitNameChoices(models.IntegerChoices):
+        DEFAULT = 0, gettext_lazy("Use global default")
+        PUBLIC = 1, gettext_lazy("Public")
+        PRIVATE = 2, gettext_lazy("Private")
+
+    commit_name = models.IntegerField(
+        verbose_name=gettext_lazy("Commit name"),
+        default=CommitNameChoices.DEFAULT,
+        choices=CommitNameChoices.choices,
     )
 
     last_2fa = models.CharField(
@@ -1107,7 +1156,29 @@ class Profile(models.Model):
         return email
 
     def get_site_commit_email(self) -> str:
-        return format_private_email(self.user.username, self.user.pk)
+        return format_private_commit_data(
+            settings.PRIVATE_COMMIT_EMAIL_TEMPLATE, self.user.username, self.user.pk
+        )
+
+    def get_commit_name(self) -> str:
+        """Return the commit name to be used for version-control commits."""
+        visible_name = self.user.get_visible_name()
+        if (
+            self.user.is_bot
+            or self.commit_name == self.CommitNameChoices.PUBLIC
+            or (
+                self.commit_name == self.CommitNameChoices.DEFAULT
+                and settings.PRIVATE_COMMIT_NAME_OPT_IN
+            )
+        ):
+            return visible_name
+        return self.get_site_commit_name() or visible_name
+
+    def get_site_commit_name(self) -> str:
+        """Return the generated private commit name from the site template."""
+        return format_private_commit_data(
+            settings.PRIVATE_COMMIT_NAME_TEMPLATE, self.user.username, self.user.pk
+        )
 
     def _get_second_factors(self) -> Iterable[Device]:
         backend: type[Device]
@@ -1127,7 +1198,7 @@ class Profile(models.Model):
     @property
     def has_2fa(self) -> bool:
         return any(
-            isinstance(device, TOTPDevice | WebAuthnCredential)
+            isinstance(device, (TOTPDevice, WebAuthnCredential))
             for device in self.second_factors
         )
 

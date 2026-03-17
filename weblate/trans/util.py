@@ -11,7 +11,7 @@ import re
 import sys
 from operator import itemgetter
 from types import GeneratorType
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlparse
 
 import django.shortcuts
@@ -21,6 +21,7 @@ from django.shortcuts import redirect, resolve_url
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext, gettext_lazy
 from lxml import etree
+from packaging.version import Version
 from translate.misc.multistring import multistring
 from translate.storage.placeables.lisa import parse_xliff, strelem_to_xml
 
@@ -38,8 +39,39 @@ if TYPE_CHECKING:
     from weblate.lang.models import Language
     from weblate.trans.models import Project, Translation, Unit
 
+
+def detect_strxfrm() -> bool:
+    # macOS problematic behavior
+    if platform.system() == "Darwin":
+        version = Version(platform.mac_ver()[0])
+        if Version("15.0") < version < Version("15.6"):
+            # Avoid triggering strxfrm on macOS 15 until 15.6 where it either
+            # crashes with OSError or causes Python segmentation fault.
+            return False
+
+    if locale.strxfrm("a") == "a":
+        # Initialize to sane Unicode locales for strxfrm
+        try:
+            locale.setlocale(locale.LC_ALL, ("en_US", "UTF-8"))
+        except locale.Error:
+            return False
+
+        # Try whether strxfrm works
+        try:
+            locale.strxfrm("zkouška")
+        except OSError:
+            # Crashes on macOS 15 and some FreeBSD derivatives, see
+            # https://github.com/python/cpython/issues/130567
+            return False
+
+        return True
+
+    # Assume it is not working
+    return False
+
+
 PLURAL_SEPARATOR = "\x1e\x1e"
-USE_STRXFRM = False
+USE_STRXFRM = detect_strxfrm()
 
 PRIORITY_CHOICES = (
     (60, gettext_lazy("Very high")),
@@ -53,26 +85,6 @@ PRIORITY_CHOICES = (
 CJK_PATTERN = re.compile(
     r"([\u1100-\u11ff\u2e80-\u2fdf\u2ff0-\u9fff\ua960-\ua97f\uac00-\ud7ff\uf900-\ufaff\ufe30-\ufe4f\uff00-\uffef\U0001aff0-\U0001b16f\U0001f200-\U0001f2ff\U00020000-\U0003FFFF]+)"
 )
-
-if platform.system() == "Darwin" and platform.mac_ver()[0].split(".", 1)[0] == "15":
-    # Avoid triggering strxfrm on macOS 15 where it either crashes with OSError
-    # or causes Python segmentation fault.
-    USE_STRXFRM = False
-elif locale.strxfrm("a") == "a":
-    # Initialize to sane Unicode locales for strxfrm
-    try:
-        locale.setlocale(locale.LC_ALL, ("en_US", "UTF-8"))
-    except locale.Error:
-        USE_STRXFRM = False
-    else:
-        try:
-            locale.strxfrm("zkouška")
-        except OSError:
-            # Crashes on macOS 15, see
-            # https://github.com/python/cpython/issues/130567
-            USE_STRXFRM = False
-        else:
-            USE_STRXFRM = True
 
 
 def is_plural(text: str) -> bool:
@@ -89,7 +101,7 @@ def join_plural(plurals: Iterable[str]) -> str:
 
 
 def get_string(
-    text: str | multistring | list | Generator[str, None, None] | None,
+    text: str | multistring | list | Generator[str] | None,
 ) -> str:
     """Return correctly formatted string from ttkit unit data."""
     # Check for null target (happens with XLIFF)
@@ -97,7 +109,7 @@ def get_string(
         return ""
     if isinstance(text, multistring):
         return join_plural(get_string(str(item)) for item in text.strings)
-    if isinstance(text, list | GeneratorType):
+    if isinstance(text, (list, GeneratorType)):
         return join_plural(get_string(str(item)) for item in text)
     if isinstance(text, str):
         # Remove possible surrogates in the string. There doesn't seem to be
@@ -140,13 +152,13 @@ def translation_percent(
         return 100.0 if zero_complete else 0.0
     if total is None:
         return 0.0
-    perc = (1000 * translated // total) / 10.0
+    promile = 1000 * translated // total
     # Avoid displaying misleading rounded 0.0% or 100.0%
-    if perc == 0.0 and translated != 0:
+    if promile == 0 and translated != 0:
         return 0.1
-    if perc == 100.0 and translated < total:
+    if promile == 1000 and translated < total:
         return 99.9
-    return perc
+    return promile / 10
 
 
 def get_clean_env(
@@ -188,13 +200,13 @@ def get_clean_env(
     for var in variables:
         if var in os.environ:
             environ[var] = os.environ[var]
-    # Extend path to include virtualenv, avoid insert already existing ones to
+    # Extend path to include Python environment, avoid inserting already existing ones to
     # not break existing ordering (for example PATH injection used in tests)
     venv_path = os.path.join(sys.exec_prefix, "bin")
     if venv_path not in environ["PATH"]:
-        environ["PATH"] = "{}:{}".format(venv_path, environ["PATH"])
+        environ["PATH"] = f"{venv_path}:{environ['PATH']}"
     if extra_path and extra_path not in environ["PATH"]:
-        environ["PATH"] = "{}:{}".format(extra_path, environ["PATH"])
+        environ["PATH"] = f"{extra_path}:{environ['PATH']}"
     return environ
 
 
@@ -286,10 +298,7 @@ def path_separator(path: str) -> str:
     return path
 
 
-T = TypeVar("T")
-
-
-def sort_unicode(choices: list[T], key: Callable[[T], str]) -> list[T]:
+def sort_unicode[T](choices: Iterable[T], key: Callable[[T], str]) -> list[T]:
     """Unicode aware sorting if available."""
 
     def sort_strxfrm(item: T) -> str:
@@ -369,6 +378,12 @@ def check_upload_method_permissions(
         if not translation.is_source:
             return Denied(
                 gettext("Source upload is only supported on the source language.")
+            )
+        if translation.is_template:
+            return Denied(
+                gettext(
+                    "Source upload is only supported for bilingual translations, you might want to use replace upload instead."
+                )
             )
         if not issubclass(translation.component.file_format_cls, BilingualUpdateMixin):
             return Denied(

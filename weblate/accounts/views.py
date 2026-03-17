@@ -10,25 +10,29 @@ from base64 import b32encode
 from binascii import unhexlify
 from collections import defaultdict
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any
+from time import monotonic
+from typing import TYPE_CHECKING, Any, ClassVar
 from urllib.parse import quote
 
 import qrcode
 import qrcode.image.svg
-import social_django.utils
 from django.conf import settings
 from django.contrib.auth import REDIRECT_FIELD_NAME, get_backends
 from django.contrib.auth import login as auth_login
 from django.contrib.auth import logout as auth_logout
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_not_required, login_required
 from django.contrib.auth.views import LoginView, RedirectURLMixin
-from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
+from django.core.exceptions import (
+    ImproperlyConfigured,
+    ObjectDoesNotExist,
+    PermissionDenied,
+    ValidationError,
+)
 from django.core.mail.message import EmailMessage
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.db import transaction
 from django.db.models import Count, Q
 from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
-from django.http.response import HttpResponseServerError
 from django.middleware.csrf import rotate_token
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -69,12 +73,14 @@ from social_core.backends.base import BaseAuth
 from social_core.exceptions import (
     AuthAlreadyAssociated,
     AuthCanceled,
+    AuthConnectionError,
     AuthException,
     AuthFailed,
     AuthForbidden,
     AuthMissingParameter,
     AuthStateForbidden,
     AuthStateMissing,
+    AuthTokenError,
     AuthUnreachableProvider,
     InvalidEmail,
     MissingBackend,
@@ -97,7 +103,6 @@ from weblate.accounts.forms import (
     NotificationForm,
     OTPTokenForm,
     PasswordConfirmForm,
-    ProfileBaseForm,
     ProfileForm,
     RegistrationForm,
     ResetForm,
@@ -120,7 +125,9 @@ from weblate.accounts.notifications import (
 )
 from weblate.accounts.pipeline import EmailAlreadyAssociated, UsernameAlreadyAssociated
 from weblate.accounts.utils import (
+    SECOND_FACTOR_VERIFY_SECONDS,
     SESSION_SECOND_FACTOR_SOCIAL,
+    SESSION_SECOND_FACTOR_TIMESTAMP,
     SESSION_SECOND_FACTOR_TOTP,
     SESSION_SECOND_FACTOR_USER,
     SESSION_WEBAUTHN_AUDIT,
@@ -129,12 +136,7 @@ from weblate.accounts.utils import (
     remove_user,
 )
 from weblate.auth.forms import UserEditForm
-from weblate.auth.models import (
-    AuthenticatedHttpRequest,
-    Invitation,
-    User,
-    get_anonymous,
-)
+from weblate.auth.models import Invitation, User, get_anonymous
 from weblate.auth.utils import format_address, get_auth_keys
 from weblate.logger import LOGGER
 from weblate.trans.models import Change, Component, Project, Suggestion, Translation
@@ -147,10 +149,14 @@ from weblate.utils.ratelimit import check_rate_limit, session_ratelimit_post
 from weblate.utils.request import get_ip_address, get_user_agent
 from weblate.utils.stats import prefetch_stats
 from weblate.utils.token import get_token
+from weblate.utils.version import USER_AGENT
 from weblate.utils.views import get_paginator, parse_path
 from weblate.utils.zammad import ZammadError, submit_zammad_ticket
 
 if TYPE_CHECKING:
+    from django.forms import Form
+
+    from weblate.accounts.forms import ProfileBaseForm
     from weblate.accounts.types import DeviceType
     from weblate.auth.models import AuthenticatedHttpRequest
 
@@ -182,7 +188,11 @@ ANCHOR_RE = re.compile(r"^#[a-z]+$")
 
 NOTIFICATION_PREFIX_TEMPLATE = "notifications__{}"
 
+# Override python-social-auth User-Agent header
+settings.SOCIAL_AUTH_USER_AGENT = USER_AGENT
 
+
+@method_decorator(login_not_required, name="dispatch")
 class EmailSentView(TemplateView):
     r"""Class for rendering "E-mail sent" page."""
 
@@ -308,7 +318,7 @@ def get_notification_forms(request: AuthenticatedHttpRequest):
     subscriptions: dict[tuple[NotificationScope, int, int], dict[str, int]] = (
         defaultdict(dict)
     )
-    initials: dict[tuple[NotificationScope, int, int], dict[str, Any]] = {}
+    initials: dict[tuple[NotificationScope | int, int, int], dict[str, Any]] = {}
     key: tuple[NotificationScope, int, int]
 
     # Ensure watched, admin and all scopes are visible
@@ -326,6 +336,9 @@ def get_notification_forms(request: AuthenticatedHttpRequest):
     if "notify_project" in request.GET:
         try:
             project = user.allowed_projects.get(pk=request.GET["notify_project"])
+        except (ObjectDoesNotExist, ValueError):
+            pass
+        else:
             active = key = (NotificationScope.SCOPE_PROJECT, project.pk, -1)
             subscriptions[key] = {}
             initials[key] = {
@@ -333,21 +346,20 @@ def get_notification_forms(request: AuthenticatedHttpRequest):
                 "project": project,
                 "component": None,
             }
-        except (ObjectDoesNotExist, ValueError):
-            pass
     if "notify_component" in request.GET:
         try:
             component = Component.objects.filter_access(user).get(
                 pk=request.GET["notify_component"],
             )
+        except (ObjectDoesNotExist, ValueError):
+            pass
+        else:
             active = key = (NotificationScope.SCOPE_COMPONENT, -1, component.pk)
             subscriptions[key] = {}
             initials[key] = {
                 "scope": NotificationScope.SCOPE_COMPONENT,
                 "component": component,
             }
-        except (ObjectDoesNotExist, ValueError):
-            pass
 
     # Populate scopes from the database
     for subscription in user.subscription_set.select_related("project", "component"):
@@ -377,7 +389,7 @@ def get_notification_forms(request: AuthenticatedHttpRequest):
         )
     for i in range(len(subscriptions), 200):
         prefix = NOTIFICATION_PREFIX_TEMPLATE.format(i)
-        if prefix + "-scope" in request.POST or i < len(subscriptions):
+        if f"{prefix}-scope" in request.POST or i < len(subscriptions):
             yield NotificationForm(
                 user=user,
                 show_default=i > 1,
@@ -386,6 +398,8 @@ def get_notification_forms(request: AuthenticatedHttpRequest):
                 is_active=i == 0,
                 prefix=prefix,
                 data=request.POST,
+                # TODO: This is most likely wrong
+                # pylint: disable-next=undefined-loop-variable
                 initial=initials[details[0]],
             )
 
@@ -470,7 +484,6 @@ def user_profile(request: AuthenticatedHttpRequest):
             "recovery_keys_count": StaticToken.objects.filter(
                 device__user=user
             ).count(),
-            "bootstrap_5": True,
         },
     )
 
@@ -509,6 +522,7 @@ def user_remove(request: AuthenticatedHttpRequest):
 
 
 @session_ratelimit_post("confirm")
+@login_not_required
 @never_cache
 def confirm(request: AuthenticatedHttpRequest):
     details = request.session.get("reauthenticate")
@@ -542,7 +556,12 @@ def get_initial_contact(request: AuthenticatedHttpRequest):
 
 
 @never_cache
+@login_not_required
 def contact(request: AuthenticatedHttpRequest):
+    if settings.CONTACT_FORM == "disabled":
+        msg = "Contact form is disabled."
+        raise Http404(msg)
+
     if request.method == "POST":
         form = ContactForm(
             request=request,
@@ -625,10 +644,10 @@ def trial(request: AuthenticatedHttpRequest):
                 "best solution for you."
             ),
         )
-        return redirect(reverse("contact") + "?t=trial")
+        return redirect(f"{reverse('contact')}?t=trial")
 
     if request.method == "POST":
-        from weblate.billing.models import Billing, Plan
+        from weblate.billing.models import Billing, BillingEvent, Plan
 
         AuditLog.objects.create(request.user, request, "trial")
         billing = Billing.objects.create(
@@ -636,6 +655,7 @@ def trial(request: AuthenticatedHttpRequest):
             state=Billing.STATE_TRIAL,
             expiry=timezone.now() + timedelta(days=14),
         )
+        billing.billinglog_set.create(event=BillingEvent.CREATED, user=request.user)
         billing.owners.add(request.user)
         messages.info(
             request,
@@ -644,7 +664,7 @@ def trial(request: AuthenticatedHttpRequest):
                 "create your translation project and start Weblating!"
             ),
         )
-        return redirect(reverse("create-project") + f"?billing={billing.pk}")
+        return redirect(f"{reverse('create-project')}?billing={billing.pk}")
 
     return render(request, "accounts/trial.html", {"title": gettext("Gratis trial")})
 
@@ -668,26 +688,26 @@ class UserPage(UpdateView):
             self.group_form = GroupAddForm(request.POST)
             if self.group_form.is_valid():
                 user.add_team(request, self.group_form.cleaned_data["add_group"])
-                return HttpResponseRedirect(self.get_success_url() + "#groups")
+                return HttpResponseRedirect(f"{self.get_success_url()}#groups")
         if "remove_group" in request.POST:
             form = GroupRemoveForm(request.POST)
             if form.is_valid():
                 user.remove_team(request, form.cleaned_data["remove_group"])
-                return HttpResponseRedirect(self.get_success_url() + "#groups")
+                return HttpResponseRedirect(f"{self.get_success_url()}#groups")
         if "remove_user" in request.POST:
             remove_user(user, request, skip_notify=True)
-            return HttpResponseRedirect(self.get_success_url() + "#groups")
+            return HttpResponseRedirect(f"{self.get_success_url()}#groups")
 
         if "remove_2fa" in request.POST:
             for device in user.profile.second_factors:
                 key_name = get_key_name(device)
                 device.delete()
                 AuditLog.objects.create(user, None, "twofactor-remove", device=key_name)
-            return HttpResponseRedirect(self.get_success_url() + "#edit")
+            return HttpResponseRedirect(f"{self.get_success_url()}#edit")
 
         if "disable_password" in request.POST:
             lock_user(user, "admin-locked")
-            return HttpResponseRedirect(self.get_success_url() + "#edit")
+            return HttpResponseRedirect(f"{self.get_success_url()}#edit")
 
         return super().post(request, *args, **kwargs)
 
@@ -769,12 +789,17 @@ def user_contributions(request: AuthenticatedHttpRequest, user: str):
             "page_user": page_user,
             "page_profile": page_user.profile,
             "page_user_translations": translation_prefetch_tasks(
-                prefetch_stats(get_paginator(request, user_translations))
+                prefetch_stats(
+                    get_paginator(
+                        request, user_translations, sort_by=request.GET.get("sort_by")
+                    )
+                )
             ),
         },
     )
 
 
+@login_not_required
 def user_avatar(request: AuthenticatedHttpRequest, user: str, size: int):
     """User avatar view."""
     allowed_sizes = (
@@ -850,6 +875,7 @@ class BaseLoginView(LoginView):
         return HttpResponseRedirect(self.get_success_url())
 
 
+@method_decorator(login_not_required, name="dispatch")
 class WeblateLoginView(BaseLoginView):
     """Login handler, just a wrapper around standard Django login."""
 
@@ -903,7 +929,7 @@ class WeblateLogoutView(TemplateView):
     - login_required decorator
     """
 
-    http_method_names = ["post", "options"]
+    http_method_names = ["post", "options"]  # noqa: RUF012
     template_name = "registration/logged_out.html"
     request: AuthenticatedHttpRequest
 
@@ -931,6 +957,7 @@ def fake_email_sent(request: AuthenticatedHttpRequest, reset: bool = False):
 
 
 @never_cache
+@login_not_required
 def register(request: AuthenticatedHttpRequest):
     """Registration form."""
     # Fetch invitation
@@ -1025,7 +1052,30 @@ def password(request: AuthenticatedHttpRequest):
     """Password change / set form."""
     do_change = True
     change_form = None
-    usable = request.user.has_usable_password()
+    user = request.user
+    usable = user.has_usable_password()
+
+    if user.profile.has_2fa and (
+        SESSION_SECOND_FACTOR_TIMESTAMP not in request.session
+        or request.session[SESSION_SECOND_FACTOR_TIMESTAMP]
+        + SECOND_FACTOR_VERIFY_SECONDS
+        < monotonic()
+    ):
+        messages.info(
+            request,
+            gettext(
+                "Please confirm your identity using a second factor before proceeding."
+            ),
+        )
+        request.session[SESSION_SECOND_FACTOR_USER] = (
+            user.id,
+            "weblate.accounts.auth.WeblateUserBackend",
+        )
+        login_params: dict[str, str] = {"next": reverse("password")}
+        login_url = reverse(
+            "2fa-login", kwargs={"backend": user.profile.get_second_factor_type()}
+        )
+        return HttpResponseRedirect(f"{login_url}?{urlencode(login_params)}")
 
     if "email" not in get_auth_keys() and not usable:
         messages.error(
@@ -1098,6 +1148,7 @@ def get_registration_hint(email: str) -> str | None:
 
 
 @never_cache
+@login_not_required
 def reset_password(request: AuthenticatedHttpRequest):
     """Password reset handling."""
     if request.user.is_authenticated:
@@ -1249,15 +1300,11 @@ def mute(request: AuthenticatedHttpRequest, path):
             component=obj,
             project=None,
         )
-        return redirect(
-            "{}?notify_component={}#notifications".format(reverse("profile"), obj.pk)
-        )
+        return redirect(f"{reverse('profile')}?notify_component={obj.pk}#notifications")
     mute_real(
         request.user, scope=NotificationScope.SCOPE_PROJECT, component=None, project=obj
     )
-    return redirect(
-        "{}?notify_project={}#notifications".format(reverse("profile"), obj.pk)
-    )
+    return redirect(f"{reverse('profile')}?notify_project={obj.pk}#notifications")
 
 
 class SuggestionView(ListView):
@@ -1328,6 +1375,7 @@ def social_disconnect(
 
 
 @never_cache
+@login_not_required
 @require_POST
 def social_auth(request: AuthenticatedHttpRequest, backend: str):
     """
@@ -1367,14 +1415,10 @@ def auth_fail(request: AuthenticatedHttpRequest, message: str):
 
 
 def registration_fail(request: AuthenticatedHttpRequest, message: str):
-    messages.error(request, gettext("Could not complete registration.") + " " + message)
+    messages.error(request, f"{gettext('Could not complete registration.')} {message}")
     messages.info(
         request,
-        gettext("Please check if you have already registered an account.")
-        + " "
-        + gettext(
-            "You can also request a new password, if you have lost your credentials."
-        ),
+        f"{gettext('Please check if you have already registered an account.')} {gettext('You can also request a new password, if you have lost your credentials.')}",
     )
 
     return redirect(reverse("login"))
@@ -1400,15 +1444,19 @@ def handle_missing_parameter(
     request: AuthenticatedHttpRequest, backend: str, error: AuthMissingParameter
 ):
     if backend != "email" and error.parameter == "email":
-        messages = [
+        error_messages = [
             gettext("Got no e-mail address from third party authentication service.")
         ]
         if "email" in get_auth_keys():
             # Show only if e-mail authentication is turned on
-            messages.append(gettext("Please register using e-mail instead."))
-        return auth_fail(request, " ".join(messages))
+            error_messages.append(gettext("Please register using e-mail instead."))
+        return auth_fail(request, " ".join(error_messages))
     if error.parameter in {"email", "user", "expires"}:
         return auth_redirect_token(request)
+    if error.parameter == "RelayState.idp":
+        return auth_fail(
+            request, gettext("Could not parse RelayState from SAML Identity Provider.")
+        )
     if error.parameter in {"state", "code", "RelayState"}:
         return auth_redirect_state(request)
     if error.parameter == "disabled":
@@ -1417,6 +1465,7 @@ def handle_missing_parameter(
 
 
 @csrf_exempt
+@login_not_required
 @never_cache
 def social_complete(request: AuthenticatedHttpRequest, backend: str):
     """
@@ -1483,6 +1532,12 @@ def social_complete(request: AuthenticatedHttpRequest, backend: str):
             request,
             gettext("The supplied username is already in use for another account."),
         )
+    except AuthTokenError as error:
+        report_error("Could not authenticate")
+        return registration_fail(
+            request,
+            gettext("Authentication failed: %s") % error,
+        )
     except AuthAlreadyAssociated:
         return registration_fail(
             request,
@@ -1490,7 +1545,7 @@ def social_complete(request: AuthenticatedHttpRequest, backend: str):
                 "The supplied user identity is already in use for another account."
             ),
         )
-    except AuthUnreachableProvider:
+    except (AuthUnreachableProvider, AuthConnectionError):
         return registration_fail(
             request,
             gettext("The authentication provider could not be reached."),
@@ -1524,13 +1579,15 @@ def subscribe(request: AuthenticatedHttpRequest):
         )
         try:
             subscription.full_clean()
-            subscription.save()
         except ValidationError:
             pass
+        else:
+            subscription.save()
         messages.success(request, gettext("Notification settings adjusted."))
     return redirect_profile("#notifications")
 
 
+@login_not_required
 def unsubscribe(request: AuthenticatedHttpRequest):
     if "i" in request.GET:
         signer = TimestampSigner()
@@ -1554,6 +1611,7 @@ def unsubscribe(request: AuthenticatedHttpRequest):
 
 
 @csrf_exempt
+@login_not_required
 @never_cache
 def saml_metadata(request: AuthenticatedHttpRequest):
     if "social_core.backends.saml.SAMLAuth" not in settings.AUTHENTICATION_BACKENDS:
@@ -1561,16 +1619,16 @@ def saml_metadata(request: AuthenticatedHttpRequest):
 
     # Generate metadata
     complete_url = reverse("social:complete", args=("saml",))
-    saml_backend = social_django.utils.load_backend(
-        load_strategy(request), "saml", complete_url
-    )
+    saml_backend = load_backend(load_strategy(request), "saml", complete_url)
     metadata, errors = saml_backend.generate_metadata_xml()
 
     # Handle errors
     if errors:
-        add_breadcrumb(category="auth", message="SAML errors", errors=errors)
-        report_error("SAML metadata", level="error")
-        return HttpResponseServerError(content=", ".join(errors))
+        add_breadcrumb(
+            category="auth", message="SAML errors", errors=errors, metadata=metadata
+        )
+        msg = "Invalid SAML metadata"
+        raise ImproperlyConfigured(msg)
 
     return HttpResponse(content=metadata, content_type="text/xml")
 
@@ -1591,7 +1649,9 @@ class UserList(ListView):
         if form.is_valid():
             search = form.cleaned_data.get("q", "")
             if search:
-                users = users.search(search, parser=form.fields["q"].parser)
+                users = users.search(
+                    search, parser=form.fields["q"].parser, user=self.request.user
+                )
         else:
             users = users.order()
 
@@ -1716,6 +1776,8 @@ class TOTPView(FormView):
     form_class = TOTPDeviceForm
     session_key = SESSION_SECOND_FACTOR_TOTP
 
+    request: AuthenticatedHttpRequest
+
     @cached_property
     def totp_key(self) -> str:
         key = self.request.session.get(self.session_key, None)
@@ -1790,11 +1852,14 @@ class TOTPView(FormView):
 
 
 class SecondFactorMixin(View):
-    def second_factor_completed(self, device: Device) -> None:
+    request: AuthenticatedHttpRequest
+
+    def second_factor_completed(self, device: Device) -> User:
         # Store audit log entry about used device and update last used device type
         user = self.get_user()
         user.profile.log_2fa(self.request, device)
         del self.request.session[SESSION_SECOND_FACTOR_USER]
+        self.request.session[SESSION_SECOND_FACTOR_TIMESTAMP] = int(monotonic())
 
         if not self.request.session.get(SESSION_SECOND_FACTOR_SOCIAL):
             # Keep login on social pipeline if we got here from it
@@ -1804,6 +1869,7 @@ class SecondFactorMixin(View):
         else:
             self.request.session[DEVICE_ID_SESSION_KEY] = device.persistent_id
             # This is completed in social_complete after completing social login
+        return user
 
     def second_factor_failed(self) -> None:
         user = self.get_user()
@@ -1821,15 +1887,20 @@ class SecondFactorMixin(View):
         user.backend = backend
         return user
 
+    def get_backend(self) -> DeviceType:
+        raise NotImplementedError
 
+
+@method_decorator(login_not_required, name="dispatch")
 class SecondFactorLoginView(SecondFactorMixin, RedirectURLMixin, FormView):
     template_name = "accounts/2fa.html"
     next_page = settings.LOGIN_REDIRECT_URL
-    forms = {
+    forms: ClassVar[dict[str, type[Form]]] = {
         "totp": TOTPTokenForm,
         "webauthn": WebAuthnTokenForm,
         "recovery": OTPTokenForm,
     }
+    request: AuthenticatedHttpRequest
 
     def get_backend(self) -> DeviceType:
         backend = self.kwargs["backend"]
@@ -1857,6 +1928,7 @@ class SecondFactorLoginView(SecondFactorMixin, RedirectURLMixin, FormView):
         return context
 
     @method_decorator(session_ratelimit_post("second_factor"))
+    @method_decorator(login_not_required)
     def dispatch(self, request: AuthenticatedHttpRequest, *args, **kwargs):  # type: ignore[override]
         self.user = self.get_user()
         return super().dispatch(request, *args, **kwargs)
@@ -1871,15 +1943,22 @@ class SecondFactorLoginView(SecondFactorMixin, RedirectURLMixin, FormView):
         return super().form_invalid(form)
 
 
+class WebAuthnMixin(SecondFactorMixin):
+    def get_backend(self) -> DeviceType:
+        return "webauthn"
+
+
+@method_decorator(login_not_required, name="dispatch")
 class WeblateBeginCredentialAuthenticationView(
-    SecondFactorMixin, BeginCredentialAuthenticationView
+    WebAuthnMixin, BeginCredentialAuthenticationView
 ):
     pass
 
 
 @method_decorator(session_ratelimit_post("second_factor"), name="dispatch")
+@method_decorator(login_not_required, name="dispatch")
 class WeblateCompleteCredentialAuthenticationView(
-    SecondFactorMixin, CompleteCredentialAuthenticationView
+    WebAuthnMixin, CompleteCredentialAuthenticationView
 ):
     def complete_auth(self, device: WebAuthnCredential) -> User:
         return self.second_factor_completed(device)

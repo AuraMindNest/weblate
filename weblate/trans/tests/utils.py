@@ -15,14 +15,17 @@ from celery.contrib.testing.tasks import ping  # type: ignore[import-untyped]
 from celery.result import allow_join_result
 from django.conf import settings
 from django.contrib.auth.hashers import make_password
+from django.core.management.color import no_style
+from django.db import connection
 from django.test.utils import modify_settings, override_settings
 from django.utils import timezone
 from django.utils.functional import cached_property
 
-from weblate.auth.models import User
+from weblate.auth.models import User, bot_cache, get_anonymous
 from weblate.billing.models import Billing, Invoice, Plan
 from weblate.configuration.models import Setting, SettingCategory
 from weblate.formats.models import FILE_FORMATS
+from weblate.lang.models import Language, Plural
 from weblate.trans.models import Category, Component, Project
 from weblate.utils.files import remove_tree
 from weblate.vcs.models import VCS_REGISTRY
@@ -33,6 +36,28 @@ TEST_DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 REPOWEB_URL = "https://nonexisting.weblate.org/blob/main/{{filename}}#L{{line}}"
 
 TESTPASSWORD = make_password("testpassword")
+
+
+def fixup_languages_seq() -> None:
+    # Reset sequence for Language and Plural objects as
+    # we're manipulating with them in FixtureTestCase.setUpTestData
+    # and that seems to affect sequence for other tests as well
+    # on some PostgreSQL versions (probably sequence is not rolled back
+    # in a transaction).
+    commands = connection.ops.sequence_reset_sql(no_style(), [Language, Plural])
+    if commands:
+        with connection.cursor() as cursor:
+            for sql in commands:
+                cursor.execute(sql)
+    # Invalidate object cache for languages
+    Language.objects.flush_object_cache()
+
+
+def clear_users_cache() -> None:
+    # Clear anonymous user cache
+    get_anonymous.cache_clear()
+    # Clear bot cache
+    bot_cache.get({}).clear()
 
 
 def wait_for_celery(timeout=10) -> None:
@@ -54,19 +79,19 @@ def create_test_user() -> User:
     )
 
 
-def create_another_user() -> User:
+def create_another_user(suffix: str = "") -> User:
     return User.objects.create(
-        username="jane",
-        email="jane.doe@example.org",
+        username=f"jane{suffix}",
+        email=f"jane.doe{suffix}@example.org",
         password=TESTPASSWORD,
-        full_name="Jane Doe",
+        full_name=f"Jane Doe{suffix}",
     )
 
 
 class RepoTestMixin:
     """Mixin for testing with test repositories."""
 
-    updated_base_repos: set[str] = set()
+    updated_base_repos: set[str] = set()  # noqa: RUF012
     CREATE_GLOSSARIES: bool = False
 
     local_repo_path = "local:"
@@ -297,7 +322,10 @@ class RepoTestMixin:
 
     def create_iphone(self, **kwargs) -> Component:
         return self._create_component(
-            "strings", "iphone/*.lproj/Localizable.strings", **kwargs
+            "strings",
+            "iphone/*.lproj/Localizable.strings",
+            file_format_params={"strings_encoding": "utf-16"},
+            **kwargs,
         )
 
     def create_android(self, suffix="", **kwargs) -> Component:
@@ -323,9 +351,9 @@ class RepoTestMixin:
             "webextension/_locales/en/messages.json",
         )
 
-    def create_ftl(self) -> Component:
+    def create_ftl(self, **kwargs) -> Component:
         return self._create_component(
-            "fluent", "ftl/locales/*/test.ftl", "ftl/locales/en/test.ftl"
+            "fluent", "ftl/locales/*/test.ftl", "ftl/locales/en/test.ftl", **kwargs
         )
 
     def create_json_intermediate(self, **kwargs) -> Component:
@@ -356,7 +384,9 @@ class RepoTestMixin:
         return self._create_component("csv", "tsv/*.txt")
 
     def create_csv(self) -> Component:
-        return self._create_component("csv", "csv/*.txt")
+        return self._create_component(
+            "csv", "csv/*.txt", file_format_params={"csv_encoding": "auto"}
+        )
 
     def create_csv_mono(self) -> Component:
         return self._create_component("csv", "csv-mono/*.csv", "csv-mono/en.csv")
@@ -364,11 +394,13 @@ class RepoTestMixin:
     def create_php_mono(self) -> Component:
         return self._create_component("php", "php-mono/*.php", "php-mono/en.php")
 
-    def create_java(self) -> Component:
+    def create_java(self, **kwargs) -> Component:
         return self._create_component(
             "properties",
             "java/swing_messages_*.properties",
             "java/swing_messages.properties",
+            file_format_params={"properties_encoding": "iso-8859-1"},
+            **kwargs,
         )
 
     def create_xliff(self, name="default", **kwargs) -> Component:
@@ -376,6 +408,9 @@ class RepoTestMixin:
 
     def create_xliff_mono(self) -> Component:
         return self._create_component("xliff", "xliff-mono/*.xlf", "xliff-mono/en.xlf")
+
+    def create_xliff_auto(self) -> Component:
+        return self._create_component("xliff", "xliff-auto/*.xlf")
 
     def create_resx(self) -> Component:
         return self._create_component("resx", "resx/*.resx", "resx/en.resx")
@@ -396,26 +431,42 @@ class RepoTestMixin:
 
     def create_html(self) -> Component:
         return self._create_component(
-            "html", "html/*.html", "html/en.html", edit_template=False
+            "html",
+            "html/*.html",
+            "html/en.html",
+            edit_template=False,
+            manage_units=False,
         )
 
     def create_idml(self) -> Component:
         return self._create_component(
-            "idml", "idml/*.idml", "idml/en.idml", edit_template=False
+            "idml",
+            "idml/*.idml",
+            "idml/en.idml",
+            edit_template=False,
+            manage_units=False,
         )
 
     def create_odt(self) -> Component:
         return self._create_component(
-            "odf", "odt/*.odt", "odt/en.odt", edit_template=False
+            "odf",
+            "odt/*.odt",
+            "odt/en.odt",
+            edit_template=False,
+            manage_units=False,
         )
 
     def create_winrc(self) -> Component:
         return self._create_component(
-            "rc", "winrc/*.rc", "winrc/en-US.rc", edit_template=False
+            "rc",
+            "winrc/*.rc",
+            "winrc/en-US.rc",
+            edit_template=False,
+            manage_units=False,
         )
 
-    def create_tbx(self) -> Component:
-        return self._create_component("tbx", "tbx/*.tbx")
+    def create_tbx(self, **kwargs) -> Component:
+        return self._create_component("tbx", "tbx/*.tbx", **kwargs)
 
     def create_link(self, **kwargs) -> Component:
         parent = self.create_iphone(*kwargs)
@@ -513,3 +564,15 @@ class social_core_override_settings(SocialCacheMixin, override_settings):  # noq
 # Lowercase name to be consistent with Django
 class social_core_modify_settings(SocialCacheMixin, modify_settings):  # noqa: N801
     pass
+
+
+# Lowercase name to be consistent with Django
+class enable_login_required_settings(override_settings):  # noqa: N801
+    def __init__(self):
+        middleware = settings.MIDDLEWARE.copy()
+        middleware.insert(
+            middleware.index("weblate.api.middleware.ThrottlingMiddleware"),
+            "django.contrib.auth.middleware.LoginRequiredMiddleware",
+        )
+        self.options = {"MIDDLEWARE": middleware}
+        super(override_settings, self).__init__()

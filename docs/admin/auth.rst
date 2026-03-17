@@ -489,7 +489,8 @@ Please follow the Python Social Auth instructions for configuration. Notable dif
 
 * Weblate supports single IDP which has to be called ``weblate`` in
   ``SOCIAL_AUTH_SAML_ENABLED_IDPS``.
-* The SAML XML metadata URL is ``/accounts/metadata/saml/``.
+* The SAML XML metadata URL is ``/accounts/metadata/saml/``, which is also an entity ID.
+* The sign-in URL is ``/accounts/complete/saml/`` (also known as ACS URL).
 * Following settings are automatically filled in:
   ``SOCIAL_AUTH_SAML_SP_ENTITY_ID``, ``SOCIAL_AUTH_SAML_TECHNICAL_CONTACT``,
   ``SOCIAL_AUTH_SAML_SUPPORT_CONTACT``
@@ -514,9 +515,6 @@ Example configuration:
             "entity_id": "https://idp.testshib.org/idp/shibboleth",
             "url": "https://idp.testshib.org/idp/profile/SAML2/Redirect/SSO",
             "x509cert": "MIIEDjCCAvagAwIBAgIBADA ... 8Bbnl+ev0peYzxFyF5sQA==",
-            "attr_name": "full_name",
-            "attr_username": "username",
-            "attr_email": "email",
         }
     }
     SOCIAL_AUTH_SAML_ORG_INFO = {
@@ -535,8 +533,14 @@ Example configuration:
         "emailAddress": "support@example.com"
     }
 
+You can generate a new pair of keys using:
+
+.. code-block:: sh
+
+   openssl req -newkey rsa:4096 -new -x509 -days 3652 -nodes -out saml.crt -keyout saml.key
+
 The default configuration extracts user details from following attributes,
-configure your IDP to provide them:
+configure your IdP to provide them:
 
 +--------------+-----------------------------------------+
 | Attribute    | SAML URI reference                      |
@@ -552,10 +556,13 @@ configure your IDP to provide them:
 | Username     | ``urn:oid:0.9.2342.19200300.100.1.1``   |
 +--------------+-----------------------------------------+
 
+When configuring Weblate SP in your IdP, it is recommended to choose persistent
+:guilabel:`Name ID format`.
+
 .. hint::
 
-   The example above and the Docker image define an IDP called ``weblate``.
-   You might need to configure this string as :guilabel:`Relay` in your IDP.
+   The example above and the Docker image define an IdP called ``weblate``.
+   You might need to configure this string as :guilabel:`Relay` in your IdP.
 
 .. note::
 

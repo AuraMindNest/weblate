@@ -6,15 +6,14 @@ from __future__ import annotations
 
 import re
 from collections import Counter, defaultdict
-from re import Pattern
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from django.utils.functional import SimpleLazyObject
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext, gettext_lazy
 
-from weblate.checks.base import MissingExtraDict, SourceCheck, TargetCheck
+from weblate.checks.base import SourceCheck, TargetCheck
 from weblate.utils.html import format_html_join_comma, list_to_tuples
 
 if TYPE_CHECKING:
@@ -22,6 +21,7 @@ if TYPE_CHECKING:
 
     from django_stubs_ext import StrOrPromise
 
+    from weblate.checks.base import MissingExtraDict
     from weblate.trans.models import Unit
 
     from .models import Check
@@ -239,6 +239,7 @@ WHITESPACE = re.compile(r"\s+")
 
 # See https://github.com/Automattic/wp-calypso/blob/899d4cba090893f5a62012a08a6d0a4e8d028d98/packages/interpolate-components/src/tokenize.js#L30
 AUTOMATTIC_COMPONENTS_MATCH = re.compile(r"(\{\{/?\s*\w+\s*/?}})")
+LARAVEL_MATCH = re.compile(r"(:[A-Za-z][A-Za-z0-9_]*)")
 
 
 def c_format_is_position_based(string: str):
@@ -343,16 +344,21 @@ FLAG_RULES: dict[
         format_not_position_based,
         extract_string_simple,
     ),
+    "laravel-format": (
+        LARAVEL_MATCH,
+        name_format_is_position_based,
+        extract_string_simple,
+    ),
 }
 
 
 class BaseFormatCheck(TargetCheck):
     """Base class for format string checks."""
 
-    regexp: Pattern[str] | None = None
-    plural_parameter_regexp: Pattern[str] | None = None
+    regexp: re.Pattern[str] | None = None
+    plural_parameter_regexp: re.Pattern[str] | None = None
     default_disabled = True
-    normalize_remove: set[str] = set()
+    normalize_remove: ClassVar[set[str]] = set()
 
     def check_target_unit(self, sources: list[str], targets: list[str], unit: Unit):
         """Check single unit, handling plurals."""
@@ -490,12 +496,14 @@ class BaseFormatCheck(TargetCheck):
             and all(self.is_position_based(flag) for flag in result["missing"])
             and set(result["missing"]) == set(result["extra"])
         ):
-            yield gettext(
-                "The following format strings are in the wrong order: %s"
-            ) % format_html_join_comma(
-                "{}",
-                list_to_tuples(
-                    self.format_string(x) for x in sorted(set(result["missing"]))
+            yield format_html(
+                "{} {}",
+                gettext("The following format strings are in the wrong order:"),
+                format_html_join_comma(
+                    "{}",
+                    list_to_tuples(
+                        self.format_string(x) for x in sorted(set(result["missing"]))
+                    ),
                 ),
             )
         else:
@@ -551,7 +559,7 @@ class BaseFormatCheck(TargetCheck):
 class BasePrintfCheck(BaseFormatCheck):
     """Base class for printf based format checks."""
 
-    normalize_remove = {"%"}
+    normalize_remove: ClassVar[set[str]] = {"%"}
 
     def __init__(self) -> None:
         super().__init__()
@@ -652,7 +660,7 @@ class SchemeFormatCheck(BasePrintfCheck):
     check_id = "scheme_format"
     name = gettext_lazy("Scheme format")
     description = gettext_lazy("Scheme format string does not match source.")
-    normalize_remove = {"~"}
+    normalize_remove: ClassVar[set[str]] = {"~"}
 
     def format_string(self, string: str) -> str:
         return f"~{string}"
@@ -666,7 +674,7 @@ class PythonBraceFormatCheck(BaseFormatCheck):
     description = gettext_lazy("Python brace format string does not match source.")
     regexp = PYTHON_BRACE_MATCH
     plural_parameter_regexp = re.compile(r"\{(?:count|number|num|n)\}")
-    normalize_remove: set[str] = {"{", "}"}
+    normalize_remove: ClassVar[set[str]] = {"{", "}"}
 
     def extract_string(self, match: re.Match) -> str:
         return extract_string_python_brace(match)
@@ -712,13 +720,24 @@ class CSharpFormatCheck(BaseFormatCheck):
     name = gettext_lazy("C# format")
     description = gettext_lazy("C# format string does not match source.")
     regexp = C_SHARP_MATCH
-    extra_enable_strings = ["csharp-format"]
+    extra_enable_strings = ("csharp-format",)
 
     def is_position_based(self, string: str):
         return name_format_is_position_based(string)
 
     def format_string(self, string: str) -> str:
         return f"{{{string}}}"
+
+
+class LaravelFormatCheck(BasePrintfCheck):
+    """Check for Laravel format string."""
+
+    check_id = "laravel_format"
+    name = gettext_lazy("Laravel format")
+    description = gettext_lazy("Laravel format string does not match source.")
+
+    def format_string(self, string: str) -> str:
+        return string
 
 
 class JavaFormatCheck(BasePrintfCheck):

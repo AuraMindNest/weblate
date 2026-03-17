@@ -4,14 +4,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.utils.translation import gettext
 
+from weblate.formats.base import BilingualUpdateMixin
 from weblate.lang.models import Language
 from weblate.trans.models import (
-    Announcement,
     Category,
     Component,
     ComponentList,
@@ -22,18 +22,20 @@ from weblate.trans.models import (
 )
 from weblate.utils.stats import CategoryLanguage, ProjectLanguage
 
-from .results import Allowed, Denied, PermissionResult
+from .results import Allowed, Denied
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from django.db.models import Model
+    from django.db.models import Model, QuerySet
 
     from weblate.auth.models import Group, User
     from weblate.billing.models import Billing
     from weblate.checks.models import Check
     from weblate.memory.models import Memory
     from weblate.trans.models import Comment, Suggestion
+
+    from .results import PermissionResult
 
 SPECIALS: dict[str, Callable[[User, str, Model], bool | PermissionResult]] = {}
 
@@ -216,6 +218,18 @@ def check_can_edit(  # noqa: C901
         if not user.is_authenticated:
             # Signing in might help, but user still might need additional privileges
             return Denied(gettext("Sign in to save translations."))
+        if component and component.restricted:
+            if permission == "unit.review":
+                return Denied(
+                    gettext(
+                        "Insufficient privileges for approving translations in a restricted component."
+                    )
+                )
+            return Denied(
+                gettext(
+                    "Insufficient privileges for saving translations in a restricted component."
+                )
+            )
         if permission == "unit.review":
             return Denied(
                 gettext("Insufficient privileges for approving translations.")
@@ -271,6 +285,8 @@ def check_unit_review(
         obj = obj.translation
     if not skip_enabled:
         if isinstance(obj, Translation):
+            if obj.is_readonly:
+                return Denied(gettext("The translation is read-only."))
             if not obj.enable_review:
                 if obj.is_source:
                     return Denied(gettext("Source-string reviews are turned off."))
@@ -292,7 +308,9 @@ def check_unit_review(
 
 @register_perm("unit.edit", "suggestion.accept")
 def check_edit_approved(
-    user: User, permission: str, obj: Unit | Translation | Component | Project
+    user: User,
+    permission: str,
+    obj: Unit | Translation | Component | Project | ProjectLanguage,
 ) -> bool | PermissionResult:
     component = None
     if isinstance(obj, Unit):
@@ -415,10 +433,12 @@ def check_translation_add(
     return check_permission(user, permission, obj)
 
 
-@register_perm("translation.auto")
+@register_perm("translation.auto", "unit.bulk_edit")
 def check_autotranslate(
-    user: User, permission: str, translation: Translation | Component | Project
+    user: User, permission: str, translation: Unit | Translation | Component | Project
 ) -> bool | PermissionResult:
+    if isinstance(translation, Unit):
+        translation = translation.translation
     if isinstance(translation, Translation) and (
         (translation.is_source and not translation.component.intermediate)
         or translation.is_readonly
@@ -438,7 +458,7 @@ def check_suggestion_vote(
 
 @register_perm("suggestion.add")
 def check_suggestion_add(
-    user: User, permission: str, obj: Unit | Translation
+    user: User, permission: str, obj: Unit | Translation | ProjectLanguage
 ) -> bool | PermissionResult:
     if isinstance(obj, Unit):
         obj = obj.translation
@@ -447,6 +467,7 @@ def check_suggestion_add(
     # Check contributor license agreement
     if (
         not user.is_bot
+        and isinstance(obj, Translation)
         and obj.component.agreement
         and not ContributorAgreement.objects.has_agreed(user, obj.component)
     ):
@@ -456,7 +477,7 @@ def check_suggestion_add(
 
 @register_perm("upload.perform")
 def check_upload(
-    user: User, permission: str, translation: Translation
+    user: User, permission: str, obj: Translation | ProjectLanguage
 ) -> bool | PermissionResult:
     """
     Check whether user can perform any upload operation.
@@ -464,29 +485,33 @@ def check_upload(
     The actual check for the method is implemented in
     weblate.trans.util.check_upload_method_permissions.
     """
-    # Source upload
-    if translation.is_source and not user.has_perm("source.edit", translation):
-        return Denied(gettext("Insufficient privileges for editing source strings."))
-    # Bilingual source translations
-    if (
-        translation.is_source
-        and not translation.is_template
-        and not hasattr(translation.component.file_format_cls, "update_bilingual")
-    ):
-        return Denied(
-            gettext("The file format does not support updating source strings.")
-        )
-    if translation.component.is_glossary:
-        permission = "glossary.upload"
-    return check_can_edit(user, permission, translation) and (
-        # Normal upload
-        check_edit_approved(user, "unit.edit", translation)
-        # Suggestion upload
-        or check_suggestion_add(user, "suggestion.add", translation)
-        # Add upload
-        or check_suggestion_add(user, "unit.add", translation)
+    if isinstance(obj, Translation):
         # Source upload
-        or translation.is_source
+        if obj.is_source and not user.has_perm("source.edit", obj):
+            return Denied(
+                gettext("Insufficient privileges for editing source strings.")
+            )
+        # Bilingual source translations
+        if (
+            obj.is_source
+            and not obj.is_template
+            and not issubclass(obj.component.file_format_cls, BilingualUpdateMixin)
+        ):
+            return Denied(
+                gettext("The file format does not support updating source strings.")
+            )
+        if obj.component.is_glossary:
+            permission = "glossary.upload"
+
+    return check_can_edit(user, permission, obj) and (
+        # Normal upload
+        check_edit_approved(user, "unit.edit", obj)
+        # Suggestion upload
+        or check_suggestion_add(user, "suggestion.add", obj)
+        # Add upload
+        or check_suggestion_add(user, "unit.add", obj)
+        # Source upload
+        or (isinstance(obj, Translation) and obj.is_source)
     )
 
 
@@ -546,19 +571,18 @@ def check_repository_status(
 def check_team_edit(user: User, permission: str, obj: Group) -> bool:
     from weblate.auth.models import Group
 
-    if check_global_permission(user, "group.edit"):
-        return True
-
-    if isinstance(obj, Group):
-        return (
-            obj.defining_project
+    return (
+        check_global_permission(user, "group.edit")
+        or (
+            isinstance(obj, Group)
+            and obj.defining_project
             and check_permission(user, "project.permissions", obj.defining_project)
-        ) or obj.admins.filter(pk=user.pk).exists()
-
-    if isinstance(obj, Project):
-        return check_permission(user, "project.permissions", obj)
-
-    return False
+        )
+        or (
+            isinstance(obj, Project)
+            and check_permission(user, "project.permissions", obj)
+        )
+    )
 
 
 @register_perm("meta:team.users")
@@ -570,19 +594,23 @@ def check_team_edit_users(
     )
 
 
-@register_perm("billing.view")
+@register_perm("meta:billing.view")
 def check_billing_view(
     user: User, permission: str, obj: Billing | Project
 ) -> bool | PermissionResult:
-    # We check Billling by hasttr to avoid importing optional Django app. To make type
+    if user.has_perm("billing.manage"):
+        return True
+
+    billings: list[Billing] | QuerySet[Billing]
+    # We check Billing by hasattr to avoid importing optional Django app. To make type
     # checker understand this, there is negative check on Project and cast in the
     # check_permission call.
     if hasattr(obj, "all_projects") and not isinstance(obj, Project):
-        if user.has_perm("billing.manage") or obj.owners.filter(pk=user.pk).exists():
-            return True
-        # This is a billing object
-        return any(check_permission(user, permission, prj) for prj in obj.all_projects)
-    return check_permission(user, permission, cast("Project", obj))
+        billings = [obj]
+    else:
+        billings = obj.billings
+
+    return any(billing.owners.filter(pk=user.pk).exists() for billing in billings)
 
 
 @register_perm("billing:project.permissions")
@@ -600,22 +628,17 @@ def check_billing(user: User, permission: str, obj: Project) -> bool | Permissio
     return check_permission(user, "project.permissions", obj)
 
 
-# This does not exist for real
 @register_perm("announcement.delete")
 def check_announcement_delete(
-    user: User, permission: str, obj: Announcement
+    user: User, permission: str, obj: Project | Component | None
 ) -> bool | PermissionResult:
-    if user.is_superuser:
-        return True
-    if obj.component:
-        return check_permission(user, "component.edit", obj.component)
-    if obj.project:
-        return check_permission(user, "project.edit", obj.project)
-    return False
+    if obj is None:
+        return check_global_permission(user, permission)
+    return check_permission(user, permission, obj)
 
 
 # This does not exist for real
-@register_perm("unit.flag")
+@register_perm("meta:unit.flag")
 def check_unit_flag(
     user: User, permission: str, obj: Unit | Translation
 ) -> bool | PermissionResult:

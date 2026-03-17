@@ -6,14 +6,16 @@ from __future__ import annotations
 
 from collections import defaultdict
 from functools import reduce
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from django.db.models import Count, Prefetch, Q, Value
 from django.db.models.functions import MD5, Lower
+from django.utils.html import format_html
 from django.utils.translation import gettext, gettext_lazy, ngettext
 
 from weblate.checks.base import BatchCheckMixin, TargetCheck
 from weblate.trans.actions import ACTIONS_REVERTABLE, ActionEvents
+from weblate.trans.util import split_plural
 from weblate.utils.html import format_html_join_comma
 from weblate.utils.state import STATE_TRANSLATED
 
@@ -21,6 +23,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from weblate.trans.models import Change, Component, Unit
+
+    from .base import FixupType
 
 
 class PluralsCheck(TargetCheck):
@@ -61,7 +65,7 @@ class SamePluralsCheck(TargetCheck):
         # Is this plural?
         if len(sources) == 1 or len(targets) == 1:
             return False
-        if not targets[0]:
+        if not targets or not targets[0]:
             return False
         return len(set(targets)) == 1
 
@@ -128,10 +132,12 @@ class ConsistencyCheck(TargetCheck, BatchCheckMixin):
         return (
             units.filter(
                 reduce(
-                    lambda x, y: x
-                    | (
-                        Q(id_hash=y["id_hash"])
-                        & Q(translation__plural_id=y["translation__plural_id"])
+                    lambda x, y: (
+                        x
+                        | (
+                            Q(id_hash=y["id_hash"])
+                            & Q(translation__plural_id=y["translation__plural_id"])
+                        )
                     ),
                     matches,
                     Q(),
@@ -183,10 +189,14 @@ class ReusedCheck(TargetCheck, BatchCheckMixin):
             .distinct()
         )
 
-        return ngettext(
-            "Other source string: %s", "Other source strings: %s", len(other_sources)
-        ) % format_html_join_comma(
-            "{}", ((gettext("“%s”") % source,) for source in other_sources)
+        return format_html(
+            "{} {}",
+            ngettext(
+                "Other source string:", "Other source strings:", len(other_sources)
+            ),
+            format_html_join_comma(
+                "{}", ((gettext("“%s”") % source,) for source in other_sources)
+            ),
         )
 
     def check_single(self, source: str, target: str, unit: Unit) -> bool:
@@ -220,11 +230,13 @@ class ReusedCheck(TargetCheck, BatchCheckMixin):
         result = (
             units.filter(
                 reduce(
-                    lambda x, y: x
-                    | (
-                        Q(target__lower__md5=MD5(Lower(Value(y["target"]))))
-                        & Q(target=y["target"])
-                        & Q(translation__plural_id=y["translation__plural_id"])
+                    lambda x, y: (
+                        x
+                        | (
+                            Q(target__lower__md5=MD5(Lower(Value(y["target"]))))
+                            & Q(target=y["target"])
+                            & Q(translation__plural_id=y["translation__plural_id"])
+                        )
                     ),
                     matches,
                     Q(),
@@ -260,12 +272,12 @@ class TranslatedCheck(TargetCheck, BatchCheckMixin):
     ignore_untranslated = False
     skip_suggestions = True
 
-    SOURCE_ACTIONS = {
+    SOURCE_ACTIONS: ClassVar[set[ActionEvents]] = {
         ActionEvents.SOURCE_CHANGE,
         ActionEvents.MARKED_EDIT,
     }
 
-    TRACK_ACTIONS = ACTIONS_REVERTABLE | SOURCE_ACTIONS
+    TRACK_ACTIONS: ClassVar[set[ActionEvents]] = ACTIONS_REVERTABLE | SOURCE_ACTIONS
 
     def get_description(self, check_obj):
         unit = check_obj.unit
@@ -317,13 +329,13 @@ class TranslatedCheck(TargetCheck, BatchCheckMixin):
         """Target strings are checked in check_target_unit."""
         return False
 
-    def get_fixup(self, unit: Unit):
+    def get_fixup(self, unit: Unit) -> Iterable[FixupType] | None:
         target = self.check_target_unit(
             unit.get_source_plurals(), unit.get_target_plurals(), unit
         )
         if not target:
             return None
-        return [(".*", target, "u")]
+        return [("plurals", split_plural(target))]
 
     def check_component(self, component: Component) -> Iterable[Unit]:
         from weblate.trans.models import Change, Unit

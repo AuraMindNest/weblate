@@ -9,9 +9,9 @@ import json
 from binascii import unhexlify
 from datetime import datetime, timedelta
 from time import time
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, ClassVar, cast
 
-from altcha import Challenge, ChallengeOptions, create_challenge, verify_solution
+from altcha import ChallengeOptions, create_challenge, verify_solution
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Div, Field, Fieldset, Layout, Submit
 from django import forms
@@ -39,7 +39,7 @@ from weblate.accounts.utils import (
     get_all_user_mails,
     invalidate_reset_codes,
 )
-from weblate.auth.models import AuthenticatedHttpRequest, Group, User
+from weblate.auth.models import Group, User
 from weblate.lang.models import Language
 from weblate.logger import LOGGER
 from weblate.trans.defines import FULLNAME_LENGTH
@@ -57,7 +57,11 @@ from weblate.utils.ratelimit import check_rate_limit, get_rate_setting, reset_ra
 from weblate.utils.validators import validate_fullname
 
 if TYPE_CHECKING:
+    from altcha import Challenge
     from django_otp.models import Device
+    from django_stubs_ext import StrOrPromise
+
+    from weblate.auth.models import AuthenticatedHttpRequest
 
 
 class UniqueEmailMixin(forms.Form):
@@ -123,7 +127,7 @@ class UniqueUsernameField(UsernameField):
 
 
 class FullNameField(forms.CharField):
-    default_validators = [validate_fullname]
+    default_validators = [validate_fullname]  # noqa: RUF012
 
     def __init__(self, *args, **kwargs) -> None:
         kwargs["max_length"] = FULLNAME_LENGTH
@@ -160,7 +164,7 @@ class LanguagesForm(ProfileBaseForm):
     class Meta:
         model = Profile
         fields = ("language", "languages", "secondary_languages")
-        widgets = {
+        widgets = {  # noqa: RUF012
             "language": SortedSelect,
             "languages": SortedSelectMultiple,
             "secondary_languages": SortedSelectMultiple,
@@ -184,7 +188,6 @@ class LanguagesForm(ProfileBaseForm):
         self.helper = FormHelper(self)
         self.helper.disable_csrf = True
         self.helper.form_tag = False
-        self.helper.template_pack = "bootstrap5"
 
     def save(self, commit=True) -> None:
         super().save(commit=commit)
@@ -202,16 +205,27 @@ class CommitForm(ProfileBaseForm):
         required=False,
         widget=forms.RadioSelect,
     )
+    commit_name = forms.TypedChoiceField(
+        coerce=int,
+        label=gettext_lazy("Commit name"),
+        choices=[],
+        help_text=gettext_lazy(
+            "Used in version control commits. The name stays in the repository forever, once changes are committed by Weblate."
+        ),
+        required=False,
+        widget=forms.RadioSelect,
+    )
 
     class Meta:
         model = Profile
-        fields = ("commit_email",)
+        fields = ("commit_email", "commit_name")
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
+        instance = self.instance
 
-        commit_emails = get_all_user_mails(self.instance.user, filter_deliverable=False)
-        site_commit_email = self.instance.get_site_commit_email()
+        commit_emails = get_all_user_mails(instance.user, filter_deliverable=False)
+        site_commit_email = instance.get_site_commit_email()
         if site_commit_email:
             if not settings.PRIVATE_COMMIT_EMAIL_OPT_IN:
                 self.fields["commit_email"].choices = [("", site_commit_email)]
@@ -220,10 +234,27 @@ class CommitForm(ProfileBaseForm):
 
         self.fields["commit_email"].choices += [(x, x) for x in sorted(commit_emails)]
 
+        site_name = instance.get_site_commit_name()
+        visible_name = instance.user.get_visible_name()
+
+        if not settings.PRIVATE_COMMIT_NAME_OPT_IN and site_name:
+            default_label = gettext_lazy("Use anonymous account name")
+        else:
+            default_label = gettext_lazy("Use account name")
+
+        name_choices = [
+            (Profile.CommitNameChoices.DEFAULT, default_label),
+            (Profile.CommitNameChoices.PUBLIC, visible_name),
+        ]
+
+        if site_name:
+            name_choices.append((Profile.CommitNameChoices.PRIVATE, site_name))
+
+        self.fields["commit_name"].choices = name_choices
+
         self.helper = FormHelper(self)
         self.helper.disable_csrf = True
         self.helper.form_tag = False
-        self.helper.template_pack = "bootstrap5"
 
 
 class ProfileForm(ProfileBaseForm):
@@ -260,7 +291,6 @@ class ProfileForm(ProfileBaseForm):
         self.helper = FormHelper(self)
         self.helper.disable_csrf = True
         self.helper.form_tag = False
-        self.helper.template_pack = "bootstrap5"
 
 
 class SubscriptionForm(ProfileBaseForm):
@@ -272,7 +302,9 @@ class SubscriptionForm(ProfileBaseForm):
             "auto_watch",
             "watched",
         )
-        widgets = {"watched": forms.SelectMultiple}
+        widgets = {  # noqa: RUF012
+            "watched": forms.SelectMultiple,
+        }
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -288,7 +320,6 @@ class SubscriptionForm(ProfileBaseForm):
         self.helper = FormHelper(self)
         self.helper.disable_csrf = True
         self.helper.form_tag = False
-        self.helper.template_pack = "bootstrap5"
 
 
 class UserSettingsForm(ProfileBaseForm):
@@ -315,7 +346,6 @@ class UserSettingsForm(ProfileBaseForm):
         self.helper = FormHelper(self)
         self.helper.disable_csrf = True
         self.helper.form_tag = False
-        self.helper.template_pack = "bootstrap5"
 
 
 class DashboardSettingsForm(ProfileBaseForm):
@@ -324,7 +354,7 @@ class DashboardSettingsForm(ProfileBaseForm):
     class Meta:
         model = Profile
         fields = ("dashboard_view", "dashboard_component_list")
-        widgets = {
+        widgets = {  # noqa: RUF012
             "dashboard_view": forms.RadioSelect,
             "dashboard_component_list": forms.HiddenInput,
         }
@@ -334,7 +364,6 @@ class DashboardSettingsForm(ProfileBaseForm):
         self.helper = FormHelper(self)
         self.helper.disable_csrf = True
         self.helper.form_tag = False
-        self.helper.template_pack = "bootstrap5"
         component_lists = self.instance.allowed_dashboard_component_lists
         self.fields["dashboard_component_list"].queryset = component_lists
         choices = [
@@ -388,7 +417,7 @@ class UserForm(forms.ModelForm):
     class Meta:
         model = User
         fields = ("username", "full_name", "email")
-        field_classes = {
+        field_classes = {  # noqa: RUF012
             "username": UniqueUsernameField,
             "full_name": FullNameField,
         }
@@ -404,7 +433,6 @@ class UserForm(forms.ModelForm):
         self.helper = FormHelper(self)
         self.helper.disable_csrf = True
         self.helper.form_tag = False
-        self.helper.template_pack = "bootstrap5"
 
     @classmethod
     def from_request(cls, request: AuthenticatedHttpRequest):
@@ -611,7 +639,14 @@ class ContactForm(CaptchaForm):
         widget=forms.Textarea,
     )
 
-    field_order = ["subject", "name", "email", "message", "captcha"]
+    field_order = [  # noqa: RUF012
+        "subject",
+        "name",
+        "email",
+        "message",
+        "captcha",
+        "altcha",
+    ]
 
 
 class EmailForm(CaptchaForm, UniqueEmailMixin):
@@ -625,7 +660,11 @@ class EmailForm(CaptchaForm, UniqueEmailMixin):
         help_text=gettext_lazy("An e-mail with a confirmation link will be sent here."),
     )
 
-    field_order = ["email", "captcha"]
+    field_order = [  # noqa: RUF012
+        "email",
+        "captcha",
+        "altcha",
+    ]
 
 
 class RegistrationForm(EmailForm):
@@ -638,8 +677,6 @@ class RegistrationForm(EmailForm):
     # This has to be without underscore for social-auth
     fullname = FullNameField()
 
-    field_order = ["email", "username", "fullname", "captcha"]
-
     def __init__(
         self, request=None, data=None, initial=None, hide_captcha: bool = False
     ) -> None:
@@ -648,6 +685,16 @@ class RegistrationForm(EmailForm):
         self.request = request
         super().__init__(
             request=request, data=data, initial=initial, hide_captcha=hide_captcha
+        )
+        self.helper = FormHelper(self)
+        self.helper.form_tag = False
+        self.helper.layout = Layout(
+            "email",
+            "username",
+            "fullname",
+            "captcha",
+            "altcha",
+            ContextDiv(template="accounts/register-password.html"),
         )
 
     def clean(self):
@@ -682,6 +729,7 @@ class SetPasswordForm(DjangoSetPasswordForm):
     )
 
     @transaction.atomic
+    # pylint: disable-next=arguments-renamed
     def save(self, request: AuthenticatedHttpRequest, delete_session=False) -> None:
         AuditLog.objects.create(
             self.user,
@@ -750,7 +798,7 @@ class LoginForm(forms.Form):
     username = forms.CharField(max_length=254, label=gettext_lazy("Username or e-mail"))
     password = PasswordField(label=gettext_lazy("Password"))
 
-    error_messages = {
+    error_messages = {  # noqa: RUF012
         "invalid_login": gettext_lazy(
             "Please enter the correct username and password."
         ),
@@ -865,7 +913,6 @@ class NotificationForm(forms.Form):
         self.helper = FormHelper(self)
         self.helper.disable_csrf = True
         self.helper.form_tag = False
-        self.helper.template_pack = "bootstrap5"
         self.helper.label_class = "col-3"
         self.helper.field_class = "col-9"
         self.helper.form_class = "form-horizontal"
@@ -1021,7 +1068,7 @@ class UserSearchForm(forms.Form):
     q = QueryField(parser="user")
     sort_by = forms.CharField(required=False, widget=forms.HiddenInput)
 
-    sort_choices = {
+    sort_choices: ClassVar[dict[str, StrOrPromise]] = {
         "username": gettext_lazy("Username"),
         "full_name": gettext_lazy("Full name"),
         "date_joined": gettext_lazy("Date joined"),
@@ -1078,7 +1125,7 @@ class GroupAddForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.helper = FormHelper(self)
         self.helper.form_class = "form-inline"
-        self.helper.field_template = "bootstrap3/layout/inline_field.html"
+        self.helper.field_template = "bootstrap5/layout/inline_field.html"
         self.helper.layout = Layout(
             "add_group",
             Submit("add_group_button", gettext("Add team")),
@@ -1126,7 +1173,7 @@ class TOTPDeviceForm(forms.Form):
         ),
     )
 
-    error_messages = {
+    error_messages = {  # noqa: RUF012
         "invalid_token": gettext_lazy("The entered token is not valid."),
     }
 

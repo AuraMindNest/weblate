@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
-import sys
+from shutil import disk_usage
+
+# pylint: disable-next=unused-import
 from typing import TYPE_CHECKING, Any, Literal, cast
 from urllib.parse import quote
 
@@ -14,7 +16,7 @@ from django.core.checks import run_checks
 from django.core.exceptions import PermissionDenied
 from django.core.mail import send_mail
 from django.db import transaction
-from django.db.models import Count, QuerySet
+from django.db.models import Count
 from django.http import Http404, HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -32,9 +34,7 @@ from weblate.accounts.views import UserList, get_initial_contact
 from weblate.auth.decorators import management_access
 from weblate.auth.forms import AdminInviteUserForm, SitewideTeamForm
 from weblate.auth.models import (
-    AuthenticatedHttpRequest,
     Group,
-    GroupQuerySet,
     Invitation,
     User,
 )
@@ -47,6 +47,7 @@ from weblate.utils import messages
 from weblate.utils.cache import measure_cache_latency
 from weblate.utils.celery import get_queue_stats
 from weblate.utils.db import measure_database_latency
+from weblate.utils.encoding import get_encoding_list
 from weblate.utils.errors import report_error
 from weblate.utils.stats import prefetch_stats
 from weblate.utils.tasks import database_backup, settings_backup
@@ -54,7 +55,6 @@ from weblate.utils.version import GIT_LINK, GIT_REVISION
 from weblate.utils.views import show_form_errors
 from weblate.utils.zammad import ZammadError, submit_zammad_ticket
 from weblate.vcs.ssh import (
-    KeyType,
     add_host_key,
     can_generate_key,
     generate_ssh_key,
@@ -74,8 +74,17 @@ from weblate.wladmin.models import BackupService, ConfigurationError, SupportSta
 from weblate.wladmin.tasks import backup_service, support_status_update
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
     from django.http.request import QueryDict
     from django_stubs_ext import StrOrPromise
+
+    from weblate.auth.models import (
+        AuthenticatedHttpRequest,
+        GroupQuerySet,
+    )
+    from weblate.vcs.ssh import (
+        KeyType,
+    )
 
 MENU: tuple[tuple[str, str, StrOrPromise], ...] = (
     ("index", "manage", gettext_lazy("Weblate status")),
@@ -103,9 +112,9 @@ def manage(request: AuthenticatedHttpRequest) -> HttpResponse:
     activation_code = request.GET.get("activation")
     if activation_code and len(activation_code) < 400:
         initial = {"secret": activation_code}
-    support_form = None
+    form = None
     if support.name != "community":
-        support_form = ContactForm(
+        form = ContactForm(
             request=request,
             hide_captcha=request.user.is_authenticated,
             initial=get_initial_contact(request),
@@ -119,7 +128,7 @@ def manage(request: AuthenticatedHttpRequest) -> HttpResponse:
             "menu_page": "index",
             "support": support,
             "activate_form": ActivateForm(initial=initial),
-            "support_form": support_form,
+            "support_form": form,
             "git_revision_link": GIT_LINK,
             "git_revision": GIT_REVISION,
         },
@@ -369,17 +378,29 @@ def performance(request: AuthenticatedHttpRequest) -> HttpResponse:
         return handle_dismiss(request)
     checks = run_checks(include_deployment_checks=True)
 
+    try:
+        disk_usage_bytes = disk_usage(settings.DATA_DIR)
+    except OSError:
+        disk_usage_bytes = None
+
+    if disk_usage_bytes is None:
+        disk_usage_percent = 0
+    else:
+        disk_usage_percent = round(disk_usage_bytes.used * 100 / disk_usage_bytes.total)
+
     context = {
         "checks": [check for check in checks if not check.is_silenced()],
         "errors": ConfigurationError.objects.filter(ignored=False),
         "queues": get_queue_stats().items(),
         "menu_items": MENU,
         "menu_page": "performance",
-        "web_encoding": [sys.getfilesystemencoding(), sys.getdefaultencoding()],
+        "web_encoding": get_encoding_list(),
         "celery_encoding": cache.get("celery_encoding"),
         "celery_latency": cache.get("celery_latency"),
         "database_latency": measure_database_latency(),
         "cache_latency": measure_cache_latency(),
+        "disk_usage": disk_usage_bytes,
+        "disk_usage_percent": disk_usage_percent,
     }
 
     return render(request, "manage/performance.html", context)
@@ -421,7 +442,7 @@ def ssh(request: AuthenticatedHttpRequest) -> HttpResponse:
     if action == "add-host":
         form = SSHAddForm(request.POST)
         if form.is_valid():
-            add_host_key(request, **form.cleaned_data)
+            add_host_key(request, form.cleaned_data["host"], form.cleaned_data["port"])
 
     context = {
         "public_ssh_keys": keys,
@@ -506,9 +527,7 @@ def users_check(request: AuthenticatedHttpRequest) -> HttpResponse:
         )
         user_list = User.objects.search(query, parser=parser)[:2]
         if user_list.count() != 1:
-            return redirect_param(
-                "manage-users", "?q={}".format(quote(form.cleaned_data["q"]))
-            )
+            return redirect_param("manage-users", f"?q={quote(form.cleaned_data['q'])}")
         return redirect(user_list[0])
     return redirect("manage-users")
 

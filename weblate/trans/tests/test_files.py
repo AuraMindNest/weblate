@@ -4,6 +4,8 @@
 
 """Test for import and export."""
 
+from __future__ import annotations
+
 from io import BytesIO
 
 from django.contrib.messages import ERROR
@@ -12,6 +14,7 @@ from django.urls import reverse
 from openpyxl import load_workbook
 
 from weblate.formats.helpers import NamedBytesIO
+from weblate.lang.models import Language
 from weblate.trans.actions import ActionEvents
 from weblate.trans.forms import SimpleUploadForm
 from weblate.trans.models import ComponentList
@@ -20,6 +23,7 @@ from weblate.trans.tests.utils import get_test_file
 from weblate.utils.state import STATE_READONLY
 
 TEST_PO = get_test_file("cs.po")
+TEST_PO_PLURAL = get_test_file("cs-plural.po")
 TEST_CSV = get_test_file("cs.csv")
 TEST_CSV_QUOTES = get_test_file("cs-quotes.csv")
 TEST_CSV_QUOTES_ESCAPED = get_test_file("cs-quotes-escaped.csv")
@@ -30,6 +34,7 @@ TEST_POT = get_test_file("hello.pot")
 TEST_POT_CHARSET = get_test_file("hello-charset.pot")
 TEST_MO = get_test_file("cs.mo")
 TEST_XLIFF = get_test_file("cs.poxliff")
+TEST_RUBY = get_test_file("cs.ryml")
 TEST_ANDROID = get_test_file("strings-cs.xml")
 TEST_ANDROID_READONLY = get_test_file("strings-with-readonly.xml")
 TEST_XLSX = get_test_file("cs.xlsx")
@@ -50,7 +55,9 @@ class ImportBaseTest(ViewTestCase):
         self.user.is_superuser = True
         self.user.save()
 
-    def do_import(self, test_file=None, follow=False, **kwargs):
+    def do_import(
+        self, *, test_file: str | None = None, follow: bool = False, **kwargs
+    ) -> None:
         """Perform file import."""
         if test_file is None:
             test_file = self.test_file
@@ -330,6 +337,75 @@ class StringsImportTest(ImportTest):
         return self.create_iphone()
 
 
+class RubyPluralImportText(ImportBaseTest):
+    test_file = TEST_RUBY
+
+    def create_component(self):
+        return self.create_ruby_yaml()
+
+    def test_import_plural(self) -> None:
+        """Test importing normally."""
+        response = self.do_import()
+        self.assertRedirects(response, self.translation_url)
+
+        # Verify stats
+        translation = self.get_translation()
+        self.assertEqual(translation.stats.translated, 1)
+        self.assertEqual(translation.stats.fuzzy, 0)
+        self.assertEqual(translation.stats.all, 4)
+
+        # Verify unit
+        unit = self.get_unit("Orangutan has %d banana.\n")
+        self.assertEqual(
+            unit.get_target_plurals(),
+            [
+                "Orangutan má %d banán.\n",
+                "Orangutan má %d banány.\n",
+                "Orangutan má %d banánů.\n",
+            ],
+        )
+
+    def test_import_pt_br(self) -> None:
+        language = Language.objects.get(code="pt_BR")
+        translation = self.component.add_new_language(language, None)
+        self.assertIsNotNone(translation)
+        response = self.client.post(
+            reverse("upload", kwargs={"path": translation.get_url_path()}),
+            {
+                "file": BytesIO(
+                    r"""
+pt_br:
+  weblate:
+    orangutan:
+      one: "Orangutan má %d banán.\n"
+      many: "Orangutan má %d banány.\n"
+      other: "Orangutan má %d banánů.\n"
+""".encode()
+                ),
+                "method": "translate",
+                "author_name": self.user.full_name,
+                "author_email": self.user.email,
+            },
+            follow=True,
+        )
+        self.assertRedirects(response, translation.get_absolute_url())
+
+        self.assertEqual(translation.stats.translated, 1)
+        self.assertEqual(translation.stats.fuzzy, 0)
+        self.assertEqual(translation.stats.all, 4)
+
+        # Verify unit
+        unit = self.get_unit("Orangutan has %d banana.\n", "pt_BR")
+        self.assertEqual(
+            unit.get_target_plurals(),
+            [
+                "Orangutan má %d banán.\n",
+                "Orangutan má %d banány.\n",
+                "Orangutan má %d banánů.\n",
+            ],
+        )
+
+
 class AndroidImportTest(ViewTestCase):
     def create_component(self):
         return self.create_android()
@@ -604,6 +680,16 @@ class ImportReplaceTest(ImportBaseTest):
         unit = self.get_unit()
         self.assertEqual(unit.target, TRANSLATION_PO)
 
+    def test_import_wrong(self) -> None:
+        """Test importing normally."""
+        response = self.do_import(method="replace", test_file=TEST_TBX, follow=True)
+        self.assertRedirects(response, self.translation_url)
+        self.assertContains(response, "Could not parse uploaded file")
+
+        # Verify stats
+        translation = self.get_translation()
+        self.assertEqual(translation.stats.translated, 0)
+
 
 class ImportSourceTest(ImportBaseTest):
     """Testing of source strings update imports."""
@@ -680,6 +766,25 @@ class ImportAddTest(ImportBaseTest):
         self.assertEqual(translation.stats.translated, 164)
         self.assertEqual(translation.stats.fuzzy, 0)
         self.assertEqual(translation.stats.all, 168)
+
+    def test_add_plural(self) -> None:
+        self.component.manage_units = True
+        self.component.save(update_fields=["manage_units"])
+        response = self.do_import(method="add", follow=True, test_file=TEST_PO_PLURAL)
+        self.assertRedirects(response, self.translation_url)
+        messages = [message.message for message in response.context["messages"]]
+        self.assertIn(
+            (
+                "Processed 1 string from the uploaded files (skipped: 1, not found: 0, updated: 0)."
+            ),
+            messages,
+        )
+
+        # Verify stats
+        translation = self.get_translation()
+        self.assertEqual(translation.stats.translated, 0)
+        self.assertEqual(translation.stats.fuzzy, 0)
+        self.assertEqual(translation.stats.all, 4)
 
 
 class ImportSourceBrokenTest(ImportSourceTest):
@@ -783,6 +888,38 @@ class ImportExportAddTest(ViewTestCase):
 
         handle = NamedBytesIO(
             "test.csv", UPLOAD_CSV.replace("Hello, world", "Hi, World").encode()
+        )
+        params = {
+            "file": handle,
+            "method": "translate",
+            "author_name": self.user.full_name,
+            "author_email": self.user.email,
+        }
+        response = self.client.post(
+            reverse("upload", kwargs=self.kw_translation),
+            params,
+            follow=True,
+        )
+        self.assertContains(response, "(skipped: 0, not found: 0, updated: 1)")
+
+    def test_xliff(self) -> None:
+        self.component.source_translation.add_unit(
+            None, "amp", "Source & translation", author=self.user
+        )
+        response = self.client.get(
+            reverse("download", kwargs=self.kw_translation),
+            {"format": "xliff11"},
+        )
+        content = response.text
+        placeholder = """<source>Source &amp; translation</source>
+        <target></target>"""
+        translation = """<source>Source &amp; translation</source>
+        <target>Zdroj &amp; překlad</target>"""
+
+        self.assertIn(placeholder, content)
+
+        handle = NamedBytesIO(
+            "test.xliff", content.replace(placeholder, translation).encode()
         )
         params = {
             "file": handle,

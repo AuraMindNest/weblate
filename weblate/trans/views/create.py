@@ -5,15 +5,15 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 from contextlib import suppress
-from functools import lru_cache
+from pathlib import Path
 from typing import TYPE_CHECKING
 from zipfile import BadZipfile
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.forms import Form, HiddenInput
+from django.db import transaction
+from django.forms import HiddenInput
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.decorators import method_decorator
@@ -29,7 +29,6 @@ from weblate.trans.forms import (
     ComponentDiscoverForm,
     ComponentDocCreateForm,
     ComponentInitCreateForm,
-    ComponentProjectForm,
     ComponentScratchCreateForm,
     ComponentSelectForm,
     ComponentZipCreateForm,
@@ -39,16 +38,20 @@ from weblate.trans.forms import (
 )
 from weblate.trans.models import Category, Component, Project
 from weblate.trans.tasks import perform_update
-from weblate.trans.util import get_clean_env
 from weblate.utils import messages
-from weblate.utils.errors import report_error
-from weblate.utils.licenses import LICENSE_URLS
+from weblate.utils.licenses import LICENSE_URLS, detect_license
 from weblate.utils.ratelimit import session_ratelimit_post
 from weblate.utils.views import create_component_from_doc, create_component_from_zip
+from weblate.vcs.base import RepositoryError
 from weblate.vcs.models import VCS_REGISTRY
 
 if TYPE_CHECKING:
+    from django.forms import Form
+
     from weblate.auth.models import AuthenticatedHttpRequest
+    from weblate.trans.forms import (
+        ComponentProjectForm,
+    )
     from weblate.trans.models.component import ComponentQuerySet
 
 SESSION_CREATE_KEY = "session_component"
@@ -100,6 +103,7 @@ class CreateProject(BaseCreateView):
                 billing_field.widget = HiddenInput()
         return form
 
+    @transaction.atomic
     def form_valid(self, form):
         result = super().form_valid(form)
         if self.has_billing and form.cleaned_data["billing"]:
@@ -197,6 +201,7 @@ class ImportProject(CreateProject):
             self.projectbackup = None
         return super().post(request, *args, **kwargs)
 
+    @transaction.atomic
     def form_valid(self, form):
         if isinstance(form, ProjectImportForm):
             # Save current zip to the import dir
@@ -271,59 +276,42 @@ class CreateComponent(BaseCreateView):
 
     def detect_license(self, form) -> None:
         """Automatic license detection based on licensee."""
-        try:
-            process_result = subprocess.run(
-                ["licensee", "detect", "--json", form.instance.full_path],
-                text=True,
-                capture_output=True,
-                env=get_clean_env(),
-                check=True,
-            )
-        except FileNotFoundError:
-            return
-        except (OSError, subprocess.CalledProcessError) as error:
-            if getattr(error, "returncode", 0) != 1:
-                report_error("Failed licensee invocation")
-            return
-        result = json.loads(process_result.stdout)
-        for license_data in result["licenses"]:
-            spdx_id = license_data["spdx_id"]
-            for license_id in (f"{spdx_id}-or-later", f"{spdx_id}-only", spdx_id):
-                if license_id in LICENSE_URLS:
-                    self.initial["license"] = license_id
-                    messages.info(
-                        self.request,
-                        gettext(
-                            "Detected license as %s, please check whether it is correct."
-                        )
-                        % license_id,
-                    )
-                    return
+        detected_license = detect_license(Path(form.instance.full_path))
 
+        if detected_license and detected_license in LICENSE_URLS:
+            self.initial["license"] = detected_license
+            messages.info(
+                self.request,
+                gettext("Detected license as %s, please check whether it is correct.")
+                % detected_license,
+            )
+
+    @transaction.atomic
     def form_valid(self, form):
         if self.stage == "create":
-            form.instance.manage_units = (
-                bool(form.instance.template) or form.instance.file_format == "tbx"
-            )
-            if self.duplicate_existing_component and (
-                source_component := form.cleaned_data["source_component"]
-            ):
-                fields_to_duplicate = [
-                    "agreement",
-                    "merge_style",
-                    "commit_message",
-                    "add_message",
-                    "delete_message",
-                    "merge_message",
-                    "addon_message",
-                    "pull_message",
-                ]
-                for field in fields_to_duplicate:
-                    setattr(form.instance, field, getattr(source_component, field))
+            with form.instance.repository.lock:
+                form.instance.manage_units = (
+                    bool(form.instance.template) or form.instance.file_format == "tbx"
+                )
+                if self.duplicate_existing_component and (
+                    source_component := form.cleaned_data["source_component"]
+                ):
+                    fields_to_duplicate = [
+                        "agreement",
+                        "merge_style",
+                        "commit_message",
+                        "add_message",
+                        "delete_message",
+                        "merge_message",
+                        "addon_message",
+                        "pull_message",
+                    ]
+                    for field in fields_to_duplicate:
+                        setattr(form.instance, field, getattr(source_component, field))
 
-            result = super().form_valid(form)
-            self.object.post_create(self.request.user, origin=self.origin)
-            return result
+                result = super().form_valid(form)
+                self.object.post_create(self.request.user, origin=self.origin)
+                return result
         if self.stage == "discover":
             # Move to create
             self.initial = form.cleaned_data
@@ -442,6 +430,7 @@ class CreateFromZip(CreateComponent):
     form_class = ComponentZipCreateForm
     origin = "zip"
 
+    @transaction.atomic
     def form_valid(self, form):
         if self.stage != "init":
             return super().form_valid(form)
@@ -467,6 +456,7 @@ class CreateFromDoc(CreateComponent):
     form_class = ComponentDocCreateForm
     origin = "document"
 
+    @transaction.atomic
     def form_valid(self, form):
         if self.stage != "init":
             return super().form_valid(form)
@@ -489,13 +479,8 @@ class CreateFromDoc(CreateComponent):
         return self.get(self.request)
 
 
-@lru_cache(maxsize=1024)
 def component_branches(repo: str) -> set[str]:
     return set(Component.objects.filter(repo=repo).values_list("branch", flat=True))
-
-
-def branch_exists(repo: str, branch: str) -> bool:
-    return branch in component_branches(repo)
 
 
 class CreateComponentSelection(CreateComponent):
@@ -508,12 +493,21 @@ class CreateComponentSelection(CreateComponent):
     @cached_property
     def branch_data(self):
         result = {}
+        existing_branches: dict[str, set[str]] = {}
         for component in self.components:
             repo = component.repo
+            if repo not in existing_branches:
+                existing_branches[repo] = component_branches(repo)
+            try:
+                remote_branches = component.repository.list_remote_branches()
+            except RepositoryError:
+                # Ignore error, use no branches
+                remote_branches = []
+
             branches = [
                 branch
-                for branch in component.repository.list_remote_branches()
-                if branch != component.branch and not branch_exists(repo, branch)
+                for branch in remote_branches
+                if branch != component.branch and branch not in existing_branches[repo]
             ]
             if branches:
                 result[component.pk] = branches
@@ -595,11 +589,10 @@ class CreateComponentSelection(CreateComponent):
         self.request.session[SESSION_CREATE_KEY] = kwargs
 
         return redirect(
-            "{}?{}".format(
-                reverse("create-component-vcs"), urlencode({SESSION_CREATE_KEY: 1})
-            )
+            f"{reverse('create-component-vcs')}?{urlencode({SESSION_CREATE_KEY: 1})}"
         )
 
+    @transaction.atomic
     def form_valid(self, form):
         if self.origin == "scratch":
             project = form.cleaned_data["project"]

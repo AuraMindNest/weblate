@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
 
+import re
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
@@ -12,13 +13,26 @@ from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.translation import gettext
+from django.views.decorators.http import require_POST
 
 from weblate.accounts.views import mail_admins_contact
-from weblate.billing.forms import HostingForm
-from weblate.billing.models import Billing, Invoice, Plan
+from weblate.trans.backups import PROJECTBACKUP_PREFIX
+from weblate.utils import messages
+from weblate.utils.data import data_path
 from weblate.utils.views import show_form_errors
 
+from .forms import (
+    BillingMergeConfirmForm,
+    BillingMergeForm,
+    BillingUserForm,
+    HostingForm,
+)
+from .models import Billing, BillingEvent, Invoice, Plan
+
 if TYPE_CHECKING:
+    from django.http import HttpResponse
+
     from weblate.auth.models import AuthenticatedHttpRequest
 
 HOSTING_TEMPLATE = """
@@ -36,7 +50,7 @@ Please review at https://hosted.weblate.org%(billing_url)s
 
 
 @login_required
-def download_invoice(request: AuthenticatedHttpRequest, pk):
+def download_invoice(request: AuthenticatedHttpRequest, pk) -> HttpResponse:
     """Download invoice PDF."""
     invoice = get_object_or_404(Invoice, pk=pk)
 
@@ -46,7 +60,7 @@ def download_invoice(request: AuthenticatedHttpRequest, pk):
         msg = "No reference!"
         raise Http404(msg)
 
-    if not request.user.has_perm("billing.view", invoice.billing):
+    if not request.user.has_perm("meta:billing.view", invoice.billing):
         raise PermissionDenied
 
     if not invoice.filename_valid:
@@ -58,6 +72,29 @@ def download_invoice(request: AuthenticatedHttpRequest, pk):
         as_attachment=True,
         filename=invoice.filename,
         content_type="application/pdf",
+    )
+
+
+BACKUP_RE = re.compile(r"^[0-9]+/[0-9]+.zip$")
+
+
+@login_required
+def restore_backup(request: AuthenticatedHttpRequest) -> HttpResponse:
+    if not request.user.is_superuser:
+        raise PermissionDenied
+    path = request.GET.get("path")
+    if not path or not BACKUP_RE.match(path):
+        msg = "Invalid backup path!"
+        raise Http404(msg)
+    backup_path = data_path(PROJECTBACKUP_PREFIX) / path
+    if not backup_path.exists():
+        msg = "File not found!"
+        raise Http404(msg)
+    return FileResponse(
+        backup_path.open("rb"),
+        as_attachment=True,
+        filename=backup_path.name,
+        content_type="application/zip",
     )
 
 
@@ -75,30 +112,44 @@ def handle_post(request: AuthenticatedHttpRequest, billing) -> None:
         elif billing.removal:
             billing.removal = now + timedelta(days=14)
             billing.save(update_fields=["removal"])
+        billing.billinglog_set.create(
+            event=BillingEvent.EXTENDED_TRIAL, user=request.user
+        )
     elif "recurring" in request.POST:
         if "recurring" in billing.payment:
             del billing.payment["recurring"]
         billing.save()
+        billing.billinglog_set.create(
+            event=BillingEvent.DISABLED_RECURRING, user=request.user
+        )
     elif "terminate" in request.POST:
         billing.state = Billing.STATE_TERMINATED
         billing.expiry = None
         billing.removal = None
         billing.save()
+        billing.billinglog_set.create(event=BillingEvent.TERMINATED, user=request.user)
     elif billing.valid_libre:
         if "approve" in request.POST and request.user.has_perm("billing.manage"):
             billing.state = Billing.STATE_ACTIVE
             billing.plan = Plan.objects.get(slug="libre")
             billing.removal = None
             billing.save(update_fields=["state", "plan", "removal"])
+            billing.billinglog_set.create(
+                event=BillingEvent.LIBRE_APPROVED, user=request.user
+            )
         elif "request" in request.POST and billing.is_libre_trial:
             form = HostingForm(request.POST)
             if form.is_valid():
                 project = billing.projects.get()
+                subject = f"Hosting request for {project}"
                 billing.payment["libre_request"] = True
                 billing.save(update_fields=["payment"])
+                billing.billinglog_set.create(
+                    event=BillingEvent.LIBRE_REQUEST, summary=subject, user=request.user
+                )
                 mail_admins_contact(
                     request,
-                    subject=f"Hosting request for {project}",
+                    subject=subject,
                     message=HOSTING_TEMPLATE,
                     context={
                         "billing": billing,
@@ -118,7 +169,7 @@ def handle_post(request: AuthenticatedHttpRequest, billing) -> None:
 
 
 @login_required
-def overview(request: AuthenticatedHttpRequest):
+def overview(request: AuthenticatedHttpRequest) -> HttpResponse:
     billings = Billing.objects.for_user(request.user).prefetch_related(
         "plan", "projects", "invoice_set"
     )
@@ -137,10 +188,112 @@ def overview(request: AuthenticatedHttpRequest):
 
 
 @login_required
-def detail(request: AuthenticatedHttpRequest, pk):
+def merge(request: AuthenticatedHttpRequest, pk) -> HttpResponse:
+    if not request.user.has_perm("billing.manage"):
+        raise PermissionDenied
+
     billing = get_object_or_404(Billing, pk=pk)
 
-    if not request.user.has_perm("billing.view", billing):
+    if request.method == "GET":
+        merge_form = BillingMergeForm(request.GET)
+        if (
+            not merge_form.is_valid()
+            or merge_form.cleaned_data["other"].pk == billing.pk
+        ):
+            messages.error(request, gettext("Cannot merge such a billing."))
+            return redirect(billing)
+
+        confirm_form = BillingMergeConfirmForm(initial=merge_form.cleaned_data)
+        return render(
+            request,
+            "billing/merge.html",
+            {
+                "billing": billing,
+                "other": merge_form.cleaned_data["other"],
+                "merge_form": confirm_form,
+            },
+        )
+
+    confirm_form = BillingMergeConfirmForm(request.POST)
+    if (
+        not confirm_form.is_valid()
+        or confirm_form.cleaned_data["other"].pk == billing.pk
+    ):
+        messages.error(request, gettext("Cannot merge such a billing."))
+        return redirect(billing)
+
+    other = confirm_form.cleaned_data["other"]
+    if "recurring" in billing.payment:
+        other.payment["recurring"] = billing.payment["recurring"]
+    if "all" in billing.payment:
+        other.payment["all"].extend(billing.payment["all"])
+    other.save()
+    other.owners.add(*billing.owners.all())
+    billing.invoice_set.update(billing=other)
+    billing.billinglog_set.update(billing=other)
+    billing.payment = {}
+    billing.save()
+
+    return redirect(confirm_form.cleaned_data["other"])
+
+
+@require_POST
+@login_required
+def owner_add(request: AuthenticatedHttpRequest, pk) -> HttpResponse:
+    billing = get_object_or_404(Billing, pk=pk)
+    if not request.user.has_perm("meta:billing.view", billing):
+        raise PermissionDenied
+
+    form = BillingUserForm(request.POST)
+    if form.is_valid():
+        # Audit log
+        billing.billinglog_set.create(
+            event=BillingEvent.ADMIN_ADDED,
+            user=request.user,
+            summary=form.cleaned_data["user"].username,
+        )
+        # Actually add
+        billing.owners.add(form.cleaned_data["user"])
+        messages.success(
+            request,
+            gettext("User %s was added as a billing admin.")
+            % form.cleaned_data["user"].username,
+        )
+    else:
+        show_form_errors(request, form)
+    return redirect(billing)
+
+
+@require_POST
+@login_required
+def owner_remove(request: AuthenticatedHttpRequest, pk, user_id) -> HttpResponse:
+    billing = get_object_or_404(Billing, pk=pk)
+    if not request.user.has_perm("meta:billing.view", billing):
+        raise PermissionDenied
+
+    user = get_object_or_404(billing.owners, pk=user_id)
+
+    if user == request.user:
+        messages.error(request, gettext("You cannot remove yourself."))
+    else:
+        # Audit log
+        billing.billinglog_set.create(
+            event=BillingEvent.ADMIN_REMOVED, user=request.user, summary=user.username
+        )
+        # Actual removal
+        billing.owners.remove(user)
+        messages.success(
+            request, gettext("User %s was removed as a billing admin.") % user.username
+        )
+
+    return redirect(billing)
+
+
+@login_required
+def detail(request: AuthenticatedHttpRequest, pk) -> HttpResponse:
+    billing = get_object_or_404(Billing, pk=pk)
+
+    if not request.user.has_perm("meta:billing.view", billing):
         raise PermissionDenied
 
     if request.method == "POST":
@@ -150,5 +303,10 @@ def detail(request: AuthenticatedHttpRequest, pk):
     return render(
         request,
         "billing/detail.html",
-        {"billing": billing, "hosting_form": HostingForm()},
+        {
+            "billing": billing,
+            "hosting_form": HostingForm(),
+            "merge_form": BillingMergeForm(),
+            "user_form": BillingUserForm(),
+        },
     )

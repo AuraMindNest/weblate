@@ -15,6 +15,7 @@ from appconf import AppConf
 from django.conf import settings
 from django.contrib.admin.utils import NestedObjects
 from django.core.exceptions import ObjectDoesNotExist
+from django.core.validators import MinValueValidator
 from django.db import models, transaction
 from django.db.models import Exists, OuterRef, Q
 from django.db.utils import OperationalError
@@ -61,7 +62,7 @@ KNOWN_SUFFIXES = {"hant", "hans", "latn", "cyrl", "shaw"}
 GENERATED_SUFFIX = "(generated)"
 
 
-def get_plural_type(base_code, plural_formula):
+def get_plural_type(base_code: str, plural_formula: str) -> int:
     """Get correct plural type for language."""
     # Remove not needed parenthesis
     if plural_formula[-1] == ";":
@@ -102,7 +103,7 @@ def is_same_plural(
     formula: str,
     our_function: Callable | None = None,
     plural_function: Callable | None = None,
-):
+) -> bool:
     if our_function is None:
         try:
             our_function = c2py(our_formula)
@@ -129,7 +130,7 @@ def is_same_plural(
     )
 
 
-def get_default_lang():
+def get_default_lang() -> int:
     """Return object ID for English language."""
     try:
         return Language.objects.default_language.id
@@ -137,7 +138,7 @@ def get_default_lang():
         return -1
 
 
-class LanguageQuerySet(models.QuerySet):
+class LanguageQuerySet(models.QuerySet["Language"]):
     def try_get(self, *args, **kwargs):
         """Try to get language by code."""
         result = self.filter(*args, **kwargs)[:2]
@@ -459,8 +460,8 @@ class LanguageQuerySet(models.QuerySet):
                 return self.get(code__iexact=accept_lang)
             except Language.DoesNotExist:
                 try:
-                    return self.get(code__iexact=accept_lang.replace("-", "_"))
-                except Language.DoesNotExist:
+                    return self.filter(code__iexact=accept_lang.replace("-", "_"))[0]
+                except IndexError:
                     continue
         return None
 
@@ -519,11 +520,18 @@ class LanguageManager(models.Manager.from_queryset(LanguageQuerySet)):
 
         # Invalidate cache, we might change languages
         self.flush_object_cache()
-        languages = {
-            language.code: language
-            for language in self.prefetch().iterator(chunk_size=1000)
-        }
-        plurals: dict[str, dict[int, list[Plural]]] = {}
+        # Fetch existing plurals and languages
+        languages: dict[str, Language] = {}
+        plurals: dict[str, dict[int, list[Plural]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
+        for plural in Plural.objects.prefetch_related("language").iterator(
+            chunk_size=1000
+        ):
+            language = plural.language
+            plurals[language.code][plural.source].append(plural)
+            languages[language.code] = language
+
         # Create Weblate languages
         for code, name, nplurals, plural_formula in LANGUAGES:
             population = POPULATION[code]
@@ -554,11 +562,6 @@ class LanguageManager(models.Manager.from_queryset(LanguageQuerySet)):
                 "formula": plural_formula,
             }
 
-            # Fetch existing plurals
-            plurals[code] = defaultdict(list)
-            for plural in lang.plural_set.all():
-                plurals[code][plural.source].append(plural)
-
             if Plural.SOURCE_DEFAULT in plurals[code]:
                 plural = plurals[code][Plural.SOURCE_DEFAULT][0]
                 modified = False
@@ -579,46 +582,65 @@ class LanguageManager(models.Manager.from_queryset(LanguageQuerySet)):
                 logger(f"Created default plural {plural_formula} for language {code}")
 
         # Create addditiona plurals
-        extra_plurals = (
+        extra_plurals: tuple[tuple[int, tuple[str, StrOrPromise, int, str]], ...] = (
             (Plural.SOURCE_GETTEXT, EXTRAPLURALS),
             (Plural.SOURCE_CLDR, CLDRPLURALS),
             (Plural.SOURCE_QT, QTPLURALS),
         )
         for source, definitions in extra_plurals:
-            for code, _unused, nplurals, plural_formula in definitions:
-                lang = languages[code]
-
-                for plural in plurals[code][source]:
-                    try:
-                        if plural.same_plural(nplurals, plural_formula):
-                            break
-                    except ValueError:
-                        # Fall back to string compare if parsing failed
-                        if (
-                            plural.number == nplurals
-                            and plural.formula == plural_formula
-                        ):
-                            break
-                else:
-                    plural = lang.plural_set.create(
-                        source=source,
-                        number=nplurals,
-                        formula=plural_formula,
-                        type=get_plural_type(lang.base_code, plural_formula),
+            extra_languages: set[str] = set(languages.keys()) - {
+                code for code, _unused, _nplurals, _plural_formula in definitions
+            }
+            for plural_code, _name, nplurals, plural_formula in definitions:
+                # Apply to child languages accordingly if created by get_by_preference
+                language_codes = [plural_code]
+                if source != Plural.SOURCE_GETTEXT:
+                    language_codes.extend(
+                        extra_lang
+                        for extra_lang in extra_languages
+                        if extra_lang.startswith((f"{plural_code}-", f"{plural_code}_"))
                     )
-                    plurals[code][source].append(plural)
-                    logger(f"Created plural {plural_formula} for language {code}")
 
-                # CLDR and QT plurals should have just a single of them
-                if source != Plural.SOURCE_GETTEXT and len(plurals[code][source]) > 1:
-                    logger(
-                        f"Removing extra {source} plurals for language {code} ({len(plurals[code][source])})!"
-                    )
-                    for extra_plural in plurals[code][source]:
-                        if extra_plural != plural:
-                            extra_plural.translation_set.update(plural=plural)
-                            extra_plural.delete()
-                    plurals[code][source] = [plural]
+                for code in language_codes:
+                    lang = languages[code]
+
+                    for plural in plurals[code][source]:
+                        try:
+                            if plural.same_plural(nplurals, plural_formula):
+                                break
+                        except ValueError:
+                            # Fall back to string compare if parsing failed
+                            if (
+                                plural.number == nplurals
+                                and plural.formula == plural_formula
+                            ):
+                                break
+                    else:
+                        if code == plural_code or plurals[code][source]:
+                            plural = lang.plural_set.create(
+                                source=source,
+                                number=nplurals,
+                                formula=plural_formula,
+                                type=get_plural_type(lang.base_code, plural_formula),
+                            )
+                            plurals[code][source].append(plural)
+                            logger(
+                                f"Created plural {plural_formula} for language {code}"
+                            )
+
+                    # CLDR and QT plurals should have just a single of them
+                    if (
+                        source != Plural.SOURCE_GETTEXT
+                        and len(plurals[code][source]) > 1
+                    ):
+                        logger(
+                            f"Removing extra {len(plurals[code][source]) - 1} plural(s) for language {code} ({source=})!"
+                        )
+                        for extra_plural in plurals[code][source]:
+                            if extra_plural != plural:
+                                extra_plural.translation_set.update(plural=plural)
+                                extra_plural.delete()
+                        plurals[code][source] = [plural]
 
         # Sync FORMULA_WITH_ZERO
         for code, language_plurals in plurals.items():
@@ -848,7 +870,7 @@ class Language(models.Model, CacheKeyMixin):
             aliases.extend(
                 default_lang
                 for default_lang in DEFAULT_LANGS
-                if default_lang.startswith(self.code)
+                if default_lang.startswith(f"{self.code}_")
             )
         return sorted(aliases)
 
@@ -897,9 +919,51 @@ class Language(models.Model, CacheKeyMixin):
         return True
 
 
-class PluralQuerySet(models.QuerySet):
+class PluralQuerySet(models.QuerySet["Plural"]):
     def order(self):
         return self.order_by("source")
+
+    def get_by_preference(
+        self, language: Language, plural_preference: tuple[int, ...]
+    ) -> Plural | None:
+        # Fetch all matching plurals
+        plurals = self.filter(source__in=plural_preference)
+
+        base_language: Language | None = None
+        base_language_fetched = False
+
+        # Use first matching in the order of preference
+        for source in plural_preference:
+            for plural in plurals:
+                if plural.source == source:
+                    return plural
+
+            # Try getting plural from the base language
+            if language.base_code != language.code:
+                if base_language is None:
+                    if base_language_fetched:
+                        # Avoid repeated fetching
+                        continue
+                    base_language_fetched = True
+
+                    try:
+                        base_language = Language.objects.get(code=language.base_code)
+                    except Language.DoesNotExist:
+                        continue
+
+                plural = base_language.plural_set.get_by_preference(
+                    base_language, (source,)
+                )
+                if plural is not None:
+                    # Create matching plural on requested language
+                    return language.plural_set.create(
+                        source=plural.source,
+                        number=plural.number,
+                        formula=plural.formula,
+                        type=plural.type,
+                    )
+
+        return None
 
 
 class Plural(models.Model):
@@ -1026,7 +1090,9 @@ class Plural(models.Model):
         ),
     )
     number = models.SmallIntegerField(
-        default=2, verbose_name=gettext_lazy("Number of plurals")
+        default=2,
+        verbose_name=gettext_lazy("Number of plurals"),
+        validators=[MinValueValidator(1)],
     )
     formula = models.TextField(
         default="n != 1",
@@ -1056,9 +1122,7 @@ class Plural(models.Model):
         super().save(*args, **kwargs)
 
     def get_absolute_url(self) -> str:
-        return "{}#information".format(
-            reverse("show_language", kwargs={"lang": self.language.code})
-        )
+        return f"{reverse('show_language', kwargs={'lang': self.language.code})}#information"
 
     @cached_property
     def plural_form(self) -> str:
@@ -1087,13 +1151,16 @@ class Plural(models.Model):
         return result
 
     @staticmethod
-    def parse_plural_forms(plurals):
+    def parse_plural_forms(plurals: str) -> tuple[int, str]:
         matches = PLURAL_RE.match(plurals)
         if matches is None:
             msg = "Could not parse plural forms"
             raise ValueError(msg)
 
         number = int(matches.group(1))
+        if number <= 0:
+            msg = "Plural number has to be greater than zero"
+            raise ValueError(msg)
         formula = matches.group(2)
         if not formula:
             formula = "0"
@@ -1173,6 +1240,9 @@ class PluralMapper:
         self.target_plural = target_plural
         self.same_plurals = source_plural.same_as(target_plural)
 
+    def __str__(self) -> str:
+        return f"<PluralMapper '{self.source_plural}' -> '{self.target_plural}'>"
+
     @cached_property
     def target_map(self) -> tuple[tuple[int | None, int | None], ...]:
         exact_source_map: dict[int, int] = {}
@@ -1194,6 +1264,7 @@ class PluralMapper:
         for i in range(target_plural.number):
             examples = target_plural.examples.get(i, [])
             if len(examples) == 1:
+                # Map plurals 1:1
                 number = int(examples[0])
                 if number in exact_source_map:
                     result.append((exact_source_map[number], None))
@@ -1202,9 +1273,25 @@ class PluralMapper:
                 else:
                     result.append((-1, number))
             elif i == last:
+                # Map last plural
                 result.append((-1, None))
             else:
-                result.append((None, None))
+                # Look for examples subset
+                values = []
+                for example in examples:
+                    try:
+                        value = int(example)
+                    except ValueError:
+                        continue
+                    values.append(value)
+                mapped = {
+                    all_source_map[value] for value in values if value in all_source_map
+                }
+                if len(mapped) == 1:
+                    result.append((mapped.pop(), None))
+                else:
+                    # Fall back to not mapping
+                    result.append((None, None))
         return tuple(result)
 
     def map(self, unit: Unit, other_unit: Unit | None = None) -> list[str]:

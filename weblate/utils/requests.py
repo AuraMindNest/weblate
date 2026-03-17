@@ -4,15 +4,19 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import requests
 from django.core.cache import cache
-from requests import Response
 
 from weblate.logger import LOGGER
 from weblate.utils.version import USER_AGENT
 
+if TYPE_CHECKING:
+    from requests import Response
 
-def request(
+
+def http_request(
     method: str,
     url: str,
     *,
@@ -46,7 +50,7 @@ def get_uri_error(uri: str) -> str | None:
         LOGGER.debug("URL check for %s, cached failure", uri)
         return cached
     try:
-        with request("get", uri, stream=True):
+        with http_request("get", uri, stream=True):
             cache.set(cache_key, True, 12 * 3600)
             LOGGER.debug("URL check for %s, tested success", uri)
             return None

@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from django.utils.translation import gettext_lazy
 
@@ -14,8 +14,7 @@ from weblate.formats.base import TranslationFormat
 from weblate.trans.exceptions import FileParseError
 
 if TYPE_CHECKING:
-    from weblate.auth.models import User
-    from weblate.trans.models import Component
+    from weblate.trans.models import Component, Project
 
 
 class BaseCleanupAddon(UpdateBaseAddon):
@@ -24,10 +23,17 @@ class BaseCleanupAddon(UpdateBaseAddon):
         return component.file_format_cls.can_delete_unit
 
     @classmethod
-    def can_install(cls, component: Component, user: User | None) -> bool:
-        if not component.has_template() or not cls.can_install_format(component):
+    def can_install(
+        cls,
+        *,
+        component: Component | None = None,
+        project: Project | None = None,
+    ) -> bool:
+        if component is not None and (
+            not component.has_template() or not cls.can_install_format(component)
+        ):
             return False
-        return super().can_install(component, user)
+        return super().can_install(component=component, project=project)
 
 
 class CleanupAddon(BaseCleanupAddon):
@@ -39,7 +45,7 @@ class CleanupAddon(BaseCleanupAddon):
         "no longer present in the base file."
     )
     icon = "eraser.svg"
-    events: set[AddonEvent] = {
+    events: ClassVar[set[AddonEvent]] = {
         AddonEvent.EVENT_PRE_COMMIT,
         AddonEvent.EVENT_POST_UPDATE,
     }
@@ -60,7 +66,13 @@ class CleanupAddon(BaseCleanupAddon):
             self.extra_files.extend(filenames)
             # Do not update hash here as this is just before parsing updated files
 
-    def pre_commit(self, translation, author: str, store_hash: bool) -> None:
+    def pre_commit(
+        self,
+        translation,
+        author: str,
+        store_hash: bool,
+        activity_log_id: int | None = None,
+    ) -> None:
         if translation.is_source and not translation.component.intermediate:
             return
         try:
@@ -79,7 +91,7 @@ class RemoveBlankAddon(BaseCleanupAddon):
     description = gettext_lazy(
         "Removes strings without a translation from translation files."
     )
-    events: set[AddonEvent] = {
+    events: ClassVar[set[AddonEvent]] = {
         AddonEvent.EVENT_POST_COMMIT,
         AddonEvent.EVENT_POST_UPDATE,
     }
@@ -95,7 +107,9 @@ class RemoveBlankAddon(BaseCleanupAddon):
             if previous_head == "weblate:post-commit":
                 translation.store_hash()
 
-    def post_commit(self, component: Component, store_hash: bool) -> None:
+    def post_commit(
+        self, component: Component, store_hash: bool, activity_log_id: int | None = None
+    ) -> None:
         self.post_update(
             component,
             "weblate:post-commit" if store_hash else "weblate:post-commit-no-store",

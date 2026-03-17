@@ -10,7 +10,8 @@ from copy import copy
 from datetime import UTC, datetime
 from functools import partial
 from io import StringIO
-from typing import TYPE_CHECKING, NoReturn
+from pathlib import Path
+from typing import TYPE_CHECKING, ClassVar, NoReturn
 from unittest.mock import MagicMock, Mock, call, patch
 
 import httpx
@@ -35,14 +36,13 @@ from weblate.configuration.models import Setting, SettingCategory
 from weblate.glossary.models import render_glossary_units_tsv
 from weblate.lang.models import Language
 from weblate.machinery.alibaba import AlibabaTranslation
+from weblate.machinery.anthropic import AnthropicTranslation
 from weblate.machinery.apertium import ApertiumAPYTranslation
 from weblate.machinery.aws import AWSTranslation
 from weblate.machinery.baidu import BAIDU_API, BaiduTranslation
 from weblate.machinery.base import (
-    BatchMachineTranslation,
     MachineryRateLimitError,
     MachineTranslationError,
-    SettingsDict,
 )
 from weblate.machinery.cyrtranslit import CyrTranslitTranslation
 from weblate.machinery.deepl import DeepLTranslation
@@ -55,6 +55,7 @@ from weblate.machinery.microsoft import MicrosoftCognitiveTranslation
 from weblate.machinery.modernmt import ModernMTTranslation
 from weblate.machinery.mymemory import MyMemoryTranslation
 from weblate.machinery.netease import NETEASE_API_ROOT, NeteaseSightTranslation
+from weblate.machinery.ollama import OllamaTranslation
 from weblate.machinery.openai import AzureOpenAITranslation, OpenAITranslation
 from weblate.machinery.saptranslationhub import SAPTranslationHub
 from weblate.machinery.systran import SystranTranslation
@@ -74,6 +75,11 @@ from .types import SourceLanguageChoices
 
 if TYPE_CHECKING:
     from requests import PreparedRequest
+
+    from weblate.machinery.base import (
+        BatchMachineTranslation,
+        SettingsDict,
+    )
 
 AMAGAMA_LIVE = "https://amagama-live.translatehouse.org/api/v1"
 
@@ -195,8 +201,7 @@ SYSTRAN_LANGUAGE_JSON = {
     ],
 }
 
-with open(get_test_file("googlev3.json")) as handle:
-    GOOGLEV3_KEY = handle.read()
+GOOGLEV3_KEY = Path(get_test_file("googlev3.json")).read_text(encoding="utf-8")
 
 MODERNMT_RESPONSE = {
     "data": {
@@ -275,7 +280,7 @@ class BaseMachineTranslationTest(TestCase):
     SOURCE_BLANK = "Hello"
     SOURCE_TRANSLATED = "Hello, world!"
     EXPECTED_LEN = 2
-    CONFIGURATION: SettingsDict = {}
+    CONFIGURATION: ClassVar[SettingsDict] = {}
 
     def get_machine(self, cache=False):
         machine = self.MACHINE_CLS(self.CONFIGURATION)
@@ -443,13 +448,60 @@ class MachineTranslationTest(BaseMachineTranslationTest):
             ],
         )
 
-    def test_batch(self) -> None:
+    def test_placeholders_backslash(self) -> None:
         machine_translation = self.get_machine()
+        unit = MockUnit(code="cs", source=r"Hello, %s C:\Windows!", flags="c-format")
+        self.assertEqual(
+            machine_translation.cleanup_text(unit.source, unit),
+            (r"Hello, [X7X] C:\Windows!", {"[X7X]": "%s"}),
+        )
+        self.assertEqual(
+            machine_translation.translate(unit),
+            [
+                [
+                    {
+                        "quality": 100,
+                        "service": "Dummy",
+                        "source": r"Hello, %s C:\Windows!",
+                        "original_source": r"Hello, %s C:\Windows!",
+                        "text": r"Nazdar %s C:\Windows!",
+                    }
+                ]
+            ],
+        )
+
+    def test_placeholders_rst(self) -> None:
+        machine_translation = self.get_machine()
+        unit = MockUnit(
+            code="cs", source=r"Hello, :file:`C:\Windows\System.exe`!", flags="rst-text"
+        )
+        self.assertEqual(
+            machine_translation.cleanup_text(unit.source, unit),
+            ("Hello, [X7X]!", {"[X7X]": r":file:`C:\Windows\System.exe`"}),
+        )
+        self.assertEqual(
+            machine_translation.translate(unit),
+            [
+                [
+                    {
+                        "quality": 100,
+                        "service": "Dummy",
+                        "source": r"Hello, :file:`C:\Windows\System.exe`!",
+                        "original_source": r"Hello, :file:`C:\Windows\System.exe`!",
+                        "text": r"Nazdar :file:`C:\Windows\System.exe`!",
+                    }
+                ]
+            ],
+        )
+
+    def test_batch(self, machine=None) -> None:
+        if machine is None:
+            machine = self.get_machine()
         units = [
             MockUnit(code="cs", source="Hello, %s!", flags="c-format"),
             MockUnit(code="cs", source="Hello, %d!", flags="c-format"),
         ]
-        machine_translation.batch_translate(units)
+        machine.batch_translate(units)
         self.assertEqual(units[0].machinery["translation"], ["Nazdar %s!"])
         self.assertEqual(units[1].machinery["translation"], ["Nazdar %d!"])
 
@@ -467,6 +519,7 @@ class GlossaryTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = DummyGlossaryTranslation
 
     @patch("weblate.glossary.models.get_glossary_tsv", new=lambda _: "foo\tbar")
+    # pylint: disable-next=arguments-differ
     def test_translate(self) -> None:
         """Test glossary translation."""
         machine = self.get_machine()
@@ -567,7 +620,7 @@ class GlossaryTranslationTest(BaseMachineTranslationTest):
                 unit, "en", "cs", source_text, 75, {}
             )
             self.assertIsNotNone(cache_key)
-            self.assertTrue(len(result) > 0)
+            self.assertGreater(len(result), 0)
             self.assertIsNotNone(result)
 
         with patch(
@@ -629,7 +682,7 @@ class MyMemoryTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = MyMemoryTranslation
     EXPECTED_LEN = 3
     NOTSUPPORTED = "ia"
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "email": "test@weblate.org",
         "username": "user",
         "key": "key",
@@ -652,7 +705,7 @@ class ApertiumAPYTranslationTest(BaseMachineTranslationTest):
     ENGLISH = "eng"
     SUPPORTED = "spa"
     EXPECTED_LEN = 1
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "url": "http://apertium.example.com",
     }
 
@@ -687,7 +740,7 @@ class ApertiumAPYTranslationTest(BaseMachineTranslationTest):
         machine = self.get_machine()
         machine.validate_settings()
         self.assertEqual(len(responses.calls), 2)
-        _, call_2 = responses.calls
+        call_2 = responses.calls[1]
         self.assertIn("langpair", call_2.request.params)
         self.assertEqual("eng|spa", call_2.request.params["langpair"])
 
@@ -712,7 +765,7 @@ class ApertiumAPYTranslationTest(BaseMachineTranslationTest):
 class MicrosoftCognitiveTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = MicrosoftCognitiveTranslation
     EXPECTED_LEN = 1
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "key": "KEY",
         "endpoint_url": "api.cognitive.microsoft.com",
         "base_url": "api.cognitive.microsofttranslator.com",
@@ -765,7 +818,7 @@ class MicrosoftCognitiveTranslationTest(BaseMachineTranslationTest):
 
 
 class MicrosoftCognitiveTranslationRegionTest(MicrosoftCognitiveTranslationTest):
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "key": "KEY",
         "endpoint_url": "api.cognitive.microsoft.com",
         "base_url": "api.cognitive.microsofttranslator.com",
@@ -807,7 +860,7 @@ class MicrosoftCognitiveTranslationRegionTest(MicrosoftCognitiveTranslationTest)
 class GoogleTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = GoogleTranslation
     EXPECTED_LEN = 1
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "key": "KEY",
     }
 
@@ -815,13 +868,13 @@ class GoogleTranslationTest(BaseMachineTranslationTest):
         self.skipTest("Not tested")
 
     def mock_error(self) -> None:
-        responses.add(responses.GET, GOOGLE_API_ROOT + "languages", body="", status=500)
+        responses.add(responses.GET, f"{GOOGLE_API_ROOT}languages", body="", status=500)
         responses.add(responses.GET, GOOGLE_API_ROOT, body="", status=500)
 
     def mock_response(self) -> None:
         responses.add(
             responses.GET,
-            GOOGLE_API_ROOT + "languages",
+            f"{GOOGLE_API_ROOT}languages",
             json={
                 "data": {
                     "languages": [
@@ -852,7 +905,7 @@ class GoogleTranslationTest(BaseMachineTranslationTest):
 class GoogleV3TranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = GoogleV3Translation
     EXPECTED_LEN = 1
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "project": "translating-7586",
         "location": "global",
         "credentials": GOOGLEV3_KEY,
@@ -1132,38 +1185,38 @@ class TMServerTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = TMServerTranslation
     EXPECTED_LEN = 1
     SOURCE_TRANSLATED = "Hello"
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "url": AMAGAMA_LIVE,
     }
 
     def mock_empty(self) -> None:
-        responses.add(responses.GET, AMAGAMA_LIVE + "/languages/", body="", status=404)
-        responses.add(responses.GET, AMAGAMA_LIVE + "/en/cs/unit/Hello", json=[])
+        responses.add(responses.GET, f"{AMAGAMA_LIVE}/languages/", body="", status=404)
+        responses.add(responses.GET, f"{AMAGAMA_LIVE}/en/cs/unit/Hello", json=[])
 
     def mock_response(self) -> None:
         responses.add(
             responses.GET,
-            AMAGAMA_LIVE + "/languages/",
+            f"{AMAGAMA_LIVE}/languages/",
             json={"sourceLanguages": ["en"], "targetLanguages": ["cs"]},
         )
         responses.add(
-            responses.GET, AMAGAMA_LIVE + "/en/cs/unit/Hello", json=AMAGAMA_JSON
+            responses.GET, f"{AMAGAMA_LIVE}/en/cs/unit/Hello", json=AMAGAMA_JSON
         )
         responses.add(
-            responses.GET, AMAGAMA_LIVE + "/en/de/unit/test", json=AMAGAMA_JSON
+            responses.GET, f"{AMAGAMA_LIVE}/en/de/unit/test", json=AMAGAMA_JSON
         )
 
     def mock_error(self) -> None:
-        responses.add(responses.GET, AMAGAMA_LIVE + "/languages/", body="", status=404)
+        responses.add(responses.GET, f"{AMAGAMA_LIVE}/languages/", body="", status=404)
         responses.add(
-            responses.GET, AMAGAMA_LIVE + "/en/cs/unit/Hello", body="", status=500
+            responses.GET, f"{AMAGAMA_LIVE}/en/cs/unit/Hello", body="", status=500
         )
 
 
 class YandexTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = YandexTranslation
     EXPECTED_LEN = 1
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "key": "KEY",
     }
 
@@ -1214,7 +1267,7 @@ class YandexTranslationTest(BaseMachineTranslationTest):
 class YandexV2TranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = YandexV2Translation
     EXPECTED_LEN = 1
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "key": "KEY",
     }
 
@@ -1278,7 +1331,7 @@ class YoudaoTranslationTest(BaseMachineTranslationTest):
     SUPPORTED = "de"
     NOTSUPPORTED = "cs"
     ENGLISH = "EN"
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "key": "id",
         "secret": "secret",
     }
@@ -1303,7 +1356,7 @@ class NeteaseSightTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = NeteaseSightTranslation
     EXPECTED_LEN = 1
     SUPPORTED = "zh"
-    CONFIGURATION = {"key": "id", "secret": "secret"}
+    CONFIGURATION: ClassVar[SettingsDict] = {"key": "id", "secret": "secret"}
 
     def mock_empty(self) -> NoReturn:
         self.skipTest("Not tested")
@@ -1326,7 +1379,7 @@ class BaiduTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = BaiduTranslation
     EXPECTED_LEN = 1
     NOTSUPPORTED = "ia"
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "key": "id",
         "secret": "secret",
     }
@@ -1366,7 +1419,7 @@ class BaiduTranslationTest(BaseMachineTranslationTest):
 class SystranTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = SystranTranslation
     EXPECTED_LEN = 1
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "key": "key",
     }
 
@@ -1399,7 +1452,7 @@ class SystranTranslationTest(BaseMachineTranslationTest):
 class SAPTranslationHubTest(BaseMachineTranslationTest):
     MACHINE_CLS = SAPTranslationHub
     EXPECTED_LEN = 1
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "key": "x",
         "username": "",
         "password": "",
@@ -1441,7 +1494,7 @@ class SAPTranslationHubTest(BaseMachineTranslationTest):
 
 
 class SAPTranslationHubAuthTest(SAPTranslationHubTest):
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "key": "id",
         "username": "username",
         "password": "password",
@@ -1450,12 +1503,12 @@ class SAPTranslationHubAuthTest(SAPTranslationHubTest):
     }
 
 
-class ModernMTHubTest(BaseMachineTranslationTest):
+class ModernMTTest(BaseMachineTranslationTest):
     MACHINE_CLS = ModernMTTranslation
     EXPECTED_LEN = 1
     ENGLISH = "en"
     SUPPORTED = "it"
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "key": "KEY",
         "url": "https://api.modernmt.com/",
     }
@@ -1475,9 +1528,9 @@ class ModernMTHubTest(BaseMachineTranslationTest):
         """Set up mock responses for languages list from ModernMT API."""
         responses.add(
             responses.GET,
-            "https://api.modernmt.com/languages",
+            "https://api.modernmt.com/translate/languages",
             json={
-                "data": {"en": ["cs", "it", "ja"], "fr": ["en", "it", "ja"]},
+                "data": ["en", "sr", "cs", "it", "ja"],
                 "status": 200,
             },
             status=200,
@@ -1500,11 +1553,11 @@ class ModernMTHubTest(BaseMachineTranslationTest):
         """Set up mock responses for list of glossaries in ModernMT."""
         data: list[dict] = [
             {
-                "id": _id,
-                "creationDate": _date or "2021-04-12T15:24:26+00:00",
-                "name": _name,
+                "id": glossary_id,
+                "creationDate": glossary_date or "2021-04-12T15:24:26+00:00",
+                "name": glossary_name,
             }
-            for _id, _name, _date in id_name_date
+            for glossary_id, glossary_name, glossary_date in id_name_date
         ]
         responses.add(
             responses.GET,
@@ -1753,7 +1806,7 @@ class DeepLTranslationTest(BaseMachineTranslationTest):
     ENGLISH = "EN"
     SUPPORTED = "DE"
     NOTSUPPORTED = "CS"
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "key": "KEY",
         "url": "https://api.deepl.com/v2/",
     }
@@ -1797,6 +1850,7 @@ class DeepLTranslationTest(BaseMachineTranslationTest):
         )
 
     @classmethod
+    # pylint: disable-next=arguments-differ
     def mock_response(cls) -> None:
         cls.mock_languages()
         responses.add(
@@ -2079,7 +2133,7 @@ class LibreTranslateTranslationTest(BaseMachineTranslationTest):
     ENGLISH = "en"
     SUPPORTED = "es"
     NOTSUPPORTED = "cs"
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "url": "https://libretranslate.com/",
         "key": "",
     }
@@ -2142,7 +2196,7 @@ class AWSTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = AWSTranslation
     EXPECTED_LEN = 1
     NOTSUPPORTED = "ia"
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "region": "us-west-2",
         "key": "key",
         "secret": "secret",
@@ -2157,15 +2211,16 @@ class AWSTranslationTest(BaseMachineTranslationTest):
     def mock_response(self) -> None:
         pass
 
-    def test_support(self) -> None:
-        machine = self.get_machine()
-        machine.delete_cache()
-        with Stubber(machine.client) as stubber:
+    def test_support(self, machine_translation=None) -> None:
+        if machine_translation is None:
+            machine_translation = self.get_machine()
+        machine_translation.delete_cache()
+        with Stubber(machine_translation.client) as stubber:
             stubber.add_response(
                 "list_languages",
                 AWS_LANGUAGES_RESPONSE,
             )
-            super().test_support(machine)
+            super().test_support(machine_translation)
 
     def test_validate_settings(self) -> None:
         machine = self.get_machine()
@@ -2267,7 +2322,7 @@ class AWSTranslationTest(BaseMachineTranslationTest):
         self.skipTest("Not tested")
 
     def setup_stubber_with_glossaries(
-        self, machine: BatchMachineTranslation, fail_delete: bool = True
+        self, machine: AWSTranslation, fail_delete: bool = True
     ) -> Stubber:
         """Set up stubber for translation with glossary test."""
         stubber = Stubber(machine.client)
@@ -2418,7 +2473,7 @@ class AlibabaTranslationTest(BaseMachineTranslationTest):
     MACHINE_CLS = AlibabaTranslation
     EXPECTED_LEN = 1
     NOTSUPPORTED = "tog"
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "key": "key",
         "secret": "secret",
         "region": "cn-hangzhou",
@@ -2454,7 +2509,7 @@ class OpenAITranslationTest(BaseMachineTranslationTest):
     ENGLISH = "en"
     SUPPORTED = "zh-TW"
     NOTSUPPORTED = None
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "key": "x",
         "model": "auto",
         "persona": "",
@@ -2516,7 +2571,7 @@ class OpenAITranslationTest(BaseMachineTranslationTest):
 
 
 class OpenAICustomTranslationTest(OpenAITranslationTest):
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "key": "x",
         "model": "auto",
         "persona": "",
@@ -2577,25 +2632,25 @@ class OpenAICustomTranslationTest(OpenAITranslationTest):
         self.mock_response()
         settings = self.CONFIGURATION.copy()
         machine = self.MACHINE_CLS
-        form = self.MACHINE_CLS.settings_form(machine, settings)
+        form = machine.settings_form(machine, settings)
         self.assertTrue(form.is_valid())
 
         settings["model"] = "custom"
-        form = self.MACHINE_CLS.settings_form(machine, settings)
+        form = machine.settings_form(machine, settings)
         self.assertFalse(form.is_valid())
 
         settings["custom_model"] = "custom"
-        form = self.MACHINE_CLS.settings_form(machine, settings)
+        form = machine.settings_form(machine, settings)
         self.assertTrue(form.is_valid())
 
         settings["model"] = "auto"
-        form = self.MACHINE_CLS.settings_form(machine, settings)
+        form = machine.settings_form(machine, settings)
         self.assertFalse(form.is_valid())
 
 
 class AzureOpenAITranslationTest(OpenAITranslationTest):
     MACHINE_CLS: type[BatchMachineTranslation] = AzureOpenAITranslation
-    CONFIGURATION = {
+    CONFIGURATION: ClassVar[SettingsDict] = {
         "key": "x",
         "deployment": "my-deployment",
         "persona": "",
@@ -2635,6 +2690,255 @@ class AzureOpenAITranslationTest(OpenAITranslationTest):
         )
 
 
+class OllamaTranslationTest(BaseMachineTranslationTest):
+    MACHINE_CLS: type[BatchMachineTranslation] = OllamaTranslation
+    EXPECTED_LEN = 1
+    ENGLISH = "en"
+    SUPPORTED = "eu"
+    NOTSUPPORTED = None
+    CONFIGURATION: ClassVar[SettingsDict] = {
+        "base_url": "http://localhost:11434",
+        "model": "itzune/latxa:8b",
+        "persona": "You are a squirrel breeder",
+        "style": "",
+    }
+
+    def mock_empty(self) -> NoReturn:
+        self.skipTest("Not tested")
+
+    def mock_error(self) -> None:
+        responses.add(
+            responses.POST,
+            "http://localhost:11434/api/generate",
+            status=404,
+            json={"error": "the model failed to generate a response"},
+        )
+
+    def mock_response(self) -> None:
+        responses.add(
+            responses.POST,
+            "http://localhost:11434/api/generate",
+            status=200,
+            json={
+                "model": "itzune/latxa:8b",
+                "created_at": "2025-11-29T21:25:08.441817763Z",
+                "response": "Sakatu SUTAN jarraitzeko",
+                "done": True,
+                "done_reason": "stop",
+                "context": [
+                    128006,
+                    9125,
+                    128007,
+                    1432,
+                    2675,
+                    527,
+                    264,
+                    7701,
+                    26611,
+                    14807,
+                    18328,
+                    11,
+                    76588,
+                    520,
+                    67371,
+                    1495,
+                    198,
+                    1527,
+                    4221,
+                    364,
+                    268,
+                    1270,
+                    998,
+                    4221,
+                    364,
+                    20732,
+                    1270,
+                    4291,
+                    16437,
+                    323,
+                    11148,
+                    685,
+                    382,
+                    1079,
+                    1002,
+                    2592,
+                    1495,
+                    596,
+                    1162,
+                    304,
+                    1855,
+                    3492,
+                    627,
+                    2675,
+                    2744,
+                    10052,
+                    449,
+                    25548,
+                    925,
+                    1193,
+                    627,
+                    2675,
+                    656,
+                    539,
+                    2997,
+                    12215,
+                    37822,
+                    2055,
+                    128009,
+                    128006,
+                    882,
+                    128007,
+                    271,
+                    1911,
+                    61563,
+                    311,
+                    3136,
+                    128009,
+                    128006,
+                    78191,
+                    128007,
+                    1432,
+                    50,
+                    587,
+                    36409,
+                    328,
+                    1406,
+                    1111,
+                    30695,
+                    969,
+                    11289,
+                    98764,
+                ],
+                "total_duration": 3946971317,
+                "load_duration": 3325185239,
+                "prompt_eval_count": 73,
+                "prompt_eval_duration": 107465065,
+                "eval_count": 11,
+                "eval_duration": 503286987,
+            },
+        )
+
+
+class OllamaRemoteModelTranslationTest(OllamaTranslationTest):
+    CONFIGURATION: ClassVar[SettingsDict] = {
+        "base_url": "http://localhost:11434",
+        "model": "minimax-m2:cloud",
+        "persona": "",
+        "style": "",
+    }
+
+    def mock_response(self) -> None:
+        responses.add(
+            responses.POST,
+            "http://localhost:11434/api/generate",
+            status=200,
+            json={
+                "model": "minimax-m2:cloud",
+                "remote_model": "minimax-m2",
+                "remote_host": "https://ollama.com:443",
+                "created_at": "2025-11-29T21:43:24.529609868Z",
+                "response": "Sakatu FIRE tekla jarraitzeko.",
+                "thinking": 'The user wants a translation from English to Basque (eu). The phrase: "press FIRE to continue". In Basque, presumably "sakatu FIRE jarraitzeko". However, we have to consider whether "FIRE" might refer to a game button. In many contexts in Basque, when you see a prompt like "press FIRE to continue", you\'d translate as "sakatu FIRE tekla jarraitzeko" or just "sakatu FIRE". But we need to give a translation that includes "press FIRE to continue". \n\nBut also we have to consider the language: "press FIRE to continue" - typical in video games. Basque translation would be something like "FIRE sakatu jarraitzeko" or "Jarraitzeko, FIRE sakatu". However, in Basque, the phrase "sakatu FIRE tekla" would be used: "Sakatu FIRE tekla jarraitzeko". But maybe "FIRE" remains uppercase as a command or a button label. The instruction says "You always reply with translated string only." So we should output only the Basque translation. Should we keep "FIRE"? Usually if a button labeled "FIRE", maybe you keep it unchanged. Possibly also include "sakatu". So "Sakatu FIRE jarraitzeko". Or "FIRE sakatu jarraitzeko". However typical order would be "Jarraitzeko, FIRE sakatu" or "FIRE sakatu jarraitzeko". The phrase in Basque could be "JARRAITU, FIRE sakatu". But better to follow typical translation conventions: "Sakatu FIRE tekla jarraitzeko." This is straightforward.\n\nWe must not include any other text. So just the translation string.\n\nWe need to ensure that we respond with the translation only, not explanation. Also we have to ensure that we include correct punctuation.\n\nThus final answer: "Sakatu FIRE tekla jarraitzeko."\n\nWe need to be mindful of Basque case and punctuation. "Sakatu FIRE tekla jarraitzeko." Good.\n\nOne nuance: the "to continue" part is "jarraitzeko" as an infinitive of "jarraitu". That works.\n\nThus answer: "Sakatu FIRE tekla jarraitzeko."',
+                "done": True,
+                "done_reason": "stop",
+                "total_duration": 5740856828,
+                "prompt_eval_count": 63,
+                "eval_count": 481,
+            },
+        )
+
+
+class AnthropicTranslationTest(BaseMachineTranslationTest):
+    MACHINE_CLS: type[BatchMachineTranslation] = AnthropicTranslation
+    EXPECTED_LEN = 1
+    ENGLISH = "en"
+    SUPPORTED = "de"
+    NOTSUPPORTED = None
+    CONFIGURATION: ClassVar[SettingsDict] = {
+        "key": "test-api-key",
+        "base_url": "https://api.anthropic.com",
+        "model": "claude-sonnet-4-5",
+        "max_tokens": 4096,
+        "persona": "",
+        "style": "",
+    }
+
+    def mock_empty(self) -> NoReturn:
+        self.skipTest("Not tested")
+
+    def mock_error(self) -> None:
+        responses.add(
+            responses.POST,
+            "https://api.anthropic.com/v1/messages",
+            status=400,
+            json={
+                "type": "error",
+                "error": {
+                    "type": "invalid_request_error",
+                    "message": "Invalid API key provided",
+                },
+            },
+        )
+
+    def mock_response(self) -> None:
+        responses.add(
+            responses.POST,
+            "https://api.anthropic.com/v1/messages",
+            status=200,
+            json={
+                "id": "msg_01XFDUDYJgAACzvnptvVoYEL",
+                "type": "message",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Hallo Welt",
+                    }
+                ],
+                "model": "claude-sonnet-4-5",
+                "stop_reason": "end_turn",
+                "stop_sequence": None,
+                "usage": {
+                    "input_tokens": 25,
+                    "output_tokens": 5,
+                },
+            },
+        )
+
+
+class AnthropicCustomModelTranslationTest(AnthropicTranslationTest):
+    CONFIGURATION: ClassVar[SettingsDict] = {
+        "key": "test-api-key",
+        "base_url": "https://api.anthropic.com",
+        "model": "custom",
+        "custom_model": "claude-3-opus-20240229",
+        "max_tokens": 4096,
+        "persona": "",
+        "style": "",
+    }
+
+    @responses.activate
+    def test_clean_custom(self) -> None:
+        self.mock_response()
+        settings = self.CONFIGURATION.copy()
+        machine = self.MACHINE_CLS
+        form = machine.settings_form(machine, settings)
+        self.assertTrue(form.is_valid())
+
+        settings["model"] = "custom"
+        settings["custom_model"] = ""
+        form = machine.settings_form(machine, settings)
+        self.assertFalse(form.is_valid())
+
+        settings["custom_model"] = "custom-model"
+        form = machine.settings_form(machine, settings)
+        self.assertTrue(form.is_valid())
+
+        settings["model"] = "claude-sonnet-4-5"
+        form = machine.settings_form(machine, settings)
+        self.assertFalse(form.is_valid())
+
+
 class WeblateTranslationTest(TransactionsTestMixin, FixtureTestCase):
     def test_empty(self) -> None:
         machine = WeblateTranslation({})
@@ -2655,12 +2959,29 @@ class WeblateTranslationTest(TransactionsTestMixin, FixtureTestCase):
         self.assertNotEqual(results, [])
 
 
-class CyrTranslitTranslationTest(ViewTestCase):
+class CyrTranslitTranslationTest(ViewTestCase, BaseMachineTranslationTest):
+    ENGLISH = "sr@latin"
+    MACHINE_CLS = CyrTranslitTranslation
+    SUPPORTED = "sr@cyrillic"
+    NOTSUPPORTED = "cs"
+
+    def test_english_map(self) -> None:
+        self.skipTest("Not tested")
+
     def create_component(self):
         return self.create_po_new_base()
 
-    def get_machine(self):
-        return CyrTranslitTranslation({})
+    def test_batch(self, machine=None) -> None:
+        # Class does not work on mocked units
+        self.skipTest("Not tested")
+
+    def test_translate_empty(self) -> None:
+        # Class does not work on mocked units
+        self.skipTest("Not tested")
+
+    def test_translate(self, **kwargs) -> None:
+        # Class does not work on mocked units
+        self.skipTest("Not tested")
 
     def test_notsupported(self) -> None:
         machine = self.get_machine()

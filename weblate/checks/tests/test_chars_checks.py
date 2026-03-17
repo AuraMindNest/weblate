@@ -4,7 +4,7 @@
 
 """Tests for char based quality checks."""
 
-from unittest import TestCase
+from django.test import SimpleTestCase
 
 from weblate.checks.chars import (
     BeginNewlineCheck,
@@ -23,11 +23,15 @@ from weblate.checks.chars import (
     KabyleCharactersCheck,
     KashidaCheck,
     MaxLengthCheck,
+    MultipleCapitalCheck,
     NewLineCountCheck,
     PunctuationSpacingCheck,
     ZeroWidthSpaceCheck,
 )
+from weblate.checks.models import Check
 from weblate.checks.tests.test_checks import CheckTestCase, MockUnit
+from weblate.lang.models import Language
+from weblate.trans.models import Component, Project, Translation, Unit
 
 
 class BeginNewlineCheckTest(CheckTestCase):
@@ -148,6 +152,17 @@ class EndStopCheckTest(CheckTestCase):
         self.do_test(False, ("Text.", "Text။", ""), "my")
         self.do_test(False, ("Text?", "ပုံဖျက်မလး။", ""), "my")
         self.do_test(False, ("Te xt", "ပုံဖျက်မလး။", ""), "my")  # codespell:ignore
+
+    def test_french(self) -> None:
+        self.do_test(
+            False,
+            (
+                "To enable password-less login, the public SSH key can be copied to the remote host.",
+                "Pour activer l’authentification sans mot de passe, la clé publique SSH peut être copiée sur le serveur distant.",  # codespell:ignore
+                "",
+            ),
+            "fr",
+        )
 
 
 class EndColonCheckTest(CheckTestCase):
@@ -304,7 +319,7 @@ class ZeroWidthSpaceCheckTest(CheckTestCase):
         self.test_failure_1 = ("string", "str\u200bing", "")
 
 
-class MaxLengthCheckTest(TestCase):
+class MaxLengthCheckTest(SimpleTestCase):
     def setUp(self) -> None:
         self.check = MaxLengthCheck()
         self.test_good_matching = ("strings", "less than 21", "max-length:12")
@@ -317,6 +332,33 @@ class MaxLengthCheckTest(TestCase):
                 [self.test_good_matching[1]],
                 MockUnit(flags=self.test_good_matching[2]),
             )
+        )
+
+    def test_check_invalid_flag(self) -> None:
+        self.assertTrue(
+            self.check.check_target(
+                [self.test_good_matching[0]],
+                [self.test_good_matching[1]],
+                MockUnit(flags="max-length:*"),
+            )
+        )
+
+    def test_description_invalid_flag(self) -> None:
+        unit = Unit(
+            source=self.test_good_matching[0],
+            target=self.test_good_matching[1],
+            extra_flags="max-length:*",
+            translation=Translation(
+                component=Component(
+                    file_format="po",
+                    source_language=Language(code="en"),
+                    project=Project(),
+                )
+            ),
+        )
+        check = Check(unit=unit)
+        self.assertIn(
+            "Could not parse max-length flag:", str(self.check.get_description(check))
         )
 
     def test_unicode_check(self) -> None:
@@ -479,6 +521,17 @@ class PunctuationSpacingCheckTest(CheckTestCase):
             "fr",
         )
 
+    def test_cdata(self) -> None:
+        self.do_test(
+            False,
+            (
+                "<![CDATA[Auto-run is <i>enabled</i>]]>",
+                "<![CDATA[Auto-run is <i>enabled</i>]]>",
+                "",
+            ),
+            "fr",
+        )
+
 
 class KabyleCharactersCheckTest(CheckTestCase):
     check = KabyleCharactersCheck()
@@ -500,4 +553,46 @@ class KabyleCharactersCheckTest(CheckTestCase):
                 "",
             ),
             "el",
+        )
+
+
+class MultipleCapitalCheckTest(CheckTestCase):
+    check = MultipleCapitalCheck()
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.test_good_matching = ("Hello", "Hello", "")
+        self.test_failure_1 = ("Hello", "HEllo", "")
+        self.test_failure_2 = ("camel case", "CAmelCase", "")
+        self.test_failure_3 = ("sigma", "ΣIGMA", "")
+
+    def test_acronyms(self) -> None:
+        self.do_test(
+            False,
+            (
+                "Welcome NATO",
+                "Bonjour OTAN",
+                "",
+            ),
+            "fr",
+        )
+        self.do_test(
+            False,
+            (
+                "Welcome NATO",
+                "Vítej NATO",
+                "",
+            ),
+            "cs",
+        )
+
+    def test_translation(self) -> None:
+        self.do_test(
+            False,
+            (
+                "Hello world",
+                "שלום עולם (World)",
+                "",
+            ),
+            "he",
         )

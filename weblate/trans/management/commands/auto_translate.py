@@ -4,13 +4,18 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.core.management.base import CommandError
 
 from weblate.auth.models import User
 from weblate.machinery.models import MACHINERY
 from weblate.trans.autotranslate import AutoTranslate
-from weblate.trans.management.commands import WeblateTranslationCommand
 from weblate.trans.models import Component
+from weblate.utils.management.base import WeblateTranslationCommand
+
+if TYPE_CHECKING:
+    from django.core.management.base import CommandParser
 
 
 class Command(WeblateTranslationCommand):
@@ -18,7 +23,7 @@ class Command(WeblateTranslationCommand):
 
     help = "performs automatic translation based on other components"
 
-    def add_arguments(self, parser) -> None:
+    def add_arguments(self, parser: CommandParser) -> None:
         super().add_arguments(parser)
         parser.add_argument(
             "--user", default="anonymous", help=("User performing the change")

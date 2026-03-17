@@ -8,25 +8,30 @@ from __future__ import annotations
 
 import os
 from io import BytesIO, StringIO
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from zipfile import BadZipFile
 
 from django.utils.translation import gettext_lazy
 from translate.storage.csvl10n import csv
 
 from weblate.formats.helpers import CONTROLCHARS_TRANS, NamedBytesIO
-from weblate.formats.ttkit import CSVUtf8Format
+from weblate.formats.ttkit import CSVFormat
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from weblate.trans.file_format_params import FileFormatParams
+
 CSV_DIALECT = "unix"
 
 
-class XlsxFormat(CSVUtf8Format):
+class XlsxFormat(CSVFormat):
     name = gettext_lazy("Excel Open XML")
     format_id = "xlsx"
     autoload = ("*.xlsx",)
+
+    def get_encoding(self) -> str | None:
+        return "utf-8"
 
     def write_cell(self, worksheet, column: int, row: int, value: str):
         from openpyxl.cell.cell import TYPE_STRING
@@ -81,6 +86,7 @@ class XlsxFormat(CSVUtf8Format):
         XlsxFormat(store).save_content(output)
         return output.getvalue()
 
+    # pylint: disable-next=arguments-differ
     def parse_store(self, storefile):
         from openpyxl import load_workbook
 
@@ -110,9 +116,9 @@ class XlsxFormat(CSVUtf8Format):
             writer.writerow(values)
 
         if isinstance(storefile, str):
-            name = os.path.basename(storefile) + ".csv"
+            name = f"{os.path.basename(storefile)}.csv"
         else:
-            name = os.path.basename(storefile.name) + ".csv"
+            name = f"{os.path.basename(storefile.name)}.csv"
 
         # return the new csv as bytes
         content = output.getvalue().encode("utf-8")
@@ -137,7 +143,7 @@ class XlsxFormat(CSVUtf8Format):
         language: str,
         base: str,
         callback: Callable | None = None,
-        file_format_params: dict[str, Any] | None = None,  # noqa: ARG003
+        file_format_params: FileFormatParams | None = None,  # noqa: ARG003
     ) -> None:
         """Handle creation of new translation file."""
         if not base:

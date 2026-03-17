@@ -19,6 +19,8 @@ class AddonEvent(IntegerChoices):
     EVENT_DAILY = 11, "Daily"
     EVENT_COMPONENT_UPDATE = 12, "Component update"
     EVENT_CHANGE = 13, "Event change"
+    EVENT_UNIT_POST_SYNC = 14, "Unit post-sync"
+    EVENT_INSTALL = 15, "Add-on installation"
 
 
 POST_CONFIGURE_EVENTS = {

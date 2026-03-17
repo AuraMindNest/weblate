@@ -19,18 +19,22 @@ from rest_framework.authtoken.models import Token
 from social_django.models import Code
 
 from weblate.accounts.models import AuditLog, VerifiedEmail
-from weblate.auth.models import AuthenticatedHttpRequest, User
+from weblate.auth.models import User
 from weblate.trans.signals import user_pre_delete
 
 if TYPE_CHECKING:
     from django_otp.models import Device
 
     from weblate.accounts.types import DeviceType
+    from weblate.auth.models import AuthenticatedHttpRequest
 
 SESSION_WEBAUTHN_AUDIT = "weblate:second_factor:webauthn_audit_log"
 SESSION_SECOND_FACTOR_USER = "weblate:second_factor:user"
+SESSION_SECOND_FACTOR_TIMESTAMP = "weblate:second_factor:timestamp"
 SESSION_SECOND_FACTOR_SOCIAL = "weblate:second_factor:social"
 SESSION_SECOND_FACTOR_TOTP = "weblate:second_factor:totp_key"
+
+SECOND_FACTOR_VERIFY_SECONDS = 600
 
 
 def remove_user(user: User, request: AuthenticatedHttpRequest, **params) -> None:

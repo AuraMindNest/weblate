@@ -31,6 +31,10 @@ if TYPE_CHECKING:
     from .flags import Flags
     from .models import Check
 
+FixupType = (
+    tuple[Literal["regex"], str, str, str] | tuple[Literal["plurals"], list[str]]
+)
+
 
 class MissingExtraDict(TypedDict, total=False):
     missing: list[str]
@@ -55,7 +59,7 @@ class BaseCheck(ClassLoaderProtocol):
     always_display = False
     batch_project_wide = False
     skip_suggestions = False
-    extra_enable_strings: list[str] = []
+    extra_enable_strings: tuple[str, ...] = ()
 
     def get_identifier(self) -> str:
         return self.check_id
@@ -178,7 +182,7 @@ class BaseCheck(ClassLoaderProtocol):
     def get_description(self, check_obj: Check) -> StrOrPromise:
         return self.description
 
-    def get_fixup(self, unit: Unit) -> Iterable[tuple[str, str, str]] | None:
+    def get_fixup(self, unit: Unit) -> Iterable[FixupType] | None:
         return None
 
     def render(self, request: AuthenticatedHttpRequest, unit: Unit) -> StrOrPromise:
@@ -186,12 +190,7 @@ class BaseCheck(ClassLoaderProtocol):
         raise Http404(msg)
 
     def get_cache_key(self, unit: Unit, pos: int) -> str:
-        return "check:{}:{}:{}:{}".format(
-            self.check_id,
-            unit.pk,
-            siphash("Weblate   Checks", unit.all_flags.format()),
-            pos,
-        )
+        return f"check:{self.check_id}:{unit.pk}:{siphash('Weblate   Checks', unit.all_flags.format())}:{pos}"
 
     def get_replacement_function(self, unit: Unit):
         def strip_xml(content: str) -> str:
@@ -383,9 +382,12 @@ class TargetCheckParametrized(TargetCheck):
     ) -> bool:
         """Check flag value."""
         if unit.all_flags.has_value(self.enable_string):
-            return self.check_target_params(
-                sources, targets, unit, self.get_value(unit)
-            )
+            try:
+                value = self.get_value(unit)
+            except ValueError:
+                # Value is present, but is syntactically invalid
+                return True
+            return self.check_target_params(sources, targets, unit, value)
         return False
 
     def check_target_params(
@@ -400,6 +402,15 @@ class TargetCheckParametrized(TargetCheck):
     def check_single(self, source: str, target: str, unit: Unit) -> bool:
         """We don't check single phrase here."""
         return False
+
+    def get_description(self, check_obj: Check) -> StrOrPromise:
+        try:
+            self.get_value(check_obj.unit)
+        except ValueError as error:
+            return format_html(
+                gettext("Could not parse {} flag: {}"), self.enable_string, error
+            )
+        return super().get_description(check_obj)
 
 
 class CountingCheck(TargetCheck):

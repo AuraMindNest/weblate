@@ -166,11 +166,12 @@ def dismiss_alert(request: AuthenticatedHttpRequest, path):
 
     try:
         alert = obj.alert_set.get(name=request.POST["dismiss"])
+    except ObjectDoesNotExist:
+        pass
+    else:
         if alert.obj.dismissable:
             alert.dismissed = True
             alert.save(update_fields=["dismissed"])
-    except ObjectDoesNotExist:
-        pass
 
     return redirect_param(obj, "#alerts")
 
@@ -336,9 +337,15 @@ def announcement(request: AuthenticatedHttpRequest, path):
 def announcement_delete(request: AuthenticatedHttpRequest, pk):
     announcement = get_object_or_404(Announcement, pk=pk)
 
-    if request.user.has_perm("announcement.delete", announcement):
-        announcement.delete()
+    obj = (
+        announcement.component
+        if announcement.component is not None
+        else announcement.project
+    )
+    if not request.user.has_perm("announcement.delete", obj):
+        raise PermissionDenied
 
+    announcement.delete()
     return JsonResponse({"responseStatus": 200})
 
 
@@ -351,7 +358,7 @@ def show_progress(request: AuthenticatedHttpRequest, path):
     or one of its languages.
     """
     obj = parse_path(request, path, (Project, Category, Component, Translation))
-    if isinstance(obj, Project | Category):
+    if isinstance(obj, (Project, Category)):
         return multi_progress(request, obj)
 
     return component_progress(request, obj)

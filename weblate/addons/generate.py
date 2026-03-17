@@ -4,7 +4,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, ClassVar
 
 from django.db.models import F, Q
 from django.utils.translation import gettext_lazy
@@ -19,18 +20,20 @@ from weblate.utils.errors import report_error
 from weblate.utils.render import render_template
 from weblate.utils.state import (
     STATE_EMPTY,
-    STATE_FUZZY,
+    STATE_NEEDS_REWRITING,
     STATE_READONLY,
     STATE_TRANSLATED,
 )
 
 if TYPE_CHECKING:
-    from weblate.auth.models import User
+    from weblate.trans.models import Component, Project, Unit
+    from weblate.utils.state import StringState
 
 
 class GenerateFileAddon(BaseAddon):
-    events: set[AddonEvent] = {
+    events: ClassVar[set[AddonEvent]] = {
         AddonEvent.EVENT_PRE_COMMIT,
+        AddonEvent.EVENT_INSTALL,
     }
     name = "weblate.generate.generate"
     verbose = gettext_lazy("Statistics generator")
@@ -42,12 +45,23 @@ class GenerateFileAddon(BaseAddon):
     icon = "poll.svg"
 
     @classmethod
-    def can_install(cls, component, user: User | None):
-        if not component.translation_set.exists():
+    def can_install(
+        cls,
+        *,
+        component: Component | None = None,
+        project: Project | None = None,
+    ) -> bool:
+        if component is not None and not component.translation_set.exists():
             return False
-        return super().can_install(component, user)
+        return super().can_install(component=component, project=project)
 
-    def pre_commit(self, translation, author: str, store_hash: bool) -> None:
+    def pre_commit(
+        self,
+        translation: Translation,
+        author: str,
+        store_hash: bool,
+        activity_log_id: int | None = None,
+    ) -> None:
         filename = self.render_repo_filename(
             self.instance.configuration["filename"], translation
         )
@@ -56,37 +70,51 @@ class GenerateFileAddon(BaseAddon):
         content = render_template(
             self.instance.configuration["template"], translation=translation
         )
-        with open(filename, "w") as handle:
-            handle.write(content)
+        Path(filename).write_text(content, encoding="utf-8")
+        # For pre_commit hook
         translation.addon_commit_files.append(filename)
+        # For post_install hook
+        self.extra_files.append(filename)
+
+    def post_install(
+        self,
+        component: Component,
+        store_hash: bool,
+        activity_log_id: int | None = None,
+    ) -> dict | None:
+        for translation in component.translation_set.exclude(
+            language_id=component.source_language_id
+        ).iterator():
+            self.pre_commit(translation, "", store_hash, activity_log_id)
+        self.commit_and_push(component)
 
 
 class LocaleGenerateAddonBase(BaseAddon):
-    events: set[AddonEvent] = {
+    events: ClassVar[set[AddonEvent]] = {
         AddonEvent.EVENT_COMPONENT_UPDATE,
         AddonEvent.EVENT_DAILY,
     }
     multiple = True
     icon = "language.svg"
 
-    def fetch_strings(self, translation, query):
+    def fetch_strings(self, translation: Translation, query: Q) -> dict[int, Unit]:
         return {
             unit.source_unit_id: unit for unit in translation.unit_set.filter(query)
         }
 
     def generate_translation(
         self,
-        source_translation,
-        target_translation,
-        query,
+        source_translation: Translation,
+        target_translation: Translation,
+        query: Q,
         *,
         prefix: str = "",
         suffix: str = "",
         var_prefix: str = "",
         var_suffix: str = "",
         var_multiplier: float = 0.0,
-        target_state: int = STATE_TRANSLATED,
-    ):
+        target_state: StringState = STATE_TRANSLATED,
+    ) -> int:
         updated = 0
         sources = self.fetch_strings(source_translation, Q(state__gte=STATE_TRANSLATED))
         targets = self.fetch_strings(target_translation, query)
@@ -122,10 +150,12 @@ class LocaleGenerateAddonBase(BaseAddon):
             target_translation.invalidate_cache()
         return updated
 
-    def daily(self, component) -> None:
+    def daily(self, component: Component, activity_log_id: int | None = None) -> None:
         raise NotImplementedError
 
-    def component_update(self, component) -> None:
+    def component_update(
+        self, component: Component, activity_log_id: int | None = None
+    ) -> None:
         raise NotImplementedError
 
 
@@ -140,21 +170,23 @@ class PseudolocaleAddon(LocaleGenerateAddonBase):
     user_name = "pseudolocale"
     user_verbose = "Pseudolocale add-on"
 
-    def daily(self, component) -> None:
+    def daily(self, component: Component, activity_log_id: int | None = None) -> None:
         # Check all strings
         query = Q(state__lte=STATE_TRANSLATED)
         if self.instance.configuration.get("include_readonly", False):
             query |= Q(state=STATE_READONLY)
         self.do_update(component, query)
 
-    def component_update(self, component) -> None:
+    def component_update(
+        self, component: Component, activity_log_id: int | None = None
+    ) -> None:
         # Update only untranslated strings
         self.do_update(component, Q(state__lt=STATE_TRANSLATED))
 
-    def get_target_translation(self, component):
+    def get_target_translation(self, component: Component) -> Translation:
         return component.translation_set.get(pk=self.instance.configuration["target"])
 
-    def do_update(self, component, query) -> None:
+    def do_update(self, component: Component, query: Q) -> None:
         try:
             source_translation = component.translation_set.get(
                 pk=self.instance.configuration["source"]
@@ -181,26 +213,34 @@ class PseudolocaleAddon(LocaleGenerateAddonBase):
         )
 
     def post_uninstall(self) -> None:
-        try:
-            target_translation = self.get_target_translation(self.instance.component)
-            flags = Flags(target_translation.check_flags)
-            flags.remove("ignore-all-checks")
-            target_translation.check_flags = flags.format()
-            target_translation.save(update_fields=["check_flags"])
-        except Translation.DoesNotExist:
-            pass
+        if self.instance.component:
+            try:
+                target_translation = self.get_target_translation(
+                    self.instance.component
+                )
+            except Translation.DoesNotExist:
+                pass
+            else:
+                flags = Flags(target_translation.check_flags)
+                flags.remove("ignore-all-checks")
+                target_translation.check_flags = flags.format()
+                target_translation.save(update_fields=["check_flags"])
         super().post_uninstall()
 
     def post_configure_run(self) -> None:
         super().post_configure_run()
-        try:
-            target_translation = self.get_target_translation(self.instance.component)
-            flags = Flags(target_translation.check_flags)
-            flags.merge("ignore-all-checks")
-            target_translation.check_flags = flags.format()
-            target_translation.save(update_fields=["check_flags"])
-        except Translation.DoesNotExist:
-            pass
+        if self.instance.component:
+            try:
+                target_translation = self.get_target_translation(
+                    self.instance.component
+                )
+            except Translation.DoesNotExist:
+                pass
+            else:
+                flags = Flags(target_translation.check_flags)
+                flags.merge("ignore-all-checks")
+                target_translation.check_flags = flags.format()
+                target_translation.save(update_fields=["check_flags"])
 
 
 class PrefillAddon(LocaleGenerateAddonBase):
@@ -210,15 +250,17 @@ class PrefillAddon(LocaleGenerateAddonBase):
     user_name = "prefill"
     user_verbose = "Prefill add-on"
 
-    def daily(self, component) -> None:
+    def daily(self, component: Component, activity_log_id: int | None = None) -> None:
         # Check all strings
         self.do_update(component)
 
-    def component_update(self, component) -> None:
+    def component_update(
+        self, component: Component, activity_log_id: int | None = None
+    ) -> None:
         # Update only untranslated strings
         self.do_update(component)
 
-    def do_update(self, component) -> None:
+    def do_update(self, component: Component) -> None:
         source_translation = component.source_translation
         updated = 0
         for translation in component.translation_set.prefetch():
@@ -227,7 +269,7 @@ class PrefillAddon(LocaleGenerateAddonBase):
             updated += self.generate_translation(
                 source_translation,
                 translation,
-                target_state=STATE_FUZZY,
+                target_state=STATE_NEEDS_REWRITING,
                 query=Q(state=STATE_EMPTY),
             )
         if updated:
@@ -244,13 +286,15 @@ class FillReadOnlyAddon(LocaleGenerateAddonBase):
     user_name = "fill"
     user_verbose = "Fill read-only add-on"
 
-    def daily(self, component) -> None:
+    def daily(self, component: Component, activity_log_id: int | None = None) -> None:
         self.do_update(component)
 
-    def component_update(self, component) -> None:
+    def component_update(
+        self, component: Component, activity_log_id: int | None = None
+    ) -> None:
         self.do_update(component)
 
-    def do_update(self, component) -> None:
+    def do_update(self, component: Component) -> None:
         source_translation = component.source_translation
         updated = 0
         for translation in component.translation_set.prefetch():

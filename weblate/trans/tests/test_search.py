@@ -10,11 +10,18 @@ from django.http import QueryDict
 from django.test.utils import override_settings
 from django.urls import reverse
 
+from weblate.checks.models import Check
+from weblate.screenshots.models import Screenshot
 from weblate.trans.models import Component
 from weblate.trans.tests.test_views import ViewTestCase
 from weblate.utils.db import TransactionsTestMixin
 from weblate.utils.ratelimit import reset_rate_limit
-from weblate.utils.state import STATE_FUZZY, STATE_READONLY, STATE_TRANSLATED
+from weblate.utils.state import (
+    STATE_APPROVED,
+    STATE_FUZZY,
+    STATE_READONLY,
+    STATE_TRANSLATED,
+)
 from weblate.utils.views import get_form_data
 
 
@@ -167,6 +174,18 @@ class SearchViewTest(TransactionsTestMixin, ViewTestCase):
         self.do_search({"q": "check:plurals"}, None)
         self.do_search({"q": ""}, "1 / 4")
 
+    def test_search_automatically_translated(self) -> None:
+        self.do_search({"q": "is:automatically-translated"}, None)
+
+        unit = self.translation.unit_set.first()
+        unit.automatically_translated = True
+        unit.save()
+
+        response = self.do_search({"q": "is:automatically-translated"}, "1 / 1")
+        self.assertContains(response, unit.source)
+
+        self.do_search({"q": "NOT is:automatically-translated"}, "1 / 3")
+
     def test_search_plural(self) -> None:
         response = self.do_search({"q": "banana"}, "banana")
         self.assertContains(response, "One")
@@ -255,6 +274,82 @@ class SearchViewTest(TransactionsTestMixin, ViewTestCase):
 
     def test_checksum(self) -> None:
         self.do_search({"checksum": "invalid"}, None, anchor="")
+
+    def test_search_multiple_labels(self) -> None:
+        """Test that searching with label:ABC AND label:XYZ works correctly."""
+        label1 = self.project.label_set.create(name="ABC", color="black")
+        label2 = self.project.label_set.create(name="XYZ", color="blue")
+
+        unit = self.get_unit()
+        source_unit = unit.source_unit
+        source_unit.labels.add(label1, label2)
+
+        unit.translation.stats.clear()
+
+        self.do_search({"q": "label:ABC"}, "Hello, world!")
+        self.do_search({"q": "label:XYZ"}, "Hello, world!")
+        self.do_search({"q": "label:ABC AND label:XYZ"}, "Hello, world!")
+        self.do_search({"q": "label:ABC label:XYZ"}, "Hello, world!")
+
+        source_unit.labels.remove(label2)
+        unit.translation.stats.clear()
+        self.do_search({"q": "label:ABC AND label:XYZ"}, None)
+        self.do_search({"q": "label:ABC label:XYZ"}, None)
+
+    def test_search_multiple_checks(self) -> None:
+        """Test that searching with check:A AND check:B works correctly."""
+        unit = self.get_unit()
+        Check.objects.create(unit=unit, name="ellipsis", dismissed=False)
+        Check.objects.create(unit=unit, name="same", dismissed=False)
+
+        self.do_search({"q": "check:ellipsis"}, "Hello, world!")
+        self.do_search({"q": "check:same"}, "Hello, world!")
+        self.do_search({"q": "check:ellipsis AND check:same"}, "Hello, world!")
+        self.do_search({"q": "check:ellipsis check:same"}, "Hello, world!")
+
+        Check.objects.filter(unit=unit, name="same").update(dismissed=True)
+        self.do_search(
+            {"q": "check:ellipsis AND dismissed_check:same"}, "Hello, world!"
+        )
+        self.do_search({"q": "check:ellipsis dismissed_check:same"}, "Hello, world!")
+
+        Check.objects.filter(unit=unit, name="same").delete()
+        self.do_search({"q": "check:ellipsis AND check:same"}, None)
+        self.do_search({"q": "check:ellipsis check:same"}, None)
+
+    def test_search_multiple_screenshots(self) -> None:
+        """Test that searching with screenshot:A AND screenshot:B works correctly."""
+        unit = self.get_unit()
+        source_unit = unit.source_unit
+        translation = self.component.source_translation
+
+        shot1 = Screenshot.objects.create(
+            name="ScreenshotAlpha", translation=translation
+        )
+        shot2 = Screenshot.objects.create(
+            name="ScreenshotBeta", translation=translation
+        )
+        shot1.units.add(source_unit)
+        shot2.units.add(unit)
+
+        self.do_search({"q": "screenshot:ScreenshotAlpha"}, "Hello, world!")
+        self.do_search({"q": "screenshot:ScreenshotBeta"}, "Hello, world!")
+        self.do_search(
+            {"q": "screenshot:ScreenshotAlpha AND screenshot:ScreenshotBeta"},
+            "Hello, world!",
+        )
+        self.do_search(
+            {"q": "screenshot:ScreenshotAlpha screenshot:ScreenshotBeta"},
+            "Hello, world!",
+        )
+
+        shot2.units.remove(unit)
+        self.do_search(
+            {"q": "screenshot:ScreenshotAlpha AND screenshot:ScreenshotBeta"}, None
+        )
+        self.do_search(
+            {"q": "screenshot:ScreenshotAlpha screenshot:ScreenshotBeta"}, None
+        )
 
 
 class ReplaceTest(ViewTestCase):
@@ -509,11 +604,9 @@ class BulkEditTest(ViewTestCase):
         )
 
     def test_bulk_translation_label(self) -> None:
-        label = self.project.label_set.create(
-            name="Automatically translated", color="black"
-        )
+        label = self.project.label_set.create(name="Test label", color="black")
         unit = self.get_unit()
-        unit.labels.add(label)
+        unit.source_unit.labels.add(label)
         # Clear local outdated cache
         unit.translation.stats.clear()
         self.assertEqual(
@@ -527,7 +620,7 @@ class BulkEditTest(ViewTestCase):
         )
         self.assertContains(response, "Bulk edit completed, 1 string was updated.")
         unit = self.get_unit()
-        self.assertNotIn(label, unit.labels.all())
+        self.assertNotIn(label, unit.source_unit.labels.all())
         # Clear local outdated cache
         unit.translation.stats.clear()
         self.assertEqual(
@@ -573,3 +666,23 @@ class BulkEditTest(ViewTestCase):
         self.assertContains(response, "Bulk edit completed, 4 strings were updated.")
         self.assertEqual(translation.unit_set.filter(state=STATE_READONLY).count(), 0)
         self.assertEqual(translation.unit_set.filter(state=STATE_TRANSLATED).count(), 1)
+
+    def test_bulk_approve_clears_automatically_translated(self) -> None:
+        self.project.translation_review = True
+        self.project.save()
+
+        unit = self.get_unit()
+        unit.automatically_translated = True
+        unit.save()
+        self.assertTrue(self.get_unit().automatically_translated)
+
+        response = self.client.post(
+            reverse("bulk-edit", kwargs={"path": self.project.get_url_path()}),
+            {"q": "state:<translated", "state": STATE_APPROVED},
+            follow=True,
+        )
+        self.assertContains(response, "Bulk edit completed, 1 string was updated.")
+
+        unit = self.get_unit()
+        self.assertEqual(unit.state, STATE_APPROVED)
+        self.assertFalse(unit.automatically_translated)

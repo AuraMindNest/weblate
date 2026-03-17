@@ -10,8 +10,9 @@ on:
     - renovate/**
     - weblate
   pull_request:
+
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
 
 permissions:
@@ -24,40 +25,49 @@ jobs:
     strategy:
       matrix:
         python-version:
-        - '3.11'
+        - '3.12'
         - '3.13'
+        - '3.14'
         requirements:
         - latest
         database:
         - postgresql
-        experimental: [false]
+        datastore:
+        - valkey
+        experimental:
+        - false
         include:
         # Reduced testing for mysql
-        - python-version: '3.13'
+        - python-version: '3.14'
           requirements: latest
           database: mysql
+          datastore: valkey
           experimental: false
         # Reduced testing for mariadb
-        - python-version: '3.13'
+        - python-version: '3.14'
           requirements: latest
           database: mariadb
+          datastore: valkey
           experimental: false
-        # Reduced testing for minimal deps
-        - python-version: '3.11'
-          requirements: minimal
-          database: postgresql
-          experimental: false
-        # Reduced testing for edge deps
-        - python-version: '3.13'
-          requirements: edge
-          database: postgresql
-          experimental: true
-        # Test with Python 3.12.
-        - python-version: '3.12'
+        # Reduced testing for redis
+        - python-version: '3.14'
           requirements: latest
           database: postgresql
+          datastore: redis
           experimental: false
-    name: py${{ matrix.python-version }}, ${{ matrix.database }}, ${{ matrix.requirements }} deps
+        # Reduced testing for minimal deps
+        - python-version: '3.12'
+          requirements: minimal
+          database: postgresql
+          datastore: valkey
+          experimental: false
+        # Reduced testing for edge deps
+        - python-version: '3.14'
+          requirements: edge
+          database: postgresql
+          datastore: valkey
+          experimental: true
+    name: py${{ matrix.python-version }}, ${{ matrix.database }}, ${{ matrix.datastore }}, ${{ matrix.requirements }} deps
     env:
       CI_DATABASE: ${{ matrix.database }}
       CI_REDIS_HOST: 127.0.0.1
@@ -70,26 +80,28 @@ jobs:
       PYTHONWARNINGS: default,ignore:unclosed:ResourceWarning
       PYTHONUNBUFFERED: 1
     steps:
-    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         persist-credentials: false
-    - uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+    - uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
       with:
         path: data-test/cache/tesseract
         key: tesseract-data
-    - uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
-      with:
-        enable-cache: true
-        cache-suffix: ${{ matrix.python-version }}
-    - name: Start services
-      run: ./ci/services-up ${{ matrix.database }}
-    - name: Install apt dependencies
-      run: sudo ./ci/apt-install "$CI_DATABASE"
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+      id: setup_python
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
       with:
         python-version: ${{ matrix.python-version }}
         allow-prereleases: true
+    - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+      with:
+        save-cache: ${{ github.ref == 'refs/heads/main' }}
+        cache-suffix: ${{ steps.setup_python.outputs.python-version }}
+        version: 0.10.6
+    - name: Start services
+      run: ./ci/services-up ${{ matrix.database }} ${{ matrix.datastore }}
+    - name: Install apt dependencies
+      run: sudo ./ci/apt-install "$CI_DATABASE"
     - name: Install Python dependencies
       run: ./ci/pip-install ${{ matrix.requirements }}
     - name: Used versions
@@ -107,7 +119,13 @@ jobs:
     - name: Django checks
       run: uv run coverage run ./manage.py check
     - name: Demo import
-      run: uv run coverage run ./manage.py import_demo
+      run: |
+        uv run coverage run ./manage.py import_demo
+        # Second execution with --delete should remove and recreate
+        uv run coverage run ./manage.py import_demo --delete
+        uv run coverage run ./manage.py billing_demo
+        # Second execution should gracefully handle existing project
+        uv run coverage run ./manage.py billing_demo
     - name: Keep coverage
       run: |
         mkdir -p build/coverage
@@ -126,16 +144,17 @@ jobs:
         mv build/coverage/.coverage.* .
         uv run coverage combine
         uv run coverage xml
-    - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+    - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       with:
         token: ${{secrets.CODECOV_TOKEN}}
         flags: unittests
         name: Tests py${{ matrix.python-version }}, ${{ matrix.database }}, ${{ matrix.requirements }} deps
     - name: Upload test results to Codecov
       if: ${{ !cancelled() }}
-      uses: codecov/test-results-action@47f89e9acb64b76debcd5ea40642d25a4adced9f # v1.1.1
+      uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
+        report_type: test_results
     - name: Stop services
       if: always()
-      run: ./ci/services-down ${{ matrix.database }}
+      run: ./ci/services-down ${{ matrix.database }} ${{ matrix.datastore }}

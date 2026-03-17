@@ -130,6 +130,7 @@ Amazon Translate
 
 :Service ID: ``aws``
 :Maximal score: 88
+:Advanced features: * :ref:`glossary-mt`
 :Configuration: +---------------------+---------------------------+---------------------------------------------------------------------+
                 | ``source_language`` | Source language selection | Available choices:                                                  |
                 |                     |                           |                                                                     |
@@ -157,15 +158,16 @@ The service automatically uses :ref:`glossary`, see :ref:`glossary-mt`.
    * `Amazon Translate Documentation <https://docs.aws.amazon.com/translate/>`_
    * `AWS TranslateFullAccess Policy <https://docs.aws.amazon.com/aws-managed-policy/latest/reference/TranslateFullAccess.html>`_
 
-.. _mt-azure-openai:
+.. _mt-anthropic:
 
-Azure OpenAI
-------------
+Anthropic
+---------
 
-.. versionadded:: 5.8
+.. versionadded:: 5.16
 
-:Service ID: ``azure-openai``
+:Service ID: ``anthropic``
 :Maximal score: 90
+:Advanced features: * :ref:`glossary-mt`
 :Configuration: +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
                 | ``source_language`` | Source language selection | Available choices:                                                                                                        |
                 |                     |                           |                                                                                                                           |
@@ -177,9 +179,74 @@ Azure OpenAI
                 +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
                 | ``key``             | API key                   |                                                                                                                           |
                 +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
+                | ``base_url``        | Anthropic API URL         | Base URL of the Anthropic API. Leave empty to use the default URL.                                                        |
+                +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
+                | ``model``           | Anthropic model           | Available choices:                                                                                                        |
+                |                     |                           |                                                                                                                           |
+                |                     |                           | ``claude-sonnet-4-5`` -- Claude Sonnet 4.5 (Recommended)                                                                  |
+                |                     |                           |                                                                                                                           |
+                |                     |                           | ``claude-haiku-4-5`` -- Claude Haiku 4.5                                                                                  |
+                |                     |                           |                                                                                                                           |
+                |                     |                           | ``claude-opus-4-5`` -- Claude Opus 4.5                                                                                    |
+                |                     |                           |                                                                                                                           |
+                |                     |                           | ``custom`` -- Custom model                                                                                                |
+                +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
+                | ``custom_model``    | Custom model name         | Only needed when model is set to 'Custom model'                                                                           |
+                +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
+                | ``max_tokens``      | Max tokens                | Maximum number of tokens to generate in the response.                                                                     |
+                +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
+                | ``persona``         | Translator persona        | Describe the persona of translator to improve the accuracy of the translation. For example: "You are a squirrel breeder." |
+                +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
+                | ``style``           | Translator style          | Describe the style of translation. For example: "Use informal language."                                                  |
+                +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
+
+Performs translation using `Anthropic's Claude`_ models.
+
+The Anthropic API provides access to the Claude family of models, which are
+known for their strong reasoning and language capabilities. You need an API key
+from Anthropic to use this service.
+
+Use persona and style fields to further fine-tune translations. These will be
+used in a prompt for Claude and allow you to change the style of the
+translations.
+
+The service automatically uses :ref:`glossary`, see :ref:`glossary-mt`.
+
+.. seealso::
+
+   * `Anthropic API documentation <https://docs.anthropic.com/en/api/getting-started>`_
+   * `Anthropic Console <https://console.anthropic.com/>`_
+
+.. _Anthropic's Claude: https://www.anthropic.com/
+
+.. _mt-azure-openai:
+
+Azure OpenAI
+------------
+
+.. versionadded:: 5.8
+
+:Service ID: ``azure-openai``
+:Maximal score: 90
+:Advanced features: * :ref:`glossary-mt`
+:Configuration: +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
+                | ``source_language`` | Source language selection | Available choices:                                                                                                        |
+                |                     |                           |                                                                                                                           |
+                |                     |                           | ``auto`` -- Automatic selection                                                                                           |
+                |                     |                           |                                                                                                                           |
+                |                     |                           | ``source`` -- Component source language                                                                                   |
+                |                     |                           |                                                                                                                           |
+                |                     |                           | ``secondary`` -- Secondary language defined in project or component                                                       |
+                +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
+                | ``base_url``        | API URL                   |                                                                                                                           |
+                +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
+                | ``model``           | LLM model                 |                                                                                                                           |
+                +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
                 | ``persona``         | Translator persona        | Describe the persona of translator to improve the accuracy of the translation. For example: “You are a squirrel breeder.” |
                 +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
                 | ``style``           | Translator style          | Describe the style of translation. For example: “Use informal language.”                                                  |
+                +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
+                | ``key``             | API key                   |                                                                                                                           |
                 +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
                 | ``azure_endpoint``  | Azure OpenAI endpoint URL | Endpoint URL of the instance, e.g: https://my-instance.openai.azure.com.                                                  |
                 +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
@@ -219,7 +286,7 @@ This service uses an API and you need to obtain an ID and API key from Baidu to 
 
 .. seealso::
 
-    `Baidu Translate API <https://api.fanyi.baidu.com/api/trans/product/index>`_
+    `Baidu Translate API <https://fanyi-api.baidu.com/product/11>`_
 
 .. _mt-cyrtranslit:
 
@@ -255,6 +322,8 @@ DeepL
 
 :Service ID: ``deepl``
 :Maximal score: 91
+:Advanced features: * :ref:`placeables-mt`
+                    * :ref:`glossary-mt`
 :Configuration: +---------------------+---------------------------+-------------------------------------------------------------------------------------+
                 | ``source_language`` | Source language selection | Available choices:                                                                  |
                 |                     |                           |                                                                                     |
@@ -289,18 +358,12 @@ as well as a free and a paid version of the v2 API.
 ``https://api.deepl.com/v1/``
     Is meant for CAT tools and is usable with a per-user subscription.
 
-Previously Weblate was classified as a CAT tool by DeepL, so it was supposed to
-use the v1 API, but now is supposed to use the v2 API.
-Therefore it defaults to v2, and you can change it to v1 in case you have
-an existing CAT subscription and want Weblate to use that.
+.. note::
 
-The easiest way to find out which one to use is to open an URL like the
-following in your browser:
-
-https://api.deepl.com/v2/translate?text=Hello&target_lang=FR&auth_key=XXX
-
-Replace the XXX with your auth_key. If you receive a JSON object which contains
-"Bonjour", you have the correct URL; if not, try the other three.
+   Previously Weblate was classified as a CAT tool by DeepL, so it was supposed
+   to use the v1 API, but now is supposed to use the v2 API. Therefore it
+   defaults to v2, and you can change it to v1 in case you have an existing CAT
+   subscription and want Weblate to use that.
 
 Weblate supports DeepL formality, it will choose matching one based on the
 language (for example, there is ``de@formal`` and ``de@informal``).
@@ -314,7 +377,7 @@ The service automatically uses :ref:`glossary`, see :ref:`glossary-mt`.
 
    * `DeepL translator <https://www.deepl.com/translator>`_
    * `DeepL pricing <https://www.deepl.com/pro>`_
-   * `DeepL API documentation <https://developers.deepl.com/docs>`_
+   * `DeepL API documentation <https://developers.deepl.com/docs/getting-started/intro>`_
 
 .. _mt-glosbe:
 
@@ -369,7 +432,7 @@ billing in the Google API console.
 
 .. seealso::
 
-    `Google translate documentation <https://cloud.google.com/translate/docs>`_
+    `Google translate documentation <https://docs.cloud.google.com/translate/docs>`_
 
 .. _mt-google-translate-api-v3:
 
@@ -378,6 +441,8 @@ Google Cloud Translation Advanced
 
 :Service ID: ``google-translate-api-v3``
 :Maximal score: 90
+:Advanced features: * :ref:`placeables-mt`
+                    * :ref:`glossary-mt`
 :Configuration: +---------------------+---------------------------------------+----------------------------------------------------------------------------------------------------------+
                 | ``source_language`` | Source language selection             | Available choices:                                                                                       |
                 |                     |                                       |                                                                                                          |
@@ -408,8 +473,8 @@ In order to use this service, you first need to go through the following steps:
 4. `Setup Authentication.`_
 
 .. _Select or create a Cloud Platform project.: https://console.cloud.google.com/project
-.. _Enable billing for your project.: https://cloud.google.com/billing/docs/how-to/modify-project#enable_billing_for_a_project
-.. _Enable the Cloud Translation.: https://cloud.google.com/translate/docs/
+.. _Enable billing for your project.: https://docs.cloud.google.com/billing/docs/how-to/modify-project#enable_billing_for_a_project
+.. _Enable the Cloud Translation.: https://docs.cloud.google.com/translate/docs
 .. _Setup Authentication.: https://googleapis.dev/python/google-api-core/latest/auth.html
 
 
@@ -419,17 +484,17 @@ Optionally, you can configure the service to use :ref:`glossary` by setting up a
 2. `Set bucket location to "us-central1".`_
 3. `Grant 'Storage Admin' permission to the Service Account.`_
 
-.. _Create a Google Cloud bucket.: https://cloud.google.com/storage/docs/creating-buckets
-.. _Set bucket location to "us-central1".: https://cloud.google.com/translate/docs/migrate-to-v3#resources_projects_and_locations
-.. _Grant 'Storage Admin' permission to the Service Account.: https://cloud.google.com/translate/docs/access-control
+.. _Create a Google Cloud bucket.: https://docs.cloud.google.com/storage/docs/creating-buckets
+.. _Set bucket location to "us-central1".: https://docs.cloud.google.com/translate/docs/migrate-to-v3#resources_projects_and_locations
+.. _Grant 'Storage Admin' permission to the Service Account.: https://docs.cloud.google.com/translate/docs/access-control
 
 
 .. seealso::
 
-   * `Google translate documentation <https://cloud.google.com/translate/docs>`_
-   * `Authenticate to Cloud services using client libraries <https://cloud.google.com/docs/authentication/client-libraries>`_
-   * `Creating Google Translate project <https://cloud.google.com/appengine/docs/standard/nodejs/building-app/creating-project>`_
-   * `Google Cloud App Engine locations <https://cloud.google.com/appengine/docs/standard/locations>`_
+   * `Google translate documentation <https://docs.cloud.google.com/translate/docs>`_
+   * `Authenticate to Cloud services using client libraries <https://docs.cloud.google.com/docs/authentication/client-libraries>`_
+   * `Creating Google Translate project <https://docs.cloud.google.com/appengine/docs/standard/nodejs/building-app/creating-project>`_
+   * `Google Cloud App Engine locations <https://docs.cloud.google.com/appengine/docs/standard/locations>`_
 
 .. _mt-ibm:
 
@@ -474,6 +539,7 @@ and there are several mirrors available to use the API for free.
 
    * `LibreTranslate website <https://libretranslate.com/>`_
    * `LibreTranslate repository <https://github.com/LibreTranslate/LibreTranslate>`_
+   * :ref:`docker-libretranslate`
 
 .. _mt-microsoft-translator:
 
@@ -486,6 +552,8 @@ Azure AI Translator
 
 :Service ID: ``microsoft-translator``
 :Maximal score: 90
+:Advanced features: * :ref:`placeables-mt`
+                    * :ref:`glossary-mt`
 :Configuration: +---------------------+-------------------------------+---------------------------------------------------------------------------+
                 | ``source_language`` | Source language selection     | Available choices:                                                        |
                 |                     |                               |                                                                           |
@@ -569,6 +637,7 @@ ModernMT
 
 :Service ID: ``modernmt``
 :Maximal score: 90
+:Advanced features: * :ref:`glossary-mt`
 :Configuration: +---------------------+---------------------------+-----------------------------------------------------------------------+
                 | ``source_language`` | Source language selection | Available choices:                                                    |
                 |                     |                           |                                                                       |
@@ -655,6 +724,54 @@ This service uses an API, and you need to obtain key and secret from NetEase.
 
     `NetEase Sight Translation Platform <https://sight.youdao.com/>`_
 
+.. _mt-ollama:
+
+Ollama
+------
+
+.. versionadded:: 5.15
+
+:Service ID: ``ollama``
+:Maximal score: 90
+:Advanced features: * :ref:`glossary-mt`
+:Configuration: +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
+                | ``source_language`` | Source language selection | Available choices:                                                                                                        |
+                |                     |                           |                                                                                                                           |
+                |                     |                           | ``auto`` -- Automatic selection                                                                                           |
+                |                     |                           |                                                                                                                           |
+                |                     |                           | ``source`` -- Component source language                                                                                   |
+                |                     |                           |                                                                                                                           |
+                |                     |                           | ``secondary`` -- Secondary language defined in project or component                                                       |
+                +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
+                | ``base_url``        | API URL                   | Base URL of the Ollama API, localhost and port 11434 by default.                                                          |
+                +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
+                | ``model``           | Ollama model              | Name of the model described in Ollama catalogue.                                                                          |
+                +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
+                | ``persona``         | Translator persona        | Describe the persona of translator to improve the accuracy of the translation. For example: “You are a squirrel breeder.” |
+                +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
+                | ``style``           | Translator style          | Describe the style of translation. For example: “Use informal language.”                                                  |
+                +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
+
+Performs translation using `Ollama`_ models.
+
+The Ollama API allows for the use of open source models for translations
+either locally installed or remotely accessed via the `Ollama`_ service.
+Note that before configuring your models, you should have `Ollama installed`_
+and downloaded the models you wish to use.
+
+Use persona and style fields to further fine-tune translations. These will be
+used in a prompt for Ollama and allow you to change the style of the
+translations.
+
+The service automatically uses :ref:`glossary`, see :ref:`glossary-mt`.
+
+.. seealso::
+
+   * `Ollama models <https://ollama.com/search>`_
+
+.. _Ollama: https://ollama.com/
+.. _Ollama installed: https://ollama.com/download
+
 .. _mt-openai:
 
 OpenAI
@@ -664,6 +781,7 @@ OpenAI
 
 :Service ID: ``openai``
 :Maximal score: 90
+:Advanced features: * :ref:`glossary-mt`
 :Configuration: +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
                 | ``source_language`` | Source language selection | Available choices:                                                                                                        |
                 |                     |                           |                                                                                                                           |
@@ -685,25 +803,31 @@ OpenAI
                 |                     |                           |                                                                                                                           |
                 |                     |                           | ``auto`` -- Automatic selection                                                                                           |
                 |                     |                           |                                                                                                                           |
+                |                     |                           | ``gpt-5-nano`` -- GPT-5-nano                                                                                              |
+                |                     |                           |                                                                                                                           |
+                |                     |                           | ``gpt-5-mini`` -- GPT-5-mini                                                                                              |
+                |                     |                           |                                                                                                                           |
+                |                     |                           | ``gpt-5`` -- GPT-5                                                                                                        |
+                |                     |                           |                                                                                                                           |
+                |                     |                           | ``gpt-4.1-nano`` -- GPT-4.1-nano                                                                                          |
+                |                     |                           |                                                                                                                           |
+                |                     |                           | ``gpt-4.1-mini`` -- GPT-4.1-mini                                                                                          |
+                |                     |                           |                                                                                                                           |
+                |                     |                           | ``gpt-4.1`` -- GPT-4.1                                                                                                    |
+                |                     |                           |                                                                                                                           |
                 |                     |                           | ``gpt-4o-mini`` -- GPT-4o mini                                                                                            |
                 |                     |                           |                                                                                                                           |
                 |                     |                           | ``gpt-4o`` -- GPT-4o                                                                                                      |
                 |                     |                           |                                                                                                                           |
-                |                     |                           | ``o3-mini`` -- OpenAI o3-mini                                                                                             |
+                |                     |                           | ``o3-mini`` -- o3-mini                                                                                                    |
                 |                     |                           |                                                                                                                           |
-                |                     |                           | ``o3`` -- OpenAI o3                                                                                                       |
+                |                     |                           | ``o3`` -- o3                                                                                                              |
                 |                     |                           |                                                                                                                           |
-                |                     |                           | ``o1-mini`` -- OpenAI o1-mini                                                                                             |
+                |                     |                           | ``o1-mini`` -- o1-mini                                                                                                    |
                 |                     |                           |                                                                                                                           |
-                |                     |                           | ``o1`` -- OpenAI o1                                                                                                       |
+                |                     |                           | ``o1`` -- o1                                                                                                              |
                 |                     |                           |                                                                                                                           |
-                |                     |                           | ``gpt-4.5-preview`` -- GPT-4.5                                                                                            |
-                |                     |                           |                                                                                                                           |
-                |                     |                           | ``gpt-4-turbo`` -- GPT-4 Turbo                                                                                            |
-                |                     |                           |                                                                                                                           |
-                |                     |                           | ``gpt-4`` -- GPT-4                                                                                                        |
-                |                     |                           |                                                                                                                           |
-                |                     |                           | ``gpt-3.5-turbo`` -- GPT-3.5 Turbo                                                                                        |
+                |                     |                           | ``o1-pro`` -- o1-pro                                                                                                      |
                 |                     |                           |                                                                                                                           |
                 |                     |                           | ``custom`` -- Custom model                                                                                                |
                 +---------------------+---------------------------+---------------------------------------------------------------------------------------------------------------------------+
@@ -825,33 +949,14 @@ tmserver
                 | ``url``             | API URL                   |                                                                     |
                 +---------------------+---------------------------+---------------------------------------------------------------------+
 
-You can run your own translation memory server by using the one bundled with
-Translate-toolkit and let Weblate talk to it. You can also use it with an
-amaGama server, which is an enhanced version of tmserver.
+You can run your own translation memory server by using a tmserver protocol.
 
-1. First you will want to import some data to the translation memory:
+* The original :program:`tmserver` was bundled with the translate-toolkit.
+* amaGama server is an enhanced version of tmserver.
 
-.. code-block:: sh
+.. note::
 
-    build_tmdb -d /var/lib/tm/db -s en -t cs locale/cs/LC_MESSAGES/django.po
-    build_tmdb -d /var/lib/tm/db -s en -t de locale/de/LC_MESSAGES/django.po
-    build_tmdb -d /var/lib/tm/db -s en -t fr locale/fr/LC_MESSAGES/django.po
-
-2. Start tmserver to listen to your requests:
-
-.. code-block:: sh
-
-    tmserver -d /var/lib/tm/db
-
-3. Configure Weblate to talk to it, the default URL is ``http://localhost:8888/tmserver/``.
-
-.. seealso::
-
-   * :doc:`tt:commands/tmserver`
-   * :ref:`amagama:installation`
-   * :doc:`virtaal:amagama`
-   * `Amagama Translation Memory <https://amagama.translatehouse.org/>`_
-
+   There currently does not seem to be a maintained server for this.
 
 .. _mt-weblate:
 
@@ -973,15 +1078,21 @@ This service uses an API, and you need to obtain an ID and an API key from Youda
 
     `Youdao Zhiyun Natural Language Translation Service <https://ai.youdao.com/product-fanyi-text.s>`_
 
+.. _custom-machinery:
+
 Custom machine translation
 --------------------------
 
-You can also implement your own machine translation services using a few lines of
-Python code. This example implements machine translation in a fixed list of
-languages using ``dictionary`` Python module:
+You can also implement your own machine translation services using a few lines
+of Python code. Place the code in a module Weblate can import (see
+:ref:`custom-module` or :ref:`docker-python-override`) and add fully qualified
+class name to :setting:`WEBLATE_MACHINERY`.
 
 .. literalinclude:: ../../weblate/examples/mt_service.py
     :language: python
 
-You can list your own class in :setting:`WEBLATE_MACHINERY` and Weblate
-will start using that.
+.. seealso::
+
+   * :ref:`custom-modules`
+   * :ref:`custom-module`
+   * :ref:`docker-python-override`

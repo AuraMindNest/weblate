@@ -6,11 +6,11 @@
 from __future__ import annotations
 
 import os
-from distutils import log  # type: ignore[attr-defined]
-from distutils.core import Command  # type: ignore[import-not-found]
 from glob import glob
 from itertools import chain
 
+from distutils import log  # type: ignore[attr-defined]
+from distutils.core import Command  # type: ignore[import-not-found]
 from setuptools import setup
 from setuptools.command.build import build
 from setuptools.command.build_py import build_py
@@ -31,7 +31,7 @@ class WeblateBuildPy(build_py):
 
 class BuildMo(Command):
     description = "update MO files to match PO"
-    user_options: list[str] = []
+    user_options: list[str] = []  # noqa: RUF012
 
     def initialize_options(self) -> None:
         self.build_base = None
@@ -53,7 +53,7 @@ class WeblateBuild(build):
     """Override the default build with new subcommands."""
 
     # The build_mo has to be before build_data
-    sub_commands = [
+    sub_commands = [  # noqa: RUF012
         ("build_mo", lambda self: True),  # noqa: ARG005
         *build.sub_commands,
     ]

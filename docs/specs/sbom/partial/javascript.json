@@ -2,7 +2,7 @@
   "$schema": "http://cyclonedx.org/schema/bom-1.5.schema.json",
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
-  "serialNumber": "urn:uuid:ab9caa2f-c13b-549b-8252-7d70cf6f8f81",
+  "serialNumber": "urn:uuid:debb6fa7-ff7e-5237-8c70-a8ed67de5d89",
   "version": 1,
   "metadata": {
     "lifecycles": [
@@ -18,13 +18,13 @@
       }
     ],
     "component": {
-      "bom-ref": "weblate-client-libs@5.13.3",
+      "bom-ref": "weblate-client-libs@5.16.1",
       "type": "application",
       "name": "client",
-      "version": "5.13.3",
+      "version": "5.16.1",
       "scope": "required",
       "description": "Used to manage 3rd party libraries for the  client side.",
-      "purl": "pkg:npm/weblate-client-libs@5.13.3",
+      "purl": "pkg:npm/weblate-client-libs@5.16.1",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -172,14 +172,14 @@
       ]
     },
     {
-      "bom-ref": "@sentry-internal/browser-utils@10.10.0",
+      "bom-ref": "@sentry-internal/browser-utils@10.39.0",
       "type": "library",
       "name": "@sentry-internal/browser-utils",
-      "version": "10.10.0",
+      "version": "10.39.0",
       "scope": "required",
       "author": "Sentry",
       "description": "Browser Utilities for all Sentry JavaScript SDKs",
-      "purl": "pkg:npm/%40sentry-internal/browser-utils@10.10.0",
+      "purl": "pkg:npm/%40sentry-internal/browser-utils@10.39.0",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -189,7 +189,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/@sentry-internal/browser-utils/-/browser-utils-10.10.0.tgz"
+          "url": "https://registry.npmjs.org/@sentry-internal/browser-utils/-/browser-utils-10.39.0.tgz"
         },
         {
           "type": "vcs",
@@ -207,7 +207,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "db4f5037dbec401c09712fbd0d4ec1e3297d99be0ea82b7691d2f72d80efaacb8e769202a707e8c1d2b744c9fcdb946e7f828b25ad0a1ccd6c7106d764273897"
+          "content": "5ba58e0e89cc1a2235dc0cf93fb8ddfe6da58ff269232b952a0ef01385fe61d94c7a12eca40bfa23b8111383814ae992d7866375a603a43fe5c2d9c1c0a03370"
         }
       ],
       "licenses": [
@@ -219,14 +219,14 @@
       ]
     },
     {
-      "bom-ref": "@sentry-internal/feedback@10.10.0",
+      "bom-ref": "@sentry-internal/feedback@10.39.0",
       "type": "library",
       "name": "@sentry-internal/feedback",
-      "version": "10.10.0",
+      "version": "10.39.0",
       "scope": "required",
       "author": "Sentry",
       "description": "Sentry SDK integration for user feedback",
-      "purl": "pkg:npm/%40sentry-internal/feedback@10.10.0",
+      "purl": "pkg:npm/%40sentry-internal/feedback@10.39.0",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -236,7 +236,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/@sentry-internal/feedback/-/feedback-10.10.0.tgz"
+          "url": "https://registry.npmjs.org/@sentry-internal/feedback/-/feedback-10.39.0.tgz"
         },
         {
           "type": "vcs",
@@ -254,7 +254,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "a1253817f79b3ac240f44a1fd267bd84ba520d349e9699c463a826854f6c1f2206f94ee1251b827de1880b140ecc1b6d79ea5646101a644bf8b3d641877883db"
+          "content": "7115e698378eaf917356c04d44b53858312e0b77e1b83d17577eb61169780c8dd70466a8f2e91ab9e29c2c82a2739599c7ab978a68d6c3f5099832e0c5e0aa92"
         }
       ],
       "licenses": [
@@ -266,14 +266,14 @@
       ]
     },
     {
-      "bom-ref": "@sentry-internal/replay@10.10.0",
+      "bom-ref": "@sentry-internal/replay@10.39.0",
       "type": "library",
       "name": "@sentry-internal/replay",
-      "version": "10.10.0",
+      "version": "10.39.0",
       "scope": "required",
       "author": "Sentry",
       "description": "User replays for Sentry",
-      "purl": "pkg:npm/%40sentry-internal/replay@10.10.0",
+      "purl": "pkg:npm/%40sentry-internal/replay@10.39.0",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -283,7 +283,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/@sentry-internal/replay/-/replay-10.10.0.tgz"
+          "url": "https://registry.npmjs.org/@sentry-internal/replay/-/replay-10.39.0.tgz"
         },
         {
           "type": "vcs",
@@ -301,7 +301,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "b0a15858169fb74113ea0779074a53851ea06138da5040970b35409d2631cbae1adbf3caea557ddc1b670350b6437e1886fff4b1c77221b66d7d39d2b0483052"
+          "content": "a1b66860ead47f1218047926b4fa48b51744dfc56ecc5d552314a067c31bb6affd52f09687e78e695594dacb4dfdc56ed4a62e617d2743006f74ddbc2facbf24"
         }
       ],
       "licenses": [
@@ -313,14 +313,14 @@
       ]
     },
     {
-      "bom-ref": "@sentry-internal/replay-canvas@10.10.0",
+      "bom-ref": "@sentry-internal/replay-canvas@10.39.0",
       "type": "library",
       "name": "@sentry-internal/replay-canvas",
-      "version": "10.10.0",
+      "version": "10.39.0",
       "scope": "required",
       "author": "Sentry",
       "description": "Replay canvas integration",
-      "purl": "pkg:npm/%40sentry-internal/replay-canvas@10.10.0",
+      "purl": "pkg:npm/%40sentry-internal/replay-canvas@10.39.0",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -330,7 +330,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/@sentry-internal/replay-canvas/-/replay-canvas-10.10.0.tgz"
+          "url": "https://registry.npmjs.org/@sentry-internal/replay-canvas/-/replay-canvas-10.39.0.tgz"
         },
         {
           "type": "vcs",
@@ -348,7 +348,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "98904d0741016c4defccbee581df250e8596851691c315dd2382a4c77af7f6edbed6a4dd24fff11db2438a1c9e9826b0ee044bd4547f182e3824b8a9cc47e429"
+          "content": "4d3897d1758272a4ea14626311960e6e4f778ffb0999772a3f372ed1c37698890a9e76870d8df0ef8487642b212aa22bd0039076dd470cd6b7eacdd309db7427"
         }
       ],
       "licenses": [
@@ -360,14 +360,14 @@
       ]
     },
     {
-      "bom-ref": "@sentry/browser@10.10.0",
+      "bom-ref": "@sentry/browser@10.39.0",
       "type": "library",
       "name": "@sentry/browser",
-      "version": "10.10.0",
+      "version": "10.39.0",
       "scope": "required",
       "author": "Sentry",
       "description": "Official Sentry SDK for browsers",
-      "purl": "pkg:npm/%40sentry/browser@10.10.0",
+      "purl": "pkg:npm/%40sentry/browser@10.39.0",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -377,7 +377,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/@sentry/browser/-/browser-10.10.0.tgz"
+          "url": "https://registry.npmjs.org/@sentry/browser/-/browser-10.39.0.tgz"
         },
         {
           "type": "vcs",
@@ -395,7 +395,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "49306cdbd99e524d02be5b883975e79d1191b632ac24df5f0074b7754bb718c8e6a30e2bc4a06205b030a0f61fb4055d7ef1b2a53ef340243e2b7d1d6d1c69d2"
+          "content": "239d16ff53c3256caa80dac6b9f1a10580a698edc16f5e7d9f1d94b766caa15bde4df807fe12c4b43c96d241e8f05bb8e78996fae9325df5382f8b3e901f5a6b"
         }
       ],
       "licenses": [
@@ -407,14 +407,14 @@
       ]
     },
     {
-      "bom-ref": "@sentry/core@10.10.0",
+      "bom-ref": "@sentry/core@10.39.0",
       "type": "library",
       "name": "@sentry/core",
-      "version": "10.10.0",
+      "version": "10.39.0",
       "scope": "required",
       "author": "Sentry",
       "description": "Base implementation for all Sentry JavaScript SDKs",
-      "purl": "pkg:npm/%40sentry/core@10.10.0",
+      "purl": "pkg:npm/%40sentry/core@10.39.0",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -424,7 +424,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/@sentry/core/-/core-10.10.0.tgz"
+          "url": "https://registry.npmjs.org/@sentry/core/-/core-10.39.0.tgz"
         },
         {
           "type": "vcs",
@@ -442,7 +442,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "e0ed4eea6cbfbd813df1981f12e2c4c0e3ae1f3aaacdf053e88751a35ca240ceff0177264a5d07fe4e0726d5c28824e21e6faf784b930c11e9d064199a921bb4"
+          "content": "c422e2a76981c02751aef5c7b551142d7d0d7df51361964184450686dd1614bf8635d350ee098138639cce1665adfda180516d0ced1fb35c623fd6eaab9a2b11"
         }
       ],
       "licenses": [
@@ -501,14 +501,14 @@
       ]
     },
     {
-      "bom-ref": "altcha@2.2.2",
+      "bom-ref": "altcha@2.3.0",
       "type": "library",
       "name": "altcha",
-      "version": "2.2.2",
+      "version": "2.3.0",
       "scope": "required",
       "author": "Daniel Regeci",
       "description": "Privacy-first CAPTCHA widget, compliant with global regulations (GDPR/HIPAA/CCPA/LGDP/DPDPA/PIPL) and WCAG accessible. No tracking, self-verifying.",
-      "purl": "pkg:npm/altcha@2.2.2",
+      "purl": "pkg:npm/altcha@2.3.0",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -518,7 +518,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/altcha/-/altcha-2.2.2.tgz"
+          "url": "https://registry.npmjs.org/altcha/-/altcha-2.3.0.tgz"
         },
         {
           "type": "vcs",
@@ -536,7 +536,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "3705006abd98f17c28d602fa3ab15ddc05658722b16056aa3c900901bb751532282b20f1d97ecd20712ea367aac67c4c13b2b5404b05eaed7abaae7084ed33f0"
+          "content": "be5f08d1d42f49007bfccc74f57b96675f8b7523fbbc475ae8e2db83d91443664ed8b4fb333814c8b2bb222a6cf86015e9cd27b55712d5758eaa110fa706c385"
         }
       ],
       "licenses": [
@@ -1018,100 +1018,6 @@
       ]
     },
     {
-      "bom-ref": "source-code-pro@2.38.0",
-      "type": "library",
-      "name": "source-code-pro",
-      "version": "2.38.0",
-      "scope": "required",
-      "author": "Paul D. Hunt",
-      "description": "Source Code Pro is a set of OpenType fonts that have been designed to work well in user interface (UI) environments.",
-      "purl": "pkg:npm/source-code-pro@2.38.0",
-      "properties": [
-        {
-          "name": "cdx:npm:package:path",
-          "value": "node_modules/source-code-pro"
-        }
-      ],
-      "externalReferences": [
-        {
-          "type": "distribution",
-          "url": "https://registry.npmjs.org/source-code-pro/-/source-code-pro-2.38.0.tgz"
-        },
-        {
-          "type": "vcs",
-          "url": "git+https://github.com/adobe-fonts/source-code-pro.git#release"
-        },
-        {
-          "type": "website",
-          "url": "https://adobe-fonts.github.io/source-code-pro"
-        },
-        {
-          "type": "issue-tracker",
-          "url": "https://github.com/adobe-fonts/source-code-pro/issues"
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-512",
-          "content": "24c5eeee5dd7acb4441b5ede13063ae80346f7bd7a593bba39e36f65f44a40a00d12f6d21110d98e4e406131de57aa3040d3d04de8a25b7ae2d8ebbddd7146be"
-        }
-      ],
-      "licenses": [
-        {
-          "license": {
-            "id": "OFL-1.1"
-          }
-        }
-      ]
-    },
-    {
-      "bom-ref": "source-sans@3.46.0",
-      "type": "library",
-      "name": "source-sans",
-      "version": "3.46.0",
-      "scope": "required",
-      "author": "Paul D. Hunt",
-      "description": "Source Sans is a set of OpenType fonts that have been designed to work well in user interface (UI) environments.",
-      "purl": "pkg:npm/source-sans@3.46.0",
-      "properties": [
-        {
-          "name": "cdx:npm:package:path",
-          "value": "node_modules/source-sans"
-        }
-      ],
-      "externalReferences": [
-        {
-          "type": "distribution",
-          "url": "https://registry.npmjs.org/source-sans/-/source-sans-3.46.0.tgz"
-        },
-        {
-          "type": "vcs",
-          "url": "git+https://github.com/adobe-fonts/source-sans.git#release"
-        },
-        {
-          "type": "website",
-          "url": "https://adobe-fonts.github.io/source-sans"
-        },
-        {
-          "type": "issue-tracker",
-          "url": "https://github.com/adobe-fonts/source-sans/issues"
-        }
-      ],
-      "hashes": [
-        {
-          "alg": "SHA-512",
-          "content": "6d50b6617e15362bf9bcc732efb74bd172ac369efde1385fca736cafe16a480c24f13186d2966c83b794422eb21f069104c56667701a7f8158e3a7712081a0b2"
-        }
-      ],
-      "licenses": [
-        {
-          "license": {
-            "id": "OFL-1.1"
-          }
-        }
-      ]
-    },
-    {
       "bom-ref": "tributejs@5.1.3",
       "type": "library",
       "name": "tributejs",
@@ -1161,12 +1067,12 @@
   ],
   "dependencies": [
     {
-      "ref": "weblate-client-libs@5.13.3",
+      "ref": "weblate-client-libs@5.16.1",
       "dependsOn": [
         "@popperjs/core@2.11.8",
-        "@sentry/browser@10.10.0",
+        "@sentry/browser@10.39.0",
         "@tarekraafat/autocomplete.js@10.2.9",
-        "altcha@2.2.2",
+        "altcha@2.3.0",
         "autosize@6.0.1",
         "bootstrap@5.3.8",
         "daterangepicker@3.1.0",
@@ -1177,8 +1083,6 @@
         "multi.js@0.5.3",
         "prismjs@1.30.0",
         "slugify@1.6.6",
-        "source-code-pro@2.38.0",
-        "source-sans@3.46.0",
         "tributejs@5.1.3"
       ]
     },
@@ -1195,43 +1099,43 @@
       "dependsOn": []
     },
     {
-      "ref": "@sentry-internal/browser-utils@10.10.0",
+      "ref": "@sentry-internal/browser-utils@10.39.0",
       "dependsOn": [
-        "@sentry/core@10.10.0"
+        "@sentry/core@10.39.0"
       ]
     },
     {
-      "ref": "@sentry-internal/feedback@10.10.0",
+      "ref": "@sentry-internal/feedback@10.39.0",
       "dependsOn": [
-        "@sentry/core@10.10.0"
+        "@sentry/core@10.39.0"
       ]
     },
     {
-      "ref": "@sentry-internal/replay@10.10.0",
+      "ref": "@sentry-internal/replay@10.39.0",
       "dependsOn": [
-        "@sentry-internal/browser-utils@10.10.0",
-        "@sentry/core@10.10.0"
+        "@sentry-internal/browser-utils@10.39.0",
+        "@sentry/core@10.39.0"
       ]
     },
     {
-      "ref": "@sentry-internal/replay-canvas@10.10.0",
+      "ref": "@sentry-internal/replay-canvas@10.39.0",
       "dependsOn": [
-        "@sentry-internal/replay@10.10.0",
-        "@sentry/core@10.10.0"
+        "@sentry-internal/replay@10.39.0",
+        "@sentry/core@10.39.0"
       ]
     },
     {
-      "ref": "@sentry/browser@10.10.0",
+      "ref": "@sentry/browser@10.39.0",
       "dependsOn": [
-        "@sentry-internal/browser-utils@10.10.0",
-        "@sentry-internal/feedback@10.10.0",
-        "@sentry-internal/replay@10.10.0",
-        "@sentry-internal/replay-canvas@10.10.0",
-        "@sentry/core@10.10.0"
+        "@sentry-internal/browser-utils@10.39.0",
+        "@sentry-internal/feedback@10.39.0",
+        "@sentry-internal/replay@10.39.0",
+        "@sentry-internal/replay-canvas@10.39.0",
+        "@sentry/core@10.39.0"
       ]
     },
     {
-      "ref": "@sentry/core@10.10.0",
+      "ref": "@sentry/core@10.39.0",
       "dependsOn": []
     },
     {
@@ -1239,7 +1143,7 @@
       "dependsOn": []
     },
     {
-      "ref": "altcha@2.2.2",
+      "ref": "altcha@2.3.0",
       "dependsOn": [
         "@altcha/crypto@0.0.1",
         "@rollup/rollup-linux-x64-gnu@4.18.0"
@@ -1290,14 +1194,6 @@
     },
     {
       "ref": "slugify@1.6.6",
-      "dependsOn": []
-    },
-    {
-      "ref": "source-code-pro@2.38.0",
-      "dependsOn": []
-    },
-    {
-      "ref": "source-sans@3.46.0",
       "dependsOn": []
     },
     {

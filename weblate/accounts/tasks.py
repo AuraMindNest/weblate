@@ -32,6 +32,9 @@ if TYPE_CHECKING:
 
 LOGGER = logging.getLogger("weblate.smtp")
 
+# The batch size needs to be below exim's default connection_max_messages = 500.
+EMAIL_BATCH_SIZE = 200
+
 
 class OutgoingEmail(TypedDict):
     address: str
@@ -98,7 +101,7 @@ class NotificationFactory:
 
     def send_queued(self) -> None:
         if self.outgoing:
-            send_mails.delay(self.outgoing)
+            queue_mails(self.outgoing)
             self.outgoing.clear()
 
 
@@ -111,6 +114,7 @@ def notify_changes(change_ids: list[int]) -> None:
     factory = NotificationFactory()
 
     for change in changes.iterator(chunk_size=200):
+        change.fill_in_prefetched()
         for notification in factory.for_action(change.action):
             notification.notify_immediate(change)
         factory.send_queued()
@@ -125,7 +129,7 @@ def notify_digest(method) -> None:
         notification = notification_cls(outgoing)
         getattr(notification, method)()
     if outgoing:
-        send_mails.delay(outgoing)
+        queue_mails(outgoing)
 
 
 @app.task(trail=False)
@@ -187,6 +191,12 @@ def monkey_patch_smtp_logging(connection):
             backend.data = MethodType(weblate_logging_smtp_data, backend)  # type: ignore[method-assign]
 
     return connection
+
+
+def queue_mails(mails: list[OutgoingEmail]) -> None:
+    """Enqueue e-mails for delivery in reasonable batches."""
+    for offset in range(0, len(mails), EMAIL_BATCH_SIZE):
+        send_mails.delay(mails[offset : offset + EMAIL_BATCH_SIZE])
 
 
 @app.task(

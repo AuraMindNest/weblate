@@ -4,12 +4,18 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
+from typing import TYPE_CHECKING
+
 from django.conf import settings
 from django.contrib.auth.backends import ModelBackend
 from django.db.models.signals import pre_save
 from django.dispatch.dispatcher import receiver
 
-from weblate.auth.models import AuthenticatedHttpRequest, User
+from weblate.auth.models import User
+
+if TYPE_CHECKING:
+    from weblate.auth.models import AuthenticatedHttpRequest
 
 
 def try_get_user(username, list_all=False):
@@ -30,12 +36,11 @@ class WeblateUserBackend(ModelBackend):
         if username == settings.ANONYMOUS_USER_NAME or username is None:
             return None
 
-        try:
+        with suppress(User.DoesNotExist, User.MultipleObjectsReturned):
             user = try_get_user(username)
             if user.check_password(password):
                 return user
-        except (User.DoesNotExist, User.MultipleObjectsReturned):
-            pass
+
         return None
 
     def get_user(self, user_id):

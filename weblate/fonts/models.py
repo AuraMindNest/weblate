@@ -45,7 +45,9 @@ class Font(models.Model, UserDisplayMixin):
     )
 
     class Meta:
-        unique_together = [("family", "style", "project")]
+        unique_together = [  # noqa: RUF012
+            ("family", "style", "project")
+        ]
         verbose_name = "Font"
         verbose_name_plural = "Fonts"
 
@@ -56,6 +58,7 @@ class Font(models.Model, UserDisplayMixin):
         super().__init__(*args, **kwargs)
         self.field_errors: dict[str, list[ValidationError]] = {}
 
+    # pylint: disable-next=arguments-differ
     def save(
         self, force_insert=False, force_update=False, using=None, update_fields=None
     ) -> None:
@@ -122,7 +125,9 @@ class FontGroup(models.Model):
     objects = FontGroupQuerySet.as_manager()
 
     class Meta:
-        unique_together = [("project", "name")]
+        unique_together = [  # noqa: RUF012
+            ("project", "name")
+        ]
         verbose_name = "Font group"
         verbose_name_plural = "Font groups"
 
@@ -149,7 +154,9 @@ class FontOverride(models.Model):
     )
 
     class Meta:
-        unique_together = [("group", "language")]
+        unique_together = [  # noqa: RUF012
+            ("group", "language")
+        ]
         verbose_name = "Font override"
         verbose_name_plural = "Font overrides"
 

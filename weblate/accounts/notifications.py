@@ -7,14 +7,14 @@ from __future__ import annotations
 from collections import defaultdict
 from copy import copy
 from email.utils import formataddr
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 from uuid import uuid4
 
 from dateutil.relativedelta import relativedelta
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.signing import TimestampSigner
-from django.db.models import IntegerChoices, Q, QuerySet
+from django.db.models import IntegerChoices, Q
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
@@ -25,26 +25,20 @@ from django.utils.translation import (
     override,
     pgettext_lazy,
 )
-from siphashc import siphash
 
-from weblate.accounts.tasks import OutgoingEmail, send_mails
+from weblate.accounts.tasks import EMAIL_BATCH_SIZE, queue_mails
 from weblate.auth.models import User
 from weblate.lang.models import Language
 from weblate.logger import LOGGER
 from weblate.trans.actions import ActionEvents
 from weblate.trans.models import (
     Alert,
-    Announcement,
     Change,
-    Comment,
-    Component,
-    Project,
     Translation,
-    Unit,
 )
 from weblate.utils.errors import report_error
 from weblate.utils.markdown import get_mention_users
-from weblate.utils.ratelimit import rate_limit
+from weblate.utils.ratelimit import rate_limit_notify
 from weblate.utils.site import get_site_domain, get_site_url
 from weblate.utils.stats import prefetch_stats
 from weblate.utils.version import USER_AGENT
@@ -52,9 +46,18 @@ from weblate.utils.version import USER_AGENT
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from django.db.models import QuerySet
     from django_stubs_ext import StrOrPromise
 
     from weblate.accounts.models import Subscription
+    from weblate.accounts.tasks import OutgoingEmail
+    from weblate.trans.models import (
+        Announcement,
+        Comment,
+        Component,
+        Project,
+        Unit,
+    )
 
 
 class NotificationFrequency(IntegerChoices):
@@ -85,7 +88,7 @@ def get_email_headers(notification: str) -> dict[str, str]:
     }
 
 
-def register_notification(handler: type[Notification]):
+def register_notification(handler: type[Notification]) -> type[Notification]:
     """Register notification handler."""
     NOTIFICATIONS.append(handler)
     for action in handler.actions:
@@ -112,13 +115,14 @@ def dispatch_changes_notifications(changes: Iterable[Change]) -> None:
 class Notification:
     actions: Iterable[int] = ()
     verbose: StrOrPromise = ""
+    verbose_plural: StrOrPromise = ""
     template_name: str = ""
     digest_template: str = "digest"
     filter_languages: bool = False
     ignore_watched: bool = False
     any_watched: bool = False
     required_attr: str | None = None
-    skip_when_notify: list[Any] = []
+    skip_when_notify: ClassVar[set[type[Notification]]] = set()
 
     def __init__(
         self,
@@ -209,9 +213,11 @@ class Notification:
 
             yield subscription
 
-    def missing_required_attrs(self, change) -> bool:
+    def missing_required_attrs(self, change: Change | None) -> bool:
         if not self.required_attr:
             return False
+        if change is None:
+            return True
         try:
             return getattr(change, self.required_attr) is None
         except ObjectDoesNotExist:
@@ -250,8 +256,8 @@ class Notification:
             last_user = user
             if subscription.frequency != frequency:
                 continue
-            if frequency == NotificationFrequency.FREQ_INSTANT and self.should_skip(
-                user, change
+            if frequency == NotificationFrequency.FREQ_INSTANT and (
+                change is None or self.should_skip(user, change)
             ):
                 continue
             last_user.current_subscription = subscription
@@ -260,12 +266,14 @@ class Notification:
     def send(
         self, address: str, subject: str, body: str, headers: dict[str, str]
     ) -> None:
-        encoded_email = siphash("Weblate notifier", address)
-        if rate_limit(f"notify:rate:{encoded_email}", 1000, 86400):
+        is_blocked, reason = rate_limit_notify(address)
+
+        if is_blocked:
             LOGGER.info(
-                "discarding notification %s to %s after sending too many",
+                "discarding notification %s to %s due to rate limit: %s",
                 self.get_name(),
                 address,
+                reason,
             )
         else:
             self.outgoing.append(
@@ -276,9 +284,9 @@ class Notification:
                     "headers": headers,
                 }
             )
-            # Avoid building huge queue of notifications
-            if len(self.outgoing) > 200:
-                send_mails.delay(self.outgoing)
+            # Avoid building huge queue of notifications in memory
+            if len(self.outgoing) > EMAIL_BATCH_SIZE:
+                queue_mails(self.outgoing)
                 self.outgoing.clear()
 
     def render_template(self, suffix: str, context: dict, digest: bool = False) -> str:
@@ -286,6 +294,14 @@ class Notification:
         base_name = self.digest_template if digest else self.template_name
         template_name = f"mail/{base_name}{suffix}"
         return render_to_string(template_name, context).strip()
+
+    def get_notification_name(self, num_changes: int) -> StrOrPromise:
+        # We don't use proper ngettext here to simplify the code and
+        # in most languages the specific plural rules won't apply for
+        # subject rendering.
+        if num_changes > 1:
+            return self.verbose_plural
+        return self.verbose
 
     def get_context(
         self,
@@ -302,7 +318,9 @@ class Notification:
             "LANGUAGE_BIDI": get_language_bidi(),
             "current_site_url": get_site_url(),
             "site_title": settings.SITE_TITLE,
-            "notification_name": self.verbose,
+            "notification_name": self.get_notification_name(
+                len(changes) if changes is not None else 0
+            ),
         }
         if changes is not None:
             result["changes"] = changes
@@ -310,9 +328,7 @@ class Notification:
             result["changes"] = summaries
         if subscription is not None:
             result["unsubscribe_url"] = get_site_url(
-                "{}?i={}".format(
-                    reverse("unsubscribe"), TimestampSigner().sign(f"{subscription.pk}")
-                )
+                f"{reverse('unsubscribe')}?i={TimestampSigner().sign(f'{subscription.pk}')}"
             )
             result["subscription_user"] = subscription.user
         else:
@@ -370,7 +386,12 @@ class Notification:
         return headers
 
     def send_immediate(
-        self, language, email, change, extracontext=None, subscription=None
+        self,
+        language: str | None,
+        email: str,
+        change: Change,
+        extracontext: dict | None = None,
+        subscription: Subscription | None = None,
     ) -> None:
         with override("en" if language is None else language):
             context = self.get_context(change, subscription, extracontext)
@@ -389,15 +410,15 @@ class Notification:
                 self.get_headers(context),
             )
 
-    def _convert_change_skip(self, change):
+    def _convert_change_skip(self, change: Change) -> Change:
         return change
 
-    def should_skip(self, user: User, change):
+    def should_skip(self, user: User, change: Change) -> bool:
         if not self.skip_when_notify:
             return False
         if self.child_notify is None:
             self.child_notify = [
-                notify_class(None) for notify_class in self.skip_when_notify
+                notify_class([]) for notify_class in self.skip_when_notify
             ]
         converted_change = self._convert_change_skip(change)
         return any(
@@ -411,7 +432,7 @@ class Notification:
             for child_notify in self.child_notify
         )
 
-    def notify_immediate(self, change) -> None:
+    def notify_immediate(self, change: Change) -> None:
         for user in self.get_users(NotificationFrequency.FREQ_INSTANT, change):
             if change.project is None or user.can_access_project(change.project):
                 self.send_immediate(
@@ -476,6 +497,7 @@ class Notification:
         notifications: dict[int, list[Change]] = defaultdict(list)
         users = {}
         for change in changes:
+            change.fill_in_prefetched()
             for user in self.get_users(frequency, change):
                 if change.project is None or user.can_access_project(change.project):
                     notifications[user.pk].append(change)
@@ -495,10 +517,13 @@ class Notification:
                 overlimit=overlimit,
             )
 
-    def filter_changes(self, **kwargs) -> QuerySet[Change]:
+    def filter_changes(
+        self, days: int = 0, weeks: int = 0, months: int = 0
+    ) -> QuerySet[Change]:
         return Change.objects.filter(
             action__in=self.actions,
-            timestamp__gte=timezone.now() - relativedelta(**kwargs),
+            timestamp__gte=timezone.now()
+            - relativedelta(days=days, weeks=weeks, months=months),
         ).prefetch_for_render()
 
     def notify_daily(self) -> None:
@@ -529,6 +554,9 @@ class RepositoryNotification(Notification):
     verbose = pgettext_lazy(
         "Notification name", "Operation was performed in the repository"
     )
+    verbose_plural = pgettext_lazy(
+        "Notification name", "Operations were performed in the repository"
+    )
     template_name = "repository_operation"
 
 
@@ -539,6 +567,9 @@ class LockNotification(Notification):
         ActionEvents.UNLOCK,
     )
     verbose = pgettext_lazy("Notification name", "Component was locked or unlocked")
+    verbose_plural = pgettext_lazy(
+        "Notification name", "Components were locked or unlocked"
+    )
     template_name = "component_lock"
 
 
@@ -556,6 +587,7 @@ class LicenseNotification(Notification):
 class ParseErrorNotification(Notification):
     actions = (ActionEvents.PARSE_ERROR,)
     verbose = pgettext_lazy("Notification name", "Parse error occurred")
+    verbose_plural = pgettext_lazy("Notification name", "Parse errors occurred")
     template_name = "parse_error"
 
     def get_context(
@@ -587,6 +619,9 @@ class NewStringNotificaton(Notification):
         ActionEvents.SOURCE_CHANGE,
     )
     verbose = pgettext_lazy("Notification name", "String is available for translation")
+    verbose_plural = pgettext_lazy(
+        "Notification name", "Strings are available for translation"
+    )
     template_name = "new_string"
     filter_languages = True
     required_attr = "unit"
@@ -598,6 +633,9 @@ class NewContributorNotificaton(Notification):
     verbose = pgettext_lazy(
         "Notification name", "Contributor made their first translation"
     )
+    verbose_plural = pgettext_lazy(
+        "Notification name", "Contributors made their first translation"
+    )
     template_name = "new_contributor"
     filter_languages = True
 
@@ -606,6 +644,7 @@ class NewContributorNotificaton(Notification):
 class NewSuggestionNotificaton(Notification):
     actions = (ActionEvents.SUGGESTION,)
     verbose = pgettext_lazy("Notification name", "Suggestion was added")
+    verbose_plural = pgettext_lazy("Notification name", "Suggestions were added")
     template_name = "new_suggestion"
     filter_languages = True
     required_attr = "suggestion"
@@ -615,6 +654,7 @@ class NewSuggestionNotificaton(Notification):
 class LanguageTranslatedNotificaton(Notification):
     actions = (ActionEvents.COMPLETE,)
     verbose = pgettext_lazy("Notification name", "Language was translated")
+    verbose_plural = pgettext_lazy("Notification name", "Languages were translated")
     template_name = "translated_language"
     required_attr = "translation"
 
@@ -623,6 +663,7 @@ class LanguageTranslatedNotificaton(Notification):
 class ComponentTranslatedNotificaton(Notification):
     actions = (ActionEvents.COMPLETED_COMPONENT,)
     verbose = pgettext_lazy("Notification name", "Component was translated")
+    verbose_plural = pgettext_lazy("Notification name", "Components were translated")
     template_name = "translated_component"
     required_attr = "component"
 
@@ -631,6 +672,7 @@ class ComponentTranslatedNotificaton(Notification):
 class NewCommentNotificaton(Notification):
     actions = (ActionEvents.COMMENT,)
     verbose = pgettext_lazy("Notification name", "Comment was added")
+    verbose_plural = pgettext_lazy("Notification name", "Comments were added")
     template_name = "new_comment"
     filter_languages = True
     required_attr = "comment"
@@ -646,11 +688,11 @@ class NewCommentNotificaton(Notification):
             return translation.language
         return None
 
-    def notify_immediate(self, change) -> None:
+    def notify_immediate(self, change: Change) -> None:
         super().notify_immediate(change)
 
         # Notify upstream
-        report_source_bugs = change.component.report_source_bugs
+        report_source_bugs = cast("Component", change.component).report_source_bugs
         if change.comment and change.comment.unit.is_source and report_source_bugs:
             self.send_immediate("en", report_source_bugs, change)
 
@@ -659,10 +701,13 @@ class NewCommentNotificaton(Notification):
 class MentionCommentNotificaton(Notification):
     actions = (ActionEvents.COMMENT,)
     verbose = pgettext_lazy("Notification name", "You were mentioned in a comment")
+    verbose_plural = pgettext_lazy(
+        "Notification name", "You were mentioned in some comments"
+    )
     template_name = "new_comment"
     ignore_watched = True
     required_attr = "comment"
-    skip_when_notify = [NewCommentNotificaton]
+    skip_when_notify: ClassVar[set[type[Notification]]] = {NewCommentNotificaton}
 
     def get_users(
         self,
@@ -693,10 +738,13 @@ class MentionCommentNotificaton(Notification):
 class LastAuthorCommentNotificaton(Notification):
     actions = (ActionEvents.COMMENT,)
     verbose = pgettext_lazy("Notification name", "Your translation received a comment")
+    verbose_plural = pgettext_lazy(
+        "Notification name", "Your translation received comments"
+    )
     template_name = "new_comment"
     ignore_watched = True
     required_attr = "comment"
-    skip_when_notify = [MentionCommentNotificaton]
+    skip_when_notify: ClassVar[set[type[Notification]]] = {MentionCommentNotificaton}
 
     def get_users(
         self,
@@ -725,6 +773,7 @@ class TranslatedStringNotificaton(Notification):
         ActionEvents.ACCEPT,
     )
     verbose = pgettext_lazy("Notification name", "String was edited by user")
+    verbose_plural = pgettext_lazy("Notification name", "Strings were edited by user")
     template_name = "translated_string"
     filter_languages = True
 
@@ -733,6 +782,7 @@ class TranslatedStringNotificaton(Notification):
 class ApprovedStringNotificaton(Notification):
     actions = (ActionEvents.APPROVE,)
     verbose = pgettext_lazy("Notification name", "String was approved")
+    verbose_plural = pgettext_lazy("Notification name", "Strings were approved")
     template_name = "approved_string"
     filter_languages = True
 
@@ -741,9 +791,13 @@ class ApprovedStringNotificaton(Notification):
 class ChangedStringNotificaton(Notification):
     actions = Change.ACTIONS_CONTENT
     verbose = pgettext_lazy("Notification name", "String was changed")
+    verbose_plural = pgettext_lazy("Notification name", "Strings were changed")
     template_name = "changed_translation"
     filter_languages = True
-    skip_when_notify = [TranslatedStringNotificaton, ApprovedStringNotificaton]
+    skip_when_notify: ClassVar[set[type[Notification]]] = {
+        TranslatedStringNotificaton,
+        ApprovedStringNotificaton,
+    }
 
 
 @register_notification
@@ -753,6 +807,9 @@ class NewTranslationNotificaton(Notification):
         ActionEvents.REQUESTED_LANGUAGE,
     )
     verbose = pgettext_lazy("Notification name", "New language was added or requested")
+    verbose_plural = pgettext_lazy(
+        "Notification name", "New languages were added or requested"
+    )
     template_name = "new_language"
 
     def get_context(
@@ -779,6 +836,9 @@ class NewComponentNotificaton(Notification):
     verbose = pgettext_lazy(
         "Notification name", "New translation component was created"
     )
+    verbose_plural = pgettext_lazy(
+        "Notification name", "New translation components were created"
+    )
     template_name = "new_component"
 
 
@@ -786,12 +846,13 @@ class NewComponentNotificaton(Notification):
 class NewAnnouncementNotificaton(Notification):
     actions = (ActionEvents.ANNOUNCEMENT,)
     verbose = pgettext_lazy("Notification name", "Announcement was published")
+    verbose_plural = pgettext_lazy("Notification name", "Announcements were published")
     template_name = "new_announcement"
     required_attr = "announcement"
     any_watched: bool = True
 
-    def should_skip(self, user: User, change) -> bool:
-        return not change.announcement.notify
+    def should_skip(self, user: User, change: Change) -> bool:
+        return not cast("Announcement", change.announcement).notify
 
     def get_language_filter(
         self, change: Change | None, translation: Translation | None
@@ -805,23 +866,27 @@ class NewAnnouncementNotificaton(Notification):
 class NewAlertNotificaton(Notification):
     actions = (ActionEvents.ALERT,)
     verbose = pgettext_lazy("Notification name", "New alert emerged in a component")
+    verbose_plural = pgettext_lazy(
+        "Notification name", "New alerts emerged in a component"
+    )
     template_name = "new_alert"
     required_attr = "alert"
 
-    def should_skip(self, user: User, change):
+    def should_skip(self, user: User, change: Change) -> bool:
         try:
-            alert = change.alert
+            alert = cast("Alert", change.alert)
         except Alert.DoesNotExist:
             # Alert was removed meanwhile
             return False
+        component = cast("Component", change.component)
         if alert.obj.link_wide:
             # Notify for main component
-            if not change.component.linked_component:
+            if not component.linked_component:
                 return False
             # Notify only for others only when user will not get main.
             # This handles component level subscriptions.
             fake = copy(change)
-            fake.component = change.component.linked_component
+            fake.component = component.linked_component
             fake.project = fake.component.project
             return bool(
                 list(
@@ -831,9 +896,9 @@ class NewAlertNotificaton(Notification):
                 )
             )
         if alert.obj.project_wide:
-            first_component = change.component.project.component_set.order_by("id")[0]
+            first_component = component.project.component_set.order_by("id")[0]
             # Notify for the first component
-            if change.component.id == first_component.id:
+            if component.id == first_component.id:
                 return True
             # Notify only for others only when user will not get first.
             # This handles component level subscriptions.
@@ -858,10 +923,11 @@ class MergeFailureNotification(Notification):
         ActionEvents.FAILED_PUSH,
     )
     verbose = pgettext_lazy("Notification name", "Repository operation failed")
+    verbose_plural = pgettext_lazy("Notification name", "Repository operations failed")
     template_name = "repository_error"
-    skip_when_notify = [NewAlertNotificaton]
+    skip_when_notify: ClassVar[set[type[Notification]]] = {NewAlertNotificaton}
 
-    def _convert_change_skip(self, change):
+    def _convert_change_skip(self, change: Change) -> Change:
         fake = copy(change)
         fake.action = ActionEvents.ALERT
         fake.alert = Alert(name="MergeFailure", details={"error": ""})
@@ -872,7 +938,7 @@ class SummaryNotification(Notification):
     filter_languages = True
 
     @classmethod
-    def get_freq_choices(cls):
+    def get_freq_choices(cls) -> list[tuple[int, StrOrPromise]]:
         return [
             x
             for x in super().get_freq_choices()
@@ -940,7 +1006,9 @@ class SummaryNotification(Notification):
 
 @register_notification
 class PendingSuggestionsNotification(SummaryNotification):
-    verbose = pgettext_lazy("Notification name", "Pending suggestions exist")
+    verbose_plural = verbose = pgettext_lazy(
+        "Notification name", "Pending suggestions exist"
+    )
     digest_template = "pending_suggestions"
 
     @staticmethod
@@ -950,7 +1018,9 @@ class PendingSuggestionsNotification(SummaryNotification):
 
 @register_notification
 class ToDoStringsNotification(SummaryNotification):
-    verbose = pgettext_lazy("Notification name", "Unfinished strings exist")
+    verbose_plural = verbose = pgettext_lazy(
+        "Notification name", "Unfinished strings exist"
+    )
     digest_template = "todo_strings"
 
     @staticmethod
@@ -959,12 +1029,12 @@ class ToDoStringsNotification(SummaryNotification):
 
 
 def get_notification_emails(
-    language: str,
+    language: str | None,
     recipients: list[str],
     notification: str,
     context: dict[str, Any] | None = None,
     info: str | None = None,
-):
+) -> list[OutgoingEmail]:
     """Render notification email."""
     context = context or {}
 
@@ -1000,13 +1070,13 @@ def get_notification_emails(
 
 
 def send_notification_email(
-    language: str,
+    language: str | None,
     recipients: list[str],
     notification: str,
     context: dict[str, Any] | None = None,
     info: str | None = None,
 ) -> None:
     """Render and sends notification email."""
-    send_mails.delay(
+    queue_mails(
         get_notification_emails(language, recipients, notification, context, info)
     )

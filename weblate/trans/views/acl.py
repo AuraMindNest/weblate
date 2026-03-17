@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from itertools import chain
+from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -20,7 +21,7 @@ from weblate.accounts.models import AuditLog
 from weblate.accounts.utils import remove_user
 from weblate.auth.data import SELECTION_ALL
 from weblate.auth.forms import InviteEmailForm, InviteUserForm, ProjectTeamForm
-from weblate.auth.models import AuthenticatedHttpRequest, Invitation, User
+from weblate.auth.models import Invitation, User
 from weblate.trans.actions import ActionEvents
 from weblate.trans.forms import (
     ProjectTokenCreateForm,
@@ -33,6 +34,9 @@ from weblate.trans.util import redirect_param, render
 from weblate.utils import messages
 from weblate.utils.views import parse_path, show_form_errors
 from weblate.vcs.ssh import get_all_key_data
+
+if TYPE_CHECKING:
+    from weblate.auth.models import AuthenticatedHttpRequest
 
 
 def check_user_form(
@@ -130,7 +134,8 @@ def block_user(request: AuthenticatedHttpRequest, project):
         else:
             expiry = None
         _userblock, created = user.userblock_set.get_or_create(
-            project=obj, defaults={"expiry": expiry}
+            project=obj,
+            defaults={"expiry": expiry, "note": form.cleaned_data.get("note", "")},
         )
         if created:
             AuditLog.objects.create(
@@ -164,10 +169,16 @@ def unblock_user(request: AuthenticatedHttpRequest, project):
     return redirect("manage-access", project=obj.slug)
 
 
+def can_invite_users(request: AuthenticatedHttpRequest) -> bool:
+    return settings.REGISTRATION_OPEN or request.user.has_perm("user.edit")
+
+
 @require_POST
 @login_required
 def invite_user(request: AuthenticatedHttpRequest, project):
     """Invite user to a project."""
+    if not can_invite_users(request):
+        raise PermissionDenied
     obj, form = check_user_form(
         request, project, form_class=InviteEmailForm, pass_project=True
     )
@@ -282,7 +293,7 @@ def manage_access(request: AuthenticatedHttpRequest, project):
             ),
             "invite_user_form": InviteUserForm(project=obj),
             "invite_email_form": InviteEmailForm(project=obj)
-            if settings.REGISTRATION_OPEN
+            if can_invite_users(request)
             else None,
             "public_ssh_keys": get_all_key_data(),
         },

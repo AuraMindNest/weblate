@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from crispy_forms.layout import Div, Field
 from crispy_forms.utils import TEMPLATE_PACK
@@ -14,15 +14,16 @@ from django.forms.models import ModelChoiceIterator
 from django.template.loader import render_to_string
 from django.utils.text import normalize_newlines
 from django.utils.translation import gettext, gettext_lazy
-from pyparsing import ParseException
 
 from weblate.formats.helpers import CONTROLCHARS
 from weblate.trans.defines import EMAIL_LENGTH, USERNAME_LENGTH
 from weblate.trans.filter import FILTERS
 from weblate.trans.util import sort_unicode
-from weblate.utils.errors import report_error
 
 from .validators import WeblateServiceURLValidator, validate_email, validate_username
+
+if TYPE_CHECKING:
+    from django_stubs_ext import StrOrPromise
 
 
 class QueryField(forms.CharField):
@@ -39,20 +40,18 @@ class QueryField(forms.CharField):
         super().__init__(**kwargs)
 
     def clean(self, value):
-        from weblate.utils.search import parse_query
+        from weblate.auth.models import get_anonymous
+        from weblate.utils.search import SearchQueryError, parse_query
 
         if not value:
             if self.required:
                 raise ValidationError(gettext("Missing query string."))
             return ""
         try:
-            parse_query(value, parser=self.parser)
-        except (ValueError, ParseException) as error:
-            raise ValidationError(
-                gettext("Could not parse query string: {}").format(error)
-            ) from error
-        except Exception as error:
-            report_error("Error parsing search query")
+            # Use anonumous user for parsing here, it is needed for some searches
+            # and anonymous user will serve well for the validation.
+            parse_query(value, parser=self.parser, user=get_anonymous())
+        except SearchQueryError as error:
             raise ValidationError(
                 gettext("Could not parse query string: {}").format(error)
             ) from error
@@ -60,34 +59,36 @@ class QueryField(forms.CharField):
 
 
 class UsernameField(forms.CharField):
-    default_validators = [validate_username]
+    default_validators = [validate_username]  # noqa: RUF012
 
     def __init__(
         self,
         *,
-        max_length: int | None = None,
+        max_length: int | None = USERNAME_LENGTH,
         min_length: int | None = None,
         strip: bool = True,
         empty_value: str = "",
+        required: bool = True,
+        label: StrOrPromise | None = None,
+        help_text: StrOrPromise | None = None,
         **kwargs,
     ) -> None:
-        params = {
-            "max_length": USERNAME_LENGTH,
-            "help_text": gettext_lazy(
-                "Username may only contain letters, "
-                "numbers or the following characters: @ . + - _"
-            ),
-            "label": gettext_lazy("Username"),
-            "required": True,
-        }
-        params.update(kwargs)
         self.valid = None
+        if not label:
+            label = gettext_lazy("Username")
+        if not help_text:
+            help_text = gettext_lazy(
+                "Username may only contain letters, numbers or the following characters: @ . + - _"
+            )
 
         super().__init__(
             max_length=max_length,
             min_length=min_length,
             strip=strip,
             empty_value=empty_value,
+            help_text=help_text,
+            label=label,
+            required=required,
             **kwargs,
         )
 
@@ -141,7 +142,7 @@ class EmailField(forms.EmailField):
     We block some additional local parts and customize error messages.
     """
 
-    default_validators = [validate_email]
+    default_validators = [validate_email]  # noqa: RUF012
 
     def __init__(self, *args, **kwargs) -> None:
         kwargs.setdefault("max_length", EMAIL_LENGTH)
@@ -185,7 +186,11 @@ class SearchField(Field):
         kwargs["template"] = "snippets/query-field.html"
         super().__init__(*args, **kwargs)
 
-    def render(self, form, context, template_pack=TEMPLATE_PACK, **kwargs):
+    def render(
+        self, form, context, template_pack=TEMPLATE_PACK, extra_context=None, **kwargs
+    ):
+        if extra_context is not None:
+            raise TypeError
         extra_context = {"custom_filter_list": self.get_search_query_choices()}
         return super().render(form, context, template_pack, extra_context, **kwargs)
 
@@ -253,9 +258,13 @@ class CachedModelMultipleChoiceField(
 
 
 class WeblateServiceURLField(forms.URLField):
-    default_validators = [WeblateServiceURLValidator()]
+    default_validators = [WeblateServiceURLValidator()]  # noqa: RUF012
 
 
 class NormalizedNewlineCharField(forms.CharField):
     def to_python(self, value):
         return normalize_newlines(str(super().to_python(value)))
+
+
+class WeblateDateInput(forms.DateInput):
+    input_type = "date"

@@ -25,10 +25,10 @@ fi
 ORGANIZATION="CppDigest"
 # add_or_update: map lang_code -> array of submodules. Each lang runs with its own submodule list.
 # Example: zh_Hans runs for ["json"], ja runs for ["json", "unordered"].
-ADD_OR_UPDATE='{"zh_Hans":["beast", "unordered"],"ja":["json"]}'
-VERSION="boost-1.89.0"
+ADD_OR_UPDATE='{"zh_Hans":["json"]}'
+VERSION="boost-1.90.0"
 # Optional: limit scan to these extensions (Weblate-supported). Use empty [] for no filter.
-EXTENSIONS='[]'  # e.g. '[".adoc", ".md"]' or '[]' for all supported
+EXTENSIONS='[".adoc", ".qbk"]'  # e.g. '[".adoc", ".md"]' or '[]' for all supported
 
 # Build JSON payload with jq to avoid corruption from special chars in ORGANIZATION/VERSION
 PAYLOAD="$(jq -n \

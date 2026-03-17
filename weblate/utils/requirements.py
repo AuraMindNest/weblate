@@ -4,17 +4,21 @@
 
 import sys
 from importlib.metadata import PackageNotFoundError, metadata
+from typing import TYPE_CHECKING, cast
 
-from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
 from django.db import DatabaseError, connection
 
 import weblate.utils.version
+from weblate.utils.cache import is_redis_cache
 from weblate.utils.db import using_postgresql
 from weblate.utils.errors import report_error
 from weblate.vcs.git import GitRepository, GitWithGerritRepository, SubversionRepository
 from weblate.vcs.mercurial import HgRepository
+
+if TYPE_CHECKING:
+    from django_redis.cache import RedisCache
 
 REQUIRES = [
     "Django",
@@ -65,8 +69,8 @@ OPTIONAL = [
     "psycopg-binary",
     "phply",
     "ruamel.yaml",
+    "tomlkit",
     "tesserocr",
-    "akismet",
     "boto3",
     "aeidon",
     "iniparse",
@@ -76,7 +80,7 @@ OPTIONAL = [
 ]
 
 
-def get_version_module(name, optional=False):
+def get_version_module(name, optional=False) -> tuple[str, str, str] | None:
     """
     Return module object.
 
@@ -89,7 +93,7 @@ def get_version_module(name, optional=False):
             return None
         msg = f"Missing dependency {name}, please install using: pip install {name}"
         raise ImproperlyConfigured(msg) from exc
-    url = package["Home-page"]
+    url = package.get("Home-page")
     if url is None and (project_urls := package.get_all("Project-URL")):
         for project_url in project_urls:
             url_name, current_url = project_url.split(",", 1)
@@ -105,7 +109,7 @@ def get_version_module(name, optional=False):
     )
 
 
-def get_optional_versions():
+def get_optional_versions() -> list[tuple[str, str, str]]:
     """Return versions of optional modules."""
     result = []
 
@@ -140,9 +144,11 @@ def get_optional_versions():
     return result
 
 
-def get_versions():
+def get_versions() -> list[tuple[str, str, str]]:
     """Return list of used versions."""
-    result = [get_version_module(name) for name in REQUIRES]
+    result: list[tuple[str, str, str]] = [
+        module for name in REQUIRES if (module := get_version_module(name))
+    ]
 
     result.append(("Python", "https://www.python.org/", sys.version.split()[0]))
 
@@ -155,7 +161,7 @@ def get_versions():
     return result
 
 
-def get_db_version():
+def get_db_version() -> tuple[str, str, str] | None:
     if using_postgresql():
         try:
             with connection.cursor() as cursor:
@@ -177,7 +183,7 @@ def get_db_version():
         report_error("MySQL version check")
         return None
     return (
-        f"{connection.display_name} sever",
+        f"{connection.display_name} server",
         "https://mariadb.org/"
         if connection.mysql_is_mariadb  # type: ignore[attr-defined]
         else "https://www.mysql.com/",
@@ -185,20 +191,29 @@ def get_db_version():
     )
 
 
-def get_cache_version():
-    if settings.CACHES["default"]["BACKEND"] == "django_redis.cache.RedisCache":
+def get_cache_version() -> tuple[str, str, str] | None:
+    if is_redis_cache():
         try:
-            version = cache.client.get_client().info()["redis_version"]  # type: ignore[attr-defined]
+            client_info = cast("RedisCache", cache).client.get_client().info()
         except RuntimeError:
             report_error("Redis version check")
             return None
 
-        return ("Redis server", "https://redis.io/", version)
+        if version := client_info.get("redict_version"):  # codespell:ignore redict
+            return (
+                "Redict server",  # codespell:ignore redict
+                "https://redict.io/",  # codespell:ignore redict
+                version,
+            )
+        if version := client_info.get("valkey_version"):
+            return ("Valkey server", "https://valkey.io/", version)
+        if version := client_info.get("redis_version"):
+            return ("Redis server", "https://redis.io/", version)
 
     return None
 
 
-def get_db_cache_version():
+def get_db_cache_version() -> list[tuple[str, str, str]]:
     """Return the list of all the Database and Cache version."""
     result = []
     cache_version = get_cache_version()
@@ -210,7 +225,7 @@ def get_db_cache_version():
     return result
 
 
-def get_versions_list():
+def get_versions_list() -> list[tuple[str, str, str]]:
     """Return list with version information summary."""
     return [
         ("Weblate", "https://weblate.org/", weblate.utils.version.GIT_VERSION),
