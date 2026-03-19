@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 
 from django.utils.translation import gettext_lazy
+
 from translate.storage.pypo import pofile
 
 from weblate.formats.convert import ConvertFormat
@@ -29,8 +30,7 @@ if TYPE_CHECKING:
 
 
 class QuickBookFormat(ConvertFormat):
-    """
-    QuickBook (.qbk) documentation file format with built-in PO converter.
+    """QuickBook (.qbk) documentation file format with built-in PO converter.
 
     Uses a pure-Python parser to extract translatable strings (paragraphs,
     headings, sections, admonitions, list blocks, tables, variable lists) and
@@ -70,9 +70,7 @@ class QuickBookFormat(ConvertFormat):
         if template_path is None:
             report_error("QuickBook: cannot determine template file path")
             empty = pofile()
-            empty.updateheader(
-                add=True, x_accelerator_marker=None, x_previous_msgid=None
-            )
+            empty.updateheader(add=True, x_accelerator_marker=None, x_previous_msgid=None)
             return empty
 
         try:
@@ -80,28 +78,33 @@ class QuickBookFormat(ConvertFormat):
         except Exception as exc:
             report_error(f"QuickBook: cannot read template {template_path}: {exc}")
             empty = pofile()
-            empty.updateheader(
-                add=True, x_accelerator_marker=None, x_previous_msgid=None
-            )
+            empty.updateheader(add=True, x_accelerator_marker=None, x_previous_msgid=None)
             return empty
 
         filename = Path(template_path).name
         store = qbk_to_po(content, filename, self.existing_units)
 
-        # When loading the source-language file (storefile IS the template), set
-        # target = source on every unit.  This mirrors what po4a-gettextize produces
-        # when given the same file for both master and localized, and is required so
-        # that Weblate stores the correct (non-empty) translation for the source
-        # language in a monolingual component.
-        storefile_path = (
-            getattr(storefile, "name", storefile)
-            if not isinstance(storefile, str)
-            else storefile
-        )
+        storefile_path = getattr(storefile, "name", storefile) if not isinstance(storefile, str) else storefile
         if storefile_path == template_path:
+            # Loading the source-language file: set target = source on every unit
+            # so Weblate stores a non-empty translation for the source language.
             for unit in store.units:
                 if not unit.isheader():
                     unit.target = unit.source
+        else:
+            # Loading a translated .qbk file: parse it and pair its segments
+            # positionally with the template segments to populate msgstr values.
+            # This mirrors what po4a-gettextize does when given both -m and -l.
+            try:
+                translated_content = Path(storefile_path).read_text(encoding="utf-8")
+                translated_store = qbk_to_po(translated_content, Path(storefile_path).name)
+                trans_units = [u for u in translated_store.units if not u.isheader()]
+                tmpl_units  = [u for u in store.units if not u.isheader()]
+                for tmpl_unit, trans_unit in zip(tmpl_units, trans_units):
+                    if trans_unit.source:
+                        tmpl_unit.target = trans_unit.source
+            except Exception as exc:
+                report_error(f"QuickBook: cannot read translated file {storefile_path}: {exc}")
 
         return store
 
@@ -119,13 +122,7 @@ class QuickBookFormat(ConvertFormat):
             report_error(msg)
             raise RuntimeError(msg)
 
-        template_path = (
-            storefile.name
-            if hasattr(storefile, "name")
-            else storefile
-            if isinstance(storefile, str)
-            else None
-        )
+        template_path = storefile.name if hasattr(storefile, "name") else storefile if isinstance(storefile, str) else None
         if not template_path:
             msg = "QuickBook: cannot save: cannot determine template file path"
             report_error(msg)
