@@ -22,20 +22,6 @@ WEBLATE_ALLOWED_HOSTS=*
 WEBLATE_REGISTRATION_OPEN=1
 WEBLATE_TIME_ZONE=UTC
 
-# Extra
-#WEBLATE_TIME_ZONE=
-#WEBLATE_MT_GOOGLE_KEY=
-#WEBLATE_MT_GOOGLE_CREDENTIALS=
-#WEBLATE_MT_GOOGLE_PROJECT=
-#WEBLATE_MT_GOOGLE_LOCATION=
-#WEBLATE_SOCIAL_AUTH_GITHUB_KEY=
-#WEBLATE_SOCIAL_AUTH_GITHUB_SECRET=
-#WEBLATE_SOCIAL_AUTH_BITBUCKET_KEY=
-#WEBLATE_SOCIAL_AUTH_BITBUCKET_SECRET=
-#WEBLATE_SOCIAL_AUTH_FACEBOOK_KEY=
-#WEBLATE_SOCIAL_AUTH_FACEBOOK_SECRET=
-#WEBLATE_SOCIAL_AUTH_GOOGLE_OAUTH2_KEY=
-#WEBLATE_SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET=
 # Data directory inside the container (default: /app/data)
 #WEBLATE_DATA_DIR=/app/data
 
@@ -51,11 +37,13 @@ WEBLATE_TIME_ZONE=UTC
 # ---------------------------------------------------------------------------
 #WEBLATE_REQUIRE_LOGIN=1
 
-
-# LDAP Auth
+# ---------------------------------------------------------------------------
+# LDAP auth (optional)
+# ---------------------------------------------------------------------------
 #WEBLATE_AUTH_LDAP_SERVER_URI=ldap://ldap.example.org
 #WEBLATE_AUTH_LDAP_USER_DN_TEMPLATE=uid=%(user)s,ou=People,dc=example,dc=net
 #WEBLATE_AUTH_LDAP_USER_ATTR_MAP=first_name:name,email:mail
+
 # ---------------------------------------------------------------------------
 # PostgreSQL (external server)
 # ---------------------------------------------------------------------------
@@ -90,8 +78,9 @@ WEBLATE_GITHUB_USERNAME=
 WEBLATE_GITHUB_TOKEN=
 
 # GitLab
-#GITLAB_USERNAME=
-#GITLAB_TOKEN=
+#WEBLATE_GITLAB_USERNAME=
+#WEBLATE_GITLAB_HOST=
+#WEBLATE_GITLAB_TOKEN=
 
 # Gitea
 #GITEA_USERNAME=
@@ -104,11 +93,6 @@ WEBLATE_GITHUB_TOKEN=
 #WEBLATE_SOCIAL_AUTH_GITHUB_SECRET=
 #WEBLATE_SOCIAL_AUTH_GOOGLE_OAUTH2_KEY=
 #WEBLATE_SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET=
-
-# GitLab lab setup
-# WEBLATE_GITLAB_USERNAME=
-# WEBLATE_GITLAB_HOST=
-# WEBLATE_GITLAB_TOKEN=
 # ---------------------------------------------------------------------------
 # Monitoring / analytics (all optional)
 # ---------------------------------------------------------------------------
