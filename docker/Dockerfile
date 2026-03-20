@@ -73,12 +73,12 @@ RUN rm -f /etc/localtime /etc/timezone \
   && ln -sf /dev/stdout /var/log/nginx/access.log \
   && ln -sf /dev/stderr /var/log/nginx/error.log \
   && rm -rf /run/* \
-  && chmod 664 /etc/passwd /etc/group \
+  && chmod 664 /etc/passwd \
   && sed -i '/pam_rootok.so/a auth requisite pam_deny.so' /etc/pam.d/su
 
 # Install po4a v0.74 from source (required by weblate/formats/asciidoc.py)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        git \
+        curl \
         libyaml-tiny-perl \
         build-essential \
         libmodule-build-perl \
@@ -86,13 +86,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libxml2-utils \
         docbook-xsl \
         xsltproc \
-    && git clone --depth 1 --branch v0.74 https://github.com/mquinson/po4a.git /tmp/po4a \
-    && cd /tmp/po4a \
+    && cd /tmp \
+    && curl -fsSL -o po4a-0.74.tar.gz \
+        https://github.com/mquinson/po4a/releases/download/v0.74/po4a-0.74.tar.gz \
+    && echo "25fc323f2ba37bbd48c3af0ebf49952644b0e468261f98633e91219a838fe7c2  po4a-0.74.tar.gz" \
+        | sha256sum -c - \
+    && tar xzf po4a-0.74.tar.gz \
+    && cd po4a-0.74 \
     && perl Build.PL \
     && ./Build build \
     && ./Build install \
-    && rm -rf /tmp/po4a \
-    && apt-get purge -y build-essential libmodule-build-perl xsltproc docbook-xsl libxml2-utils \
+    && cd /tmp \
+    && rm -rf po4a-0.74.tar.gz po4a-0.74 \
+    && apt-get purge -y build-essential libmodule-build-perl xsltproc docbook-xsl libxml2-utils curl \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 

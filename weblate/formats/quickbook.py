@@ -99,10 +99,17 @@ class QuickBookFormat(ConvertFormat):
                 translated_content = Path(storefile_path).read_text(encoding="utf-8")
                 translated_store = qbk_to_po(translated_content, Path(storefile_path).name)
                 trans_units = [u for u in translated_store.units if not u.isheader()]
-                tmpl_units  = [u for u in store.units if not u.isheader()]
-                for tmpl_unit, trans_unit in zip(tmpl_units, trans_units):
-                    if trans_unit.source:
-                        tmpl_unit.target = trans_unit.source
+                tmpl_units = [u for u in store.units if not u.isheader()]
+                if len(tmpl_units) != len(trans_units):
+                    report_error(
+                        "QuickBook: refusing positional import: segment count mismatch "
+                        f"(file={storefile_path!s}, name={Path(storefile_path).name!s}, "
+                        f"template_units={len(tmpl_units)}, translated_units={len(trans_units)})"
+                    )
+                else:
+                    for tmpl_unit, trans_unit in zip(tmpl_units, trans_units):
+                        if trans_unit.source:
+                            tmpl_unit.target = trans_unit.source
             except Exception as exc:
                 report_error(f"QuickBook: cannot read translated file {storefile_path}: {exc}")
 
