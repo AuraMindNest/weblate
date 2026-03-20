@@ -29,5 +29,5 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
           script: |
-            sleep 10
+            sleep 300
             curl -sf http://localhost:8000/healthz/
