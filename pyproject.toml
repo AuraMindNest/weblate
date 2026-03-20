@@ -188,9 +188,9 @@ keywords = [
 ]
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
-name = "weblate"
+name = "boost-weblate"
 requires-python = ">=3.12"
-version = "5.16.1"
+version = "1.0.0"
 
 [project.optional-dependencies]
 alibaba = [
@@ -198,7 +198,7 @@ alibaba = [
   "aliyun-python-sdk-core>=2.16.0,<3.0.0"
 ]
 all = [
-  "weblate[alibaba,amazon,gerrit,gelf,google,ldap,mercurial,openai,postgres,zxcvbn]"
+  "boost-weblate[alibaba,amazon,gerrit,gelf,google,ldap,mercurial,openai,postgres,zxcvbn]"
 ]
 amazon = [
   "boto3>=1.38.0,<2.0"
