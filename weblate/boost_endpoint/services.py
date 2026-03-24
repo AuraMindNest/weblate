@@ -138,7 +138,13 @@ class BoostComponentService:
         try:
             LOGGER.info("Cloning %s to %s", repo_url, target_dir)
             cmd = ["git", "clone", "-b", branch, "--depth", "1", repo_url, target_dir]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=300,
+                check=False,
+            )
 
             if result.returncode != 0:
                 LOGGER.error("Failed to clone: %s", result.stderr)
@@ -677,7 +683,7 @@ class BoostComponentService:
                 # Stage only the removed files (not all tracked changes)
                 rel_paths = [os.path.relpath(p, base_path) for p in actually_removed]
                 subprocess.run(
-                    ["git", "-C", base_path, "add", "--"] + rel_paths,
+                    ["git", "-C", base_path, "add", "--", *rel_paths],
                     check=True,
                     capture_output=True,
                     timeout=60,
@@ -687,6 +693,7 @@ class BoostComponentService:
                     capture_output=True,
                     text=True,
                     timeout=10,
+                    check=False,
                 )
                 if status.stdout.strip():
                     author = (

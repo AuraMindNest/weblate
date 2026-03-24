@@ -487,6 +487,11 @@ ignore = [
   "settings_test.py",
   "test-repos"
 ]
+# Fork/local automation (Django setup before imports; not core app lint surface)
+ignore-paths = [
+  "scripts/auto/",
+  "scripts/backup/"
+]
 
 [tool.pytest]
 

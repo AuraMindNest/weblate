@@ -329,7 +329,7 @@ class AsciiDocFormat(ConvertFormat):
             msgfmt_wrapper_path = os.path.join(tmp_bin_dir, "msgfmt")
 
             # Create wrapper script that always succeeds
-            with open(msgfmt_wrapper_path, "w") as wrapper:
+            with open(msgfmt_wrapper_path, "w", encoding="utf-8") as wrapper:
                 wrapper.write("#!/bin/bash\n")
                 wrapper.write(
                     "# Wrapper to bypass msgfmt validation - always succeed to allow po4a-translate to proceed\n"

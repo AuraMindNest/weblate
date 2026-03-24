@@ -133,7 +133,7 @@ class OpenRouterTranslator:
                 completion = self.client.chat.completions.create(
                     extra_headers={"X-Title": "Documentation Batch Translation"},
                     model=self.model,
-                    messages=cast("Any", messages),
+                    messages=cast(Any, messages),  # noqa: TC006
                     response_format={"type": "json_object"},
                     temperature=0,
                     max_tokens=60000,

@@ -8,6 +8,7 @@ import os
 import re
 import time
 from collections import defaultdict
+from datetime import UTC
 from glob import glob
 from itertools import chain
 from typing import TYPE_CHECKING, Any, TypedDict, cast
@@ -29,6 +30,7 @@ from django.db import IntegrityError, connection, models, transaction
 from django.db.models import Count, F, Q
 from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
+from django.utils import timezone
 from django.utils.functional import cached_property
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
@@ -4455,8 +4457,6 @@ class Component(
                 except Exception as e:
                     # Handle IntegrityError and other exceptions gracefully
                     # This can happen if another task already created the units
-                    from django.db import IntegrityError
-
                     if not isinstance(e, IntegrityError):
                         self.log_error(
                             "Autobatch translation: error during file parsing for language %s in component %s (ID: %d): %s",
@@ -4524,8 +4524,6 @@ class Component(
         # This ensures file sync runs after all translations are processed
         # Only schedule if file_sync is True and we processed at least one translation
         if file_sync and lang and translations_processed:
-            from django.db import transaction
-
             # Run file sync synchronously after transaction commits to prevent race condition
             # where commit_pending() commits with default message before file sync task runs
             # Using transaction.on_commit() ensures:
@@ -4599,22 +4597,12 @@ class Component(
         This function reads from database, writes to files, and commits to git.
         Minimal database modifications are performed (local_revision update).
         """
-        from datetime import UTC
-
-        from django.utils import timezone
-
-        from weblate.trans.exceptions import FileParseError
-        from weblate.trans.models.pending import PendingUnitChange
-        from weblate.utils.errors import report_error
-
         # For autobatch translation, handle only one translation: the specified language for this component
         if not lang:
             self.log_error(
                 "File sync: lang parameter is required for autobatch translation"
             )
             return False
-
-        from weblate.lang.models import Language
 
         try:
             language = Language.objects.get(code=lang)
@@ -4669,8 +4657,6 @@ class Component(
             # Read pending changes for this translation
             # For autobatch translation, bypass commit policy filtering to force commit
             # even if units are STATE_FUZZY (which is the default for auto-translations)
-            from weblate.trans.models.pending import PendingUnitChange
-
             # Simply get all pending changes for this translation
             # We bypass commit policy filtering to ensure STATE_FUZZY units are committed
             pending_changes = list(
