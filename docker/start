@@ -41,7 +41,7 @@ echo "Starting Boost Weblate ${BOOST_WEBLATE_VERSION:-unknown}..."
 # Append GitHub SSH host keys from https://api.github.com/meta (HTTPS, verified JSON).
 # Exits 0 on success, non-zero on failure.
 fetch_github_ssh_keys_from_meta() {
-    /app/venv/bin/python <<'PY'
+    /app/venv/bin/python << 'PY'
 import json
 import sys
 import urllib.error
@@ -78,14 +78,14 @@ chmod 600 /app/data/ssh/id_ed25519 2> /dev/null || true
 # Ensure GitHub host keys are in known_hosts so git clone via SSH works.
 # Prefer GITHUB_KNOWN_HOSTS, else official keys from https://api.github.com/meta (HTTPS).
 # ssh-keyscan is only a last resort if both are unavailable.
-if ! grep -q "github.com" /app/data/ssh/known_hosts 2>/dev/null; then
+if ! grep -q "github.com" /app/data/ssh/known_hosts 2> /dev/null; then
     if [ -n "${GITHUB_KNOWN_HOSTS:-}" ]; then
         printf '%s\n' "$GITHUB_KNOWN_HOSTS" >> /app/data/ssh/known_hosts
     elif fetch_github_ssh_keys_from_meta; then
         :
     else
         echo "Warning: could not use GITHUB_KNOWN_HOSTS or api.github.com/meta; falling back to ssh-keyscan github.com" >&2
-        ssh-keyscan github.com >> /app/data/ssh/known_hosts 2>/dev/null || true
+        ssh-keyscan github.com >> /app/data/ssh/known_hosts 2> /dev/null || true
     fi
 fi
 
@@ -212,7 +212,7 @@ until run_weblate shell -c 'from weblate.auth.models import User; list(User.obje
     TIMEOUT=$((TIMEOUT + 1))
     if [ $TIMEOUT -gt 30 ]; then
         run_weblate shell -c 'from weblate.auth.models import User; User.objects.exists()'
-        fail_dep PosgreSQL
+        fail_dep PostgreSQL
     fi
     sleep 1
 done

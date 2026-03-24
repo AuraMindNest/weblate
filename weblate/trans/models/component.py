@@ -2917,7 +2917,6 @@ class Component(
                         request=request,
                         change=change,
                     )
-                    # transaction.on_commit(lambda: self.auto_translate_via_openrouter())
                 except InvalidTemplateError as error:
                     self.log_warning(
                         "skipping update due to error in parsing template: %s",
@@ -4065,8 +4064,6 @@ class Component(
                     "language_code": code,
                 },
             )
-            # if create_translations:
-            #     translation = translation.auto_translate_via_openrouter()
             # Make it clear that there is no change for the newly created translation
             # to avoid expensive last change lookup in stats while committing changes.
             if created:
@@ -4394,6 +4391,7 @@ class Component(
             user_id=request.user.id if request is not None else None,
             file_sync=file_sync,
         )
+        return None
 
     def _autobatchtranslate_via_openrouter_immediate(
         self,
@@ -4650,13 +4648,6 @@ class Component(
         # Track translations that were updated and need to be committed
         translations_to_commit: list[tuple[Translation, str, datetime]] = []
 
-        # Get author name from request if available
-        author = (
-            request.user.get_author_name()
-            if request and request.user
-            else "Weblate <noreply@weblate.org>"
-        )
-
         # Write files first (inside lock)
         with self.repository.lock:
             # translation.component is already set to self since we fetched it via self.translation_set.get()
@@ -4692,10 +4683,11 @@ class Component(
                 return False
 
             # Group changes by author for consistent file writing
-            commit_groups = translation._group_changes_by_author(pending_changes)
-            file_updated = False
+            commit_groups = translation._group_changes_by_author(  # noqa: SLF001
+                pending_changes
+            )
 
-            for group_idx, (author_obj, changes) in enumerate(commit_groups, 1):
+            for author_obj, changes in commit_groups:
                 author_name = author_obj.get_author_name() if author_obj else "Unknown"
                 timestamp = max(change.timestamp for change in changes)
 
@@ -4706,7 +4698,6 @@ class Component(
                         changes, store, author_name
                     )
                     if any(changes_status.values()):
-                        file_updated = True
                         was_changed = True
 
                         # Track this translation for committing after lock is released
@@ -4728,9 +4719,7 @@ class Component(
                     # Continue with next group even if one fails
 
         # Commit all updated translations (outside lock to avoid deadlock)
-        for idx, (translation, author_name, commit_timestamp) in enumerate(
-            translations_to_commit, 1
-        ):
+        for translation, author_name, commit_timestamp in translations_to_commit:
             component = translation.component
             # Use default autobatch translation commit message template
             # Uses template variables that will be rendered by render_template

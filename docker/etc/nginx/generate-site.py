@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-import django
 import sys
+
+import django
 from django.conf import settings
 
 # Parse args

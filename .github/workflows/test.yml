@@ -145,12 +145,13 @@ jobs:
         uv run coverage combine
         uv run coverage xml
     - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      if: ${{ secrets.CODECOV_TOKEN != '' }}
       with:
         token: ${{secrets.CODECOV_TOKEN}}
         flags: unittests
         name: Tests py${{ matrix.python-version }}, ${{ matrix.database }}, ${{ matrix.requirements }} deps
     - name: Upload test results to Codecov
-      if: ${{ !cancelled() }}
+      if: ${{ !cancelled() && secrets.CODECOV_TOKEN != '' }}
       uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       with:
         token: ${{ secrets.CODECOV_TOKEN }}

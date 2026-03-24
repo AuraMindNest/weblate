@@ -61,20 +61,20 @@ _QBK_MACRO_ONLY_RE = re.compile(r"^(?:__\w+__[\s,;.]*)+$")
 # Block-level bracket keywords whose entire content is non-translatable.
 _SKIP_KEYWORDS: frozenset[str] = frozenset(
     {
-        "/",           # [/ comment]
-        "include",     # [include file.qbk]
-        "import",      # [import file.qbk]
-        "def",         # [def macro_name value]
-        "template",    # [template …]
-        "quickbook",   # [quickbook 1.x] version declaration
-        "br",          # [br] deprecated line-break
-        "pre",         # [pre preformatted / code-like block]
-        "endsect",     # [endsect]
-        "xinclude",    # [xinclude …]
-        "if",          # [if symbol]
-        "elif",        # [elif symbol]
-        "else",        # [else]
-        "endif",       # [endif]
+        "/",  # [/ comment]
+        "include",  # [include file.qbk]
+        "import",  # [import file.qbk]
+        "def",  # [def macro_name value]
+        "template",  # [template …]
+        "quickbook",  # [quickbook 1.x] version declaration
+        "br",  # [br] deprecated line-break
+        "pre",  # [pre preformatted / code-like block]
+        "endsect",  # [endsect]
+        "xinclude",  # [xinclude …]
+        "if",  # [if symbol]
+        "elif",  # [elif symbol]
+        "else",  # [else]
+        "endif",  # [endif]
         # source-mode switches
         "c++",
         "python",
@@ -116,13 +116,40 @@ _ADMONITION_KEYWORDS: frozenset[str] = frozenset(
 # paragraph.
 _PARA_BREAK_KEYWORDS: frozenset[str] = frozenset(
     {
-        "section", "endsect",
-        "h1", "h2", "h3", "h4", "h5", "h6", "heading",
-        "note", "warning", "tip", "caution", "important", "blurb",
-        "table", "variablelist",
-        "pre", "include", "import", "def", "template", "quickbook", "xinclude",
-        "if", "elif", "else", "endif",
-        "c++", "python", "ruby", "teletype", "xml", "javascript",
+        "section",
+        "endsect",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "heading",
+        "note",
+        "warning",
+        "tip",
+        "caution",
+        "important",
+        "blurb",
+        "table",
+        "variablelist",
+        "pre",
+        "include",
+        "import",
+        "def",
+        "template",
+        "quickbook",
+        "xinclude",
+        "if",
+        "elif",
+        "else",
+        "endif",
+        "c++",
+        "python",
+        "ruby",
+        "teletype",
+        "xml",
+        "javascript",
         "/",
     }
 )
@@ -138,7 +165,8 @@ _PARA_BREAK_SINGLE_CHARS: frozenset[str] = frozenset({"/", "#", "$", "?", ":"})
 
 
 def _find_bracket_end(text: str, start: int) -> int:
-    """Return the index of the ``]`` that closes the ``[`` at *text[start]*.
+    r"""
+    Return the index of the ``]`` that closes the ``[`` at *text[start]*.
 
     Handles:
 
@@ -174,7 +202,8 @@ def _find_bracket_end(text: str, start: int) -> int:
 
 
 def _parse_bracket_keyword(text: str) -> tuple[str, int]:
-    """Parse keyword and content-start offset from a bracket block string.
+    """
+    Parse keyword and content-start offset from a bracket block string.
 
     *text* spans the full bracket including the surrounding ``[`` and ``]``.
 
@@ -186,27 +215,27 @@ def _parse_bracket_keyword(text: str) -> tuple[str, int]:
     n = len(text)
 
     # Single-character special keywords: /, #, $, @, ?, :
-    if i < n and text[i] in ("/", "#", "$", "@", "?", ":"):
+    if i < n and text[i] in {"/", "#", "$", "@", "?", ":"}:
         kw = text[i]
         i += 1
-        while i < n and text[i] in (" ", "\t"):
+        while i < n and text[i] in {" ", "\t"}:
             i += 1
         return kw, i
 
     # Multi-character keyword: read until whitespace, ], or :
     kw_start = i
-    while i < n and text[i] not in (" ", "\t", "\n", "]", ":"):
+    while i < n and text[i] not in {" ", "\t", "\n", "]", ":"}:
         i += 1
     kw = text[kw_start:i].lower()
 
     # Optional :id suffix (e.g. ``section:my_anchor``)
     if i < n and text[i] == ":":
         i += 1
-        while i < n and text[i] not in (" ", "\t", "\n", "]"):
+        while i < n and text[i] not in {" ", "\t", "\n", "]"}:
             i += 1  # skip the id token
 
     # Skip trailing spaces / tabs after keyword or :id, then one optional newline.
-    while i < n and text[i] in (" ", "\t"):
+    while i < n and text[i] in {" ", "\t"}:
         i += 1
     if i < n and text[i] == "\n":
         i += 1
@@ -224,11 +253,11 @@ class _Seg:
     """One translatable span within a QuickBook document."""
 
     text_start: int  # absolute char offset of the first translatable character
-    text_end: int    # exclusive end offset (points just past the last char)
-    line: int        # 1-based line number of the containing block start
-    seg_type: str    # 'paragraph', 'list', 'heading', 'section-title', …
-    msgid: str       # normalised translatable text (PO msgid)
-    no_wrap: bool    # True → add ``no-wrap`` type-comment to the PO unit
+    text_end: int  # exclusive end offset (points just past the last char)
+    line: int  # 1-based line number of the containing block start
+    seg_type: str  # 'paragraph', 'list', 'heading', 'section-title', …
+    msgid: str  # normalised translatable text (PO msgid)
+    no_wrap: bool  # True → add ``no-wrap`` type-comment to the PO unit
     context: str = ""  # PO ``#. type:`` annotation
 
 
@@ -238,7 +267,8 @@ class _Seg:
 
 
 def _has_prose(text: str) -> bool:
-    """Return True if *text* contains translatable prose outside bracket markup.
+    """
+    Return True if *text* contains translatable prose outside bracket markup.
 
     Used to distinguish cells with human-readable description text from cells
     that contain only bracket references (``[link …]``, ``[@url …]``, etc.),
@@ -263,13 +293,12 @@ def _has_prose(text: str) -> bool:
         return False
     # QuickBook macro references such as ``__message__`` are identifier
     # placeholders, not human-readable prose.
-    if _QBK_MACRO_ONLY_RE.match(bare):
-        return False
-    return True
+    return not _QBK_MACRO_ONLY_RE.match(bare)
 
 
 def _clean_cell_text(text: str) -> str:
-    """Prepare raw cell content as a PO msgid.
+    r"""
+    Prepare raw cell content as a PO msgid.
 
     Steps:
     * Strip backtick code fences (````` ``` … ``` `````) — those lines are code.
@@ -293,10 +322,9 @@ def _clean_cell_text(text: str) -> str:
             continue
         if stripped:
             current_para.append(stripped)
-        else:
-            if current_para:
-                paragraphs.append(" ".join(current_para))
-                current_para = []
+        elif current_para:
+            paragraphs.append(" ".join(current_para))
+            current_para = []
     if current_para:
         paragraphs.append(" ".join(current_para))
     return "\n\n".join(p for p in paragraphs if p)
@@ -309,7 +337,8 @@ def _extract_fence_content_segs(
     bracket_line: int,
     kw: str,
 ) -> list[_Seg]:
-    """Extract translatable content from backtick code fences inside a table cell.
+    """
+    Extract translatable content from backtick code fences inside a table cell.
 
     When a cell contains ``` … ``` fences, the code *between* the fence lines
     is extracted as a translatable segment.  ``text_start``/``text_end`` point
@@ -339,11 +368,18 @@ def _extract_fence_content_segs(
                 fence_content_start = eol + 1 if eol < cell_body_end else eol
             else:
                 in_fence = False
-                fence_content_end = i  # points to the first char of the closing fence line
-                if fence_content_start is not None and fence_content_end > fence_content_start:
+                fence_content_end = (
+                    i  # points to the first char of the closing fence line
+                )
+                if (
+                    fence_content_start is not None
+                    and fence_content_end > fence_content_start
+                ):
                     raw_code = content[fence_content_start:fence_content_end]
                     # Strip per-line indentation; join non-empty lines.
-                    code_lines = [ln.strip() for ln in raw_code.split("\n") if ln.strip()]
+                    code_lines = [
+                        ln.strip() for ln in raw_code.split("\n") if ln.strip()
+                    ]
                     cleaned_code = "\n".join(code_lines)
                     if cleaned_code:
                         segs.append(
@@ -373,7 +409,8 @@ def _parse_table_inner(
     kw: str,
     _depth: int,
 ) -> list[_Seg]:
-    """Parse a ``[table …]`` or ``[variablelist …]`` body into fine-grained segments.
+    """
+    Parse a ``[table …]`` or ``[variablelist …]`` body into fine-grained segments.
 
     Extracts:
 
@@ -419,7 +456,7 @@ def _parse_table_inner(
     i = inner_abs_start + nl + 1
     while i < inner_abs_end:
         ch = content[i]
-        if ch in (" ", "\t", "\n"):
+        if ch in {" ", "\t", "\n"}:
             i += 1
             continue
         if ch != "[":
@@ -435,7 +472,7 @@ def _parse_table_inner(
         ci = i + 1  # skip the opening '['
         while ci < row_end:
             cc = content[ci]
-            if cc in (" ", "\t", "\n"):
+            if cc in {" ", "\t", "\n"}:
                 ci += 1
                 continue
             if cc != "[":
@@ -488,7 +525,8 @@ def _parse_qbk(
     stop: int | None = None,
     _depth: int = 0,
 ) -> list[_Seg]:
-    """Parse *content[start:stop]* and return all translatable segments.
+    """
+    Parse *content[start:stop]* and return all translatable segments.
 
     The function calls itself recursively (depth-capped at 10) for block
     elements whose bodies may contain further translatable blocks (e.g.
@@ -518,7 +556,7 @@ def _parse_qbk(
 
         # ── code block: line begins with space or tab ─────────────────────────
         # Only treat as a code block if we are at the very start of a line.
-        if ch in (" ", "\t") and (i == 0 or content[i - 1] == "\n"):
+        if ch in {" ", "\t"} and (i == 0 or content[i - 1] == "\n"):
             # Consume all consecutive indented or blank lines.
             while i < stop:
                 while i < stop and content[i] != "\n":
@@ -528,7 +566,7 @@ def _parse_qbk(
                 i += 1
                 line += 1
                 # Stop when the next line is neither blank nor indented.
-                if i < stop and content[i] not in (" ", "\t", "\n"):
+                if i < stop and content[i] not in {" ", "\t", "\n"}:
                     break
             continue
 
@@ -643,9 +681,7 @@ def _parse_qbk(
                 if inner_multiline:
                     # Body may contain full block elements: recurse.
                     segments.extend(
-                        _parse_qbk(
-                            content, inner_abs_start, inner_abs_end, _depth + 1
-                        )
+                        _parse_qbk(content, inner_abs_start, inner_abs_end, _depth + 1)
                     )
                 else:
                     segments.append(
@@ -665,9 +701,7 @@ def _parse_qbk(
             if kw == ":":
                 if inner_multiline:
                     segments.extend(
-                        _parse_qbk(
-                            content, inner_abs_start, inner_abs_end, _depth + 1
-                        )
+                        _parse_qbk(content, inner_abs_start, inner_abs_end, _depth + 1)
                     )
                 else:
                     segments.append(
@@ -684,7 +718,7 @@ def _parse_qbk(
                 continue
 
             # ── tables and variable lists (cell-level parsing) ────────────
-            if kw in ("table", "variablelist"):
+            if kw in {"table", "variablelist"}:
                 segments.extend(
                     _parse_table_inner(
                         content,
@@ -711,11 +745,11 @@ def _parse_qbk(
                 eol += 1
             line_text = content[i:eol]
 
-            if not line_text.strip():                    # blank line → end of para
+            if not line_text.strip():  # blank line → end of para
                 break
-            if line_text and line_text[0] in (" ", "\t"):   # code block next
+            if line_text and line_text[0] in {" ", "\t"}:  # code block next
                 break
-            if line_text.startswith("'''"):              # raw escape next
+            if line_text.startswith("'''"):  # raw escape next
                 break
             if line_text.startswith("["):
                 # Only break for block-level constructs.  Inline / phrase-level
@@ -724,23 +758,26 @@ def _parse_qbk(
                 # enclosing paragraph.
                 bracket_end = _find_bracket_end(line_text, 0)
                 if bracket_end != -1:
-                    para_kw, _ = _parse_bracket_keyword(line_text[:bracket_end + 1])
+                    para_kw, _ = _parse_bracket_keyword(line_text[: bracket_end + 1])
                 else:
                     # Bracket extends beyond this line → treat as block-level.
                     para_kw, _ = _parse_bracket_keyword(line_text + "]")
-                if para_kw in _PARA_BREAK_KEYWORDS or para_kw in _PARA_BREAK_SINGLE_CHARS:
+                if (
+                    para_kw in _PARA_BREAK_KEYWORDS
+                    or para_kw in _PARA_BREAK_SINGLE_CHARS
+                ):
                     break
                 # Inline bracket — fall through and keep accumulating.
 
             i = eol
             if i < stop:
-                i += 1   # consume '\n'
+                i += 1  # consume '\n'
                 line += 1
 
         stripped = content[para_start:i].rstrip()
         if stripped and _has_prose(stripped):
             first_non_ws = stripped.lstrip()[0]
-            is_list = first_non_ws in ("*", "#")
+            is_list = first_non_ws in {"*", "#"}
             if is_list:
                 # Keep newlines: each line is a structural list item.
                 msgid = stripped
@@ -770,10 +807,9 @@ def _parse_qbk(
 # ---------------------------------------------------------------------------
 
 
-def qbk_to_po(
-    content: str, filename: str, existing_units: Any = None
-) -> pofile:
-    """Convert a QuickBook document string to a ``pofile`` store.
+def qbk_to_po(content: str, filename: str, existing_units: Any = None) -> pofile:
+    """
+    Convert a QuickBook document string to a ``pofile`` store.
 
     *filename* is used in PO location comments (``#: filename:lineno``).
 
@@ -812,9 +848,7 @@ def qbk_to_po(
     # missed by the file extractor (e.g. removed blocks, formatting changes).
     if existing_units:
         store_index: dict[tuple[str, str], Any] = {
-            (u.source, u.getcontext()): u
-            for u in store.units
-            if not u.isheader()
+            (u.source, u.getcontext()): u for u in store.units if not u.isheader()
         }
         for ex_unit in existing_units:
             sources = ex_unit.get_source_plurals()
@@ -827,10 +861,11 @@ def qbk_to_po(
                 if ctx:
                     new_unit.setcontext(ctx)
                 new_unit.target = ex_unit.target
-                from weblate.utils.state import STATE_FUZZY  # noqa: PLC0415
+                from weblate.utils.state import STATE_FUZZY
+
                 if ex_unit.state == STATE_FUZZY:
                     new_unit.markfuzzy(True)
-                store_index[(src, ctx)] = new_unit
+                store_index[src, ctx] = new_unit
 
     return store
 
@@ -840,8 +875,9 @@ def qbk_to_po(
 # ---------------------------------------------------------------------------
 
 
-def po_to_qbk(template_content: str, po_store: Any, filename: str) -> str:  # noqa: ARG001
-    """Apply translations from *po_store* to *template_content*.
+def po_to_qbk(template_content: str, po_store: Any, filename: str) -> str:
+    """
+    Apply translations from *po_store* to *template_content*.
 
     Returns the fully translated QuickBook document as a string.  Each
     translatable span identified by the parser is replaced with the

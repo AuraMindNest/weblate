@@ -22,7 +22,7 @@ django-otp-webauthn==0.8.0
 django-redis==6.0.0
 django_compressor==4.6.0
 djangorestframework==3.16.1
-# Alernative Celery pool implementation
+# Alternative Celery pool implementation
 gevent==25.9.1
 git-review==2.5.0
 google-cloud-translate==3.24.0
