@@ -4073,7 +4073,9 @@ class Component(
                 Change.store_last_change(translation, None)
 
             # Create the file
-            autobatch_lang = None  # Will be set if file is created or translation is new
+            autobatch_lang = (
+                None  # Will be set if file is created or translation is new
+            )
             if os.path.exists(fullname):
                 # Ignore request if file exists (possibly race condition as
                 # the processing of new language can take some time and user
@@ -4105,11 +4107,17 @@ class Component(
 
         # Trigger autobatch translation for newly created translation files
         # (runs after lock is released to avoid deadlock with Celery task)
-        if settings.AUTO_BATCH_TRANSLATE_VIA_OPENROUTER and create_translations and autobatch_lang is not None:
+        if (
+            settings.AUTO_BATCH_TRANSLATE_VIA_OPENROUTER
+            and create_translations
+            and autobatch_lang is not None
+        ):
             try:
                 # Autobatch translation will schedule file sync after it completes
                 # to ensure proper sequencing
-                self.autobatchtranslate_via_openrouter(lang=autobatch_lang, request=request, file_sync=True)
+                self.autobatchtranslate_via_openrouter(
+                    lang=autobatch_lang, request=request, file_sync=True
+                )
             except Exception as e:
                 self.log_error(
                     "autobatch translation failed for language %s: %s",
@@ -4117,6 +4125,7 @@ class Component(
                     e,
                 )
                 import traceback
+
                 self.log_error("traceback: %s", traceback.format_exc())
 
         # Trigger parsing of the newly added file
@@ -4383,7 +4392,7 @@ class Component(
             pk=self.pk,
             lang=lang,
             user_id=request.user.id if request is not None else None,
-            file_sync=file_sync
+            file_sync=file_sync,
         )
 
     def _autobatchtranslate_via_openrouter_immediate(
@@ -4393,7 +4402,8 @@ class Component(
         request: AuthenticatedHttpRequest | None = None,
         file_sync: bool = False,
     ) -> None:
-        """Run autobatch translation via OpenRouter (immediate execution).
+        """
+        Run autobatch translation via OpenRouter (immediate execution).
 
         Note: This method does NOT use @perform_on_link decorator because
         each component should process its own translations, even when components
@@ -4413,7 +4423,10 @@ class Component(
         component_pk = self.pk
 
         if not lang:
-            self.log_error("Autobatch translation: no language specified for component %s", self.full_slug)
+            self.log_error(
+                "Autobatch translation: no language specified for component %s",
+                self.full_slug,
+            )
             return
 
         # Process single translation for specified language
@@ -4422,8 +4435,7 @@ class Component(
             # to ensure we get the correct translation for THIS specific component
             # This is critical when multiple components share a repository
             translation = Translation.objects.filter(
-                component_id=component_pk,
-                language__code=lang
+                component_id=component_pk, language__code=lang
             ).first()
             if not translation or translation.unit_set.count() == 0:
                 # Translation doesn't exist yet, or exists but has no units (file not parsed)
@@ -4446,6 +4458,7 @@ class Component(
                     # Handle IntegrityError and other exceptions gracefully
                     # This can happen if another task already created the units
                     from django.db import IntegrityError
+
                     if not isinstance(e, IntegrityError):
                         self.log_error(
                             "Autobatch translation: error during file parsing for language %s in component %s (ID: %d): %s",
@@ -4455,20 +4468,20 @@ class Component(
                             e,
                         )
                         import traceback
+
                         self.log_error("traceback: %s", traceback.format_exc())
 
                 # Try to get the translation again after creation/parsing
                 # Use component_id to ensure we get the right one
                 translation = Translation.objects.filter(
-                    component_id=component_pk,
-                    language__code=lang
+                    component_id=component_pk, language__code=lang
                 ).first()
                 if not translation:
                     self.log_info(
                         "Autobatch translation: failed to create translation for language %s in component %s (component ID: %d)",
                         lang,
                         self.full_slug,
-                        component_pk
+                        component_pk,
                     )
                     return
                 # Check if units were created after parsing
@@ -4477,7 +4490,7 @@ class Component(
                         "Autobatch translation: still no units after parsing for language %s in component %s (component ID: %d) - file may be empty",
                         lang,
                         self.full_slug,
-                        component_pk
+                        component_pk,
                     )
                     return
 
@@ -4488,7 +4501,7 @@ class Component(
                     translation.full_slug,
                     translation.pk,
                     translation.component_id,
-                    component_pk
+                    component_pk,
                 )
                 return
         except ObjectDoesNotExist:
@@ -4496,6 +4509,7 @@ class Component(
         translations_processed = False
         try:
             from weblate.trans.autobatchtranslate import auto_translate_via_openrouter
+
             auto_translate_via_openrouter(translation)
             translations_processed = True
         except Exception as e:
@@ -4505,6 +4519,7 @@ class Component(
                 e,
             )
             import traceback
+
             self.log_error("traceback: %s", traceback.format_exc())
 
         # Schedule file sync after autobatch translation completes
@@ -4533,9 +4548,13 @@ class Component(
                         e,
                     )
                     import traceback
+
                     self.log_error("File sync traceback: %s", traceback.format_exc())
                     # Fallback: schedule as task if immediate execution fails
-                    from weblate.trans.tasks import perform_file_sync_for_autobatchtranslation
+                    from weblate.trans.tasks import (
+                        perform_file_sync_for_autobatchtranslation,
+                    )
+
                     perform_file_sync_for_autobatchtranslation.delay(
                         pk=self.pk,
                         lang=lang,
@@ -4576,17 +4595,19 @@ class Component(
         lang: str | None = None,
         request: AuthenticatedHttpRequest | None = None,
     ) -> bool:
-        """Write pending changes to files and commit them (immediate execution).
+        """
+        Write pending changes to files and commit them (immediate execution).
 
         This function reads from database, writes to files, and commits to git.
         Minimal database modifications are performed (local_revision update).
         """
-        from weblate.trans.models import Translation
-        from weblate.trans.models.pending import PendingUnitChange
-        from weblate.trans.exceptions import FileParseError
-        from weblate.utils.errors import report_error
-        from django.utils import timezone
         from datetime import UTC
+
+        from django.utils import timezone
+
+        from weblate.trans.exceptions import FileParseError
+        from weblate.trans.models.pending import PendingUnitChange
+        from weblate.utils.errors import report_error
 
         # For autobatch translation, handle only one translation: the specified language for this component
         if not lang:
@@ -4596,13 +4617,11 @@ class Component(
             return False
 
         from weblate.lang.models import Language
+
         try:
             language = Language.objects.get(code=lang)
         except Language.DoesNotExist:
-            self.log_error(
-                "File sync: language %s not found, aborting",
-                lang
-            )
+            self.log_error("File sync: language %s not found, aborting", lang)
             return False
 
         # Get the specific translation for this component and language
@@ -4616,12 +4635,14 @@ class Component(
             self.log_error(
                 "File sync: multiple translations found for language %s in component %s (unexpected)",
                 lang,
-                self.full_slug
+                self.full_slug,
             )
             return False
 
         # Check if this translation has pending changes
-        has_pending = translation.unit_set.filter(pending_changes__isnull=False).exists()
+        has_pending = translation.unit_set.filter(
+            pending_changes__isnull=False
+        ).exists()
         if not has_pending:
             return False
 
@@ -4645,14 +4666,12 @@ class Component(
                 store = translation.store
                 store.ensure_index()
             except (FileParseError, ValueError) as error:
-                report_error(
-                    "Could not parse file on sync", project=component.project
-                )
+                report_error("Could not parse file on sync", project=component.project)
                 translation.log_error("skipping sync due to error: %s", error)
                 self.log_error(
                     "File sync: failed to load store for translation %s: %s",
                     translation.full_slug,
-                    error
+                    error,
                 )
                 return False
 
@@ -4683,7 +4702,9 @@ class Component(
                 # Use translation.update_units() which properly writes to file
                 # This method handles all the store operations correctly
                 try:
-                    changes_status = translation.update_units(changes, store, author_name)
+                    changes_status = translation.update_units(
+                        changes, store, author_name
+                    )
                     if any(changes_status.values()):
                         file_updated = True
                         was_changed = True
@@ -4691,29 +4712,34 @@ class Component(
                         # Track this translation for committing after lock is released
                         if not timezone.is_aware(timestamp):
                             timestamp = timezone.make_aware(timestamp, UTC)
-                        translations_to_commit.append((translation, author_name, timestamp))
+                        translations_to_commit.append(
+                            (translation, author_name, timestamp)
+                        )
                 except Exception as error:
-                    translation.log_error(
-                        "failed to update units: %s", error
-                    )
+                    translation.log_error("failed to update units: %s", error)
                     import traceback
+
                     translation.log_error("traceback: %s", traceback.format_exc())
                     self.log_error(
                         "File sync: exception updating units for translation %s: %s",
                         translation.full_slug,
-                        error
+                        error,
                     )
                     # Continue with next group even if one fails
 
         # Commit all updated translations (outside lock to avoid deadlock)
-        for idx, (translation, author_name, commit_timestamp) in enumerate(translations_to_commit, 1):
+        for idx, (translation, author_name, commit_timestamp) in enumerate(
+            translations_to_commit, 1
+        ):
             component = translation.component
             # Use default autobatch translation commit message template
             # Uses template variables that will be rendered by render_template
             commit_message_template = settings.DEFAULT_AUTOBATCH_MESSAGE
             if not commit_message_template:
                 # Fallback if DEFAULT_AUTOBATCH_MESSAGE is not configured
-                commit_message_template = "Autobatch translation using LLM API ({{ language_name }})\n\n"
+                commit_message_template = (
+                    "Autobatch translation using LLM API ({{ language_name }})\n\n"
+                )
 
             try:
                 # Use translation.git_commit which properly handles the commit
@@ -4730,23 +4756,25 @@ class Component(
                 if not commit_result:
                     self.log_warning(
                         "File sync: git_commit returned False for translation %s (nothing to commit?)",
-                        translation.full_slug
+                        translation.full_slug,
                     )
 
             except Exception as error:
-                translation.log_error(
-                    "failed to commit files: %s", error
-                )
+                translation.log_error("failed to commit files: %s", error)
                 self.log_error(
                     "File sync: failed to commit translation %s: %s",
                     translation.full_slug,
-                    error
+                    error,
                 )
                 import traceback
-                self.log_error("File sync: commit traceback: %s", traceback.format_exc())
+
+                self.log_error(
+                    "File sync: commit traceback: %s", traceback.format_exc()
+                )
                 # Continue with other translations even if one fails
 
         return was_changed
+
 
 @receiver(m2m_changed, sender=Component.links.through)
 @disable_for_loaddata

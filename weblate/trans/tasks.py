@@ -805,6 +805,7 @@ def setup_periodic_tasks(sender, **kwargs) -> None:
         name="cleanup-project-backup-download",
     )
 
+
 @app.task(
     trail=False,
     autoretry_for=(WeblateLockTimeoutError,),
@@ -828,6 +829,7 @@ def perform_file_sync_for_autobatchtranslation(
         lang=lang,
         request=request,
     )
+
 
 @app.task(
     trail=False,

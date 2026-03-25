@@ -2,14 +2,14 @@
 # Script to restore Weblate backup to LOCAL machine
 # Run this script on your LOCAL machine after transferring backup from server
 
-set -e  # Exit on error
+set -e # Exit on error
 
 # Configuration - ADJUST THESE FOR YOUR LOCAL SETUP
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_USER="${DB_USER:-weblate}"
 DB_NAME="${DB_NAME:-weblate}"
 DB_PASSWORD="${DB_PASSWORD:-weblate}"
-DATA_DIR="${DATA_DIR:-$HOME/boost-weblate/data}"  # Adjust to your local DATA_DIR
+DATA_DIR="${DATA_DIR:-$HOME/boost-weblate/data}" # Adjust to your local DATA_DIR
 
 # Colors for output
 RED='\033[0;31m'
@@ -43,8 +43,8 @@ fi
 cd "$BACKUP_DIR"
 
 # Find backup files
-DB_SQL=$(ls -1 weblate_database_*.sql 2>/dev/null | head -1)
-FILES_ARCHIVE=$(ls -1 weblate_files_*.tar.gz 2>/dev/null | head -1)
+DB_SQL=$(ls -1 weblate_database_*.sql 2> /dev/null | head -1)
+FILES_ARCHIVE=$(ls -1 weblate_files_*.tar.gz 2> /dev/null | head -1)
 
 if [ -z "$DB_SQL" ] && [ -z "$FILES_ARCHIVE" ]; then
     echo -e "${RED}Error: No backup files found in '$BACKUP_DIR'${NC}"
@@ -75,19 +75,19 @@ export PGPASSWORD="$DB_PASSWORD"
 # Restore database
 if [ -n "$DB_SQL" ]; then
     echo -e "${GREEN}[1/4] Restoring database from SQL...${NC}"
-    
+
     # Drop and recreate database
     echo -e "${YELLOW}Dropping existing database (if exists)...${NC}"
-    dropdb -h "$DB_HOST" -U "$DB_USER" "$DB_NAME" 2>/dev/null || true
-    
+    dropdb -h "$DB_HOST" -U "$DB_USER" "$DB_NAME" 2> /dev/null || true
+
     echo -e "${YELLOW}Creating new database...${NC}"
     createdb -h "$DB_HOST" -U "$DB_USER" "$DB_NAME"
-    
+
     echo -e "${YELLOW}Restoring database from $DB_SQL...${NC}"
     psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" \
         -v ON_ERROR_STOP=1 \
         -f "$DB_SQL"
-    
+
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✓ Database restored successfully${NC}"
     else
@@ -112,15 +112,15 @@ fi
 
 if [ -n "$WEBLATE_DIR" ] && [ -f "$WEBLATE_DIR/manage.py" ]; then
     cd "$WEBLATE_DIR"
-    source weblate-env/bin/activate 2>/dev/null || true
-    
-    python manage.py shell <<'PYTHON_EOF'
+    source weblate-env/bin/activate 2> /dev/null || true
+
+    python manage.py shell << 'PYTHON_EOF'
 from django.db import connection
 cursor = connection.cursor()
 
 # Get all sequences and reset them
 sequences_query = """
-    SELECT sequence_name, 
+    SELECT sequence_name,
            REPLACE(REPLACE(sequence_name, '_id_seq', ''), 'trans_', 'trans_') as table_name
     FROM information_schema.sequences
     WHERE sequence_schema = 'public'
@@ -161,19 +161,19 @@ cd "$BACKUP_DIR"
 if [ -n "$FILES_ARCHIVE" ]; then
     echo ""
     echo -e "${GREEN}[3/4] Restoring files...${NC}"
-    
+
     # Create DATA_DIR if it doesn't exist
     mkdir -p "$DATA_DIR"
-    
+
     echo -e "${YELLOW}Extracting files to $DATA_DIR...${NC}"
     tar -xzf "$FILES_ARCHIVE" -C "$DATA_DIR"
-    
+
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✓ Files restored successfully${NC}"
-        
+
         # Set proper permissions (adjust user/group as needed)
         echo -e "${YELLOW}Setting file permissions...${NC}"
-        chmod -R u+rwX "$DATA_DIR" 2>/dev/null || true
+        chmod -R u+rwX "$DATA_DIR" 2> /dev/null || true
     else
         echo -e "${RED}✗ Files restore failed!${NC}"
         exit 1
@@ -186,22 +186,22 @@ fi
 if [ -n "$WEBLATE_DIR" ] && [ -f "$WEBLATE_DIR/manage.py" ]; then
     echo ""
     echo -e "${GREEN}[4/4] Running post-restore steps...${NC}"
-    
+
     cd "$WEBLATE_DIR"
-    source weblate-env/bin/activate 2>/dev/null || true
-    
+    source weblate-env/bin/activate 2> /dev/null || true
+
     echo -e "${YELLOW}Updating Git repositories...${NC}"
-    python manage.py updategit --all 2>/dev/null || echo -e "${YELLOW}Note: Some repositories may need manual update${NC}"
-    
+    python manage.py updategit --all 2> /dev/null || echo -e "${YELLOW}Note: Some repositories may need manual update${NC}"
+
     echo -e "${YELLOW}Synchronizing files with database (committing all components)...${NC}"
-    python manage.py commitgit --all 2>/dev/null || echo -e "${YELLOW}Note: Some components may need manual commit${NC}"
-    
+    python manage.py commitgit --all 2> /dev/null || echo -e "${YELLOW}Note: Some components may need manual commit${NC}"
+
     # echo -e "${YELLOW}Reloading translations...${NC}"
     # python manage.py loadpo --all --force 2>/dev/null || echo -e "${YELLOW}Note: Some translations may need manual reload${NC}"
-    
+
     echo -e "${YELLOW}Regenerating static files...${NC}"
-    python manage.py compress --force 2>/dev/null || echo -e "${YELLOW}Note: Static files may need manual regeneration${NC}"
-    
+    python manage.py compress --force 2> /dev/null || echo -e "${YELLOW}Note: Static files may need manual regeneration${NC}"
+
     echo -e "${GREEN}✓ Post-restore steps completed${NC}"
 else
     echo -e "${YELLOW}[4/4] Skipping post-restore steps (Weblate directory not found)${NC}"
@@ -229,4 +229,3 @@ echo ""
 echo -e "3. Access Weblate in your browser and verify projects/components are present"
 echo ""
 echo -e "${YELLOW}Note: If you see parse errors, check the logs and fix any malformed files${NC}"
-

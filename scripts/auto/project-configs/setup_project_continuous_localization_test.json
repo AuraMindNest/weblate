@@ -24,13 +24,16 @@
     "hide_glossary_matches": false,
     "language_regex": "^zh_Hans$"
   },
-  "languages": ["zh_Hans"],
+  "languages": [
+    "zh_Hans"
+  ],
   "wait_for_ready": true,
   "trigger_update": true,
   "scan": {
     "github_path": "",
-    "extensions": [".adoc"],
+    "extensions": [
+      ".adoc"
+    ],
     "exclude_patterns": []
   }
 }
-

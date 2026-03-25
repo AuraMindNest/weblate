@@ -21,18 +21,21 @@ Usage:
 """
 
 import argparse
+import contextlib
 import json
 import os
+import pathlib
 import re
 import sys
 import time
 from collections import defaultdict
-from typing import Dict, List, Optional, Set, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 # {ref} = branch/tag (e.g. develop, boost-1.90.0, master)
-GITMODULES_URL_TEMPLATE = "https://raw.githubusercontent.com/boostorg/boost/{ref}/.gitmodules"
+GITMODULES_URL_TEMPLATE = (
+    "https://raw.githubusercontent.com/boostorg/boost/{ref}/.gitmodules"
+)
 # {repo} = submodule name, {ref} = branch/tag (e.g. develop, boost-1.90.0)
 LIBS_JSON_TEMPLATE = (
     "https://raw.githubusercontent.com/boostorg/{repo}/{ref}/meta/libraries.json"
@@ -57,8 +60,7 @@ def load_dotenv_script_dir() -> None:
     if not os.path.isfile(env_path):
         return
     try:
-        with open(env_path, "r", encoding="utf-8") as f:
-            content = f.read()
+        content = pathlib.Path(env_path).read_text(encoding="utf-8")
     except OSError as e:
         print(f"Warning: could not read .env: {e}", file=sys.stderr)
         return
@@ -94,7 +96,7 @@ def format_subpath_display(subpath: str) -> str:
     return "root" if not subpath else f"root/{subpath}"
 
 
-def fetch_url(url: str, token: Optional[str] = None) -> str:
+def fetch_url(url: str, token: str | None = None) -> str:
     headers = {"User-Agent": USER_AGENT}
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -110,40 +112,42 @@ def fetch_url(url: str, token: Optional[str] = None) -> str:
                 raise
             retry_after = None
             if e.headers.get("Retry-After"):
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     retry_after = int(e.headers.get("Retry-After"))
-                except (ValueError, TypeError):
-                    pass
             if retry_after is None:
-                retry_after = min(60, 2 ** attempt)
+                retry_after = min(60, 2**attempt)
             time.sleep(retry_after)
     if last_error is not None:
         raise last_error
-    raise RuntimeError("fetch_url: unexpected state")
+    msg = "fetch_url: unexpected state"
+    raise RuntimeError(msg)
 
 
-def fetch_json(url: str, token: Optional[str] = None) -> dict:
+def fetch_json(url: str, token: str | None = None) -> dict:
     """Fetch URL and parse response as JSON."""
     content = fetch_url(url, token=token)
     return json.loads(content)
 
 
-def parse_repo_url(repo_url: str) -> Tuple[str, str]:
+def parse_repo_url(repo_url: str) -> tuple[str, str]:
     """Extract (owner, repo) from https://github.com/owner/repo.git ."""
-    m = re.match(r"https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", repo_url.strip())
+    m = re.match(
+        r"https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", repo_url.strip()
+    )
     if not m:
-        raise ValueError(f"Cannot parse repo URL: {repo_url}")
+        msg = f"Cannot parse repo URL: {repo_url}"
+        raise ValueError(msg)
     return m.group(1), m.group(2).removesuffix(".git")
 
 
 def group_by_submodule(
-    libraries: List[Tuple[str, str, str, str]]
-) -> Dict[Tuple[str, str], List[Tuple[str, str, str]]]:
+    libraries: list[tuple[str, str, str, str]],
+) -> dict[tuple[str, str], list[tuple[str, str, str]]]:
     """
     Group libraries by (submodule_name, repo_url).
-    Returns dict mapping (submodule, repo_url) -> [(lib_name, subpath, extensions), ...]
+    Returns dict mapping (submodule, repo_url) -> [(lib_name, subpath, extensions), ...].
     """
-    grouped: Dict[Tuple[str, str], List[Tuple[str, str, str]]] = defaultdict(list)
+    grouped: dict[tuple[str, str], list[tuple[str, str, str]]] = defaultdict(list)
     for lib_name, repo_url, subpath, extensions in libraries:
         # Extract submodule name from repo URL (e.g., "algorithm" from "boostorg/algorithm.git")
         try:
@@ -152,18 +156,18 @@ def group_by_submodule(
         except ValueError:
             # Fallback: use lib_name if URL parsing fails
             submodule_name = lib_name
-        grouped[(submodule_name, repo_url)].append((lib_name, subpath, extensions))
+        grouped[submodule_name, repo_url].append((lib_name, subpath, extensions))
     return grouped
 
 
 def get_doc_extensions(
-    owner: str, repo: str, ref: str, doc_path: str, token: Optional[str] = None
-) -> Set[str]:
+    owner: str, repo: str, ref: str, doc_path: str, token: str | None = None
+) -> set[str]:
     """
     List all files under doc_path in the repo at ref via GitHub Git Trees API.
     Returns the set of file extensions (e.g. {".html", ".adoc"}).
     """
-    extensions: Set[str] = set()
+    extensions: set[str] = set()
     try:
         # Get commit for ref to obtain tree SHA
         commit_url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/commits/{ref}"
@@ -172,7 +176,9 @@ def get_doc_extensions(
         if not tree_sha:
             return extensions
         # Get full tree recursively
-        tree_url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/git/trees/{tree_sha}?recursive=1"
+        tree_url = (
+            f"{GITHUB_API_BASE}/repos/{owner}/{repo}/git/trees/{tree_sha}?recursive=1"
+        )
         tree_data = fetch_json(tree_url, token=token)
         tree_entries = tree_data.get("tree") or []
         prefix = doc_path.rstrip("/") + "/"
@@ -196,7 +202,7 @@ def get_doc_extensions(
     return extensions
 
 
-def parse_gitmodules(content: str) -> List[Tuple[str, str]]:
+def parse_gitmodules(content: str) -> list[tuple[str, str]]:
     """Parse .gitmodules and return list of (submodule_name, path)."""
     entries = []
     current_name = None
@@ -211,13 +217,15 @@ def parse_gitmodules(content: str) -> List[Tuple[str, str]]:
             current_path = None
             continue
         if line.startswith(GITMODULES_PATH_PREFIX):
-            current_path = line[len(GITMODULES_PATH_PREFIX):].strip()
+            current_path = line[len(GITMODULES_PATH_PREFIX) :].strip()
     if current_name is not None and current_path is not None:
         entries.append((current_name, current_path))
     return entries
 
 
-def get_libraries_from_repo(submodule_name: str, ref: str) -> List[Tuple[str, str, str]]:
+def get_libraries_from_repo(
+    submodule_name: str, ref: str
+) -> list[tuple[str, str, str]]:
     """
     Fetch meta/libraries.json for a submodule at ref (branch/tag).
     Returns list of (first_column, repo_url, subpath).
@@ -264,7 +272,7 @@ def get_libraries_from_repo(submodule_name: str, ref: str) -> List[Tuple[str, st
         else:
             prefix = submodule_name + "/"
             first_column = name
-            subpath = key[len(prefix):] if key.startswith(prefix) else key
+            subpath = key.removeprefix(prefix)
         result.append((first_column, repo_url, subpath))
     return result
 
@@ -337,7 +345,9 @@ def fetch_gitmodules(ref: str) -> str:
     try:
         return fetch_url(url)
     except HTTPError as e:
-        print(f"Failed to fetch .gitmodules: HTTP {e.code} - {e.reason}", file=sys.stderr)
+        print(
+            f"Failed to fetch .gitmodules: HTTP {e.code} - {e.reason}", file=sys.stderr
+        )
         sys.exit(1)
     except URLError as e:
         print(f"Failed to fetch .gitmodules: {e.reason}", file=sys.stderr)
@@ -345,11 +355,11 @@ def fetch_gitmodules(ref: str) -> str:
 
 
 def collect_all_libraries(
-    lib_submodules: List[Tuple[str, str]], ref: str
-) -> List[Tuple[str, str, str]]:
+    lib_submodules: list[tuple[str, str]], ref: str
+) -> list[tuple[str, str, str]]:
     """Fetch library metadata for each submodule. Returns list of (first_col, repo_url, subpath)."""
-    all_libraries: List[Tuple[str, str, str]] = []
-    seen: Set[Tuple[str, str, str]] = set()
+    all_libraries: list[tuple[str, str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
 
     for i, (submodule_name, _path_in_boost) in enumerate(lib_submodules, 1):
         print(
@@ -373,14 +383,17 @@ def collect_all_libraries(
 
 
 def fetch_extensions_for_libraries(
-    all_libraries: List[Tuple[str, str, str]],
+    all_libraries: list[tuple[str, str, str]],
     ref: str,
-    token: Optional[str],
-) -> List[Tuple[str, str, str, str]]:
+    token: str | None,
+) -> list[tuple[str, str, str, str]]:
     """Fetch doc folder file extensions for each library. Returns list of 4-tuples."""
     n_libs = len(all_libraries)
-    print(f"Fetching doc folder extensions via GitHub API ({n_libs} libraries)...", file=sys.stderr)
-    rows_with_ext: List[Tuple[str, str, str, str]] = []
+    print(
+        f"Fetching doc folder extensions via GitHub API ({n_libs} libraries)...",
+        file=sys.stderr,
+    )
+    rows_with_ext: list[tuple[str, str, str, str]] = []
     for i, (first_col, repo_url, subpath) in enumerate(all_libraries, 1):
         doc_path = "doc" if not subpath else f"{subpath}/doc"
         try:
@@ -388,7 +401,10 @@ def fetch_extensions_for_libraries(
             exts = get_doc_extensions(owner, repo, ref, doc_path, token=token)
             ext_str = "|".join(sorted(exts)) if exts else ""
             rows_with_ext.append((first_col, repo_url, subpath, ext_str))
-            print(f"  [{i}/{n_libs}] {first_col} -> {ext_str or '(none)'}", file=sys.stderr)
+            print(
+                f"  [{i}/{n_libs}] {first_col} -> {ext_str or '(none)'}",
+                file=sys.stderr,
+            )
         except (ValueError, HTTPError, URLError, KeyError, json.JSONDecodeError) as e:
             print(f"  [{i}/{n_libs}] {first_col} error: {e}", file=sys.stderr)
             rows_with_ext.append((first_col, repo_url, subpath, ""))
@@ -396,7 +412,7 @@ def fetch_extensions_for_libraries(
 
 
 def write_library_output(
-    all_libraries: List[Tuple[str, str, str, str]],
+    all_libraries: list[tuple[str, str, str, str]],
     out_path: str,
     ref: str,
     include_extensions: bool,
@@ -422,8 +438,8 @@ def write_library_output(
 
 
 def write_submodule_output(
-    all_libraries: List[Tuple[str, str, str, str]],
-    lib_submodules: List[Tuple[str, str]],
+    all_libraries: list[tuple[str, str, str, str]],
+    lib_submodules: list[tuple[str, str]],
     out_path: str,
     ref: str,
 ) -> None:
@@ -433,7 +449,7 @@ def write_submodule_output(
         submodule_out_path = out_path + "_submodules"
 
     grouped = group_by_submodule(all_libraries)
-    submodule_rows: List[Tuple[str, str, str, str, str, str]] = []
+    submodule_rows: list[tuple[str, str, str, str, str, str]] = []
 
     # Build one row per lib submodule so submodules with 0 libraries get an empty row
     for submodule_name, _path_in_boost in lib_submodules:
@@ -447,21 +463,23 @@ def write_submodule_output(
         lib_names = [lib[0] for lib in libs_data]
         subpaths = [format_subpath_display(lib[1]) for lib in libs_data]
 
-        all_exts: Set[str] = set()
+        all_exts: set[str] = set()
         for lib in libs_data:
             ext_str = lib[2]
             if ext_str:
                 all_exts.update(ext_str.split("|"))
         combined_exts = "|".join(sorted(all_exts)) if all_exts else ""
 
-        submodule_rows.append((
-            submodule_name,
-            repo_url,
-            "|".join(lib_names),
-            ref,
-            "|".join(subpaths),
-            combined_exts,
-        ))
+        submodule_rows.append(
+            (
+                submodule_name,
+                repo_url,
+                "|".join(lib_names),
+                ref,
+                "|".join(subpaths),
+                combined_exts,
+            )
+        )
 
     try:
         with open(submodule_out_path, "w", encoding="utf-8") as f:
@@ -476,7 +494,10 @@ def write_submodule_output(
     except OSError as e:
         print(f"Failed to write submodule output file: {e}", file=sys.stderr)
         sys.exit(1)
-    print(f"Wrote {len(submodule_rows)} submodules to {submodule_out_path}", file=sys.stderr)
+    print(
+        f"Wrote {len(submodule_rows)} submodules to {submodule_out_path}",
+        file=sys.stderr,
+    )
 
 
 def main() -> None:
@@ -492,7 +513,9 @@ def main() -> None:
     lib_submodules = [(n, p) for n, p in submodules if p.startswith("libs/")]
     if args.limit is not None:
         lib_submodules = lib_submodules[: args.limit]
-        print(f"Limited to first {len(lib_submodules)} libs submodules.", file=sys.stderr)
+        print(
+            f"Limited to first {len(lib_submodules)} libs submodules.", file=sys.stderr
+        )
     print(f"Found {len(lib_submodules)} libs submodules.", file=sys.stderr)
 
     all_libraries = collect_all_libraries(lib_submodules, libs_ref)
@@ -514,4 +537,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

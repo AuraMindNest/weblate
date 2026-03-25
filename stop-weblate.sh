@@ -37,5 +37,3 @@ fi
 echo ""
 echo -e "${GREEN}✓ Weblate has been stopped${NC}"
 echo -e "${RED}========================================${NC}"
-
-

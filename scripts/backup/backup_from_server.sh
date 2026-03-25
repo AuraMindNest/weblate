@@ -2,14 +2,14 @@
 # Script to backup Weblate from SERVER
 # Run this script on the SERVER to create a complete backup
 
-set -e  # Exit on error
+set -e # Exit on error
 
 # Configuration - ADJUST THESE FOR YOUR SERVER
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_USER="${DB_USER:-weblate}"
 DB_NAME="${DB_NAME:-weblate}"
 DB_PASSWORD="${DB_PASSWORD:-weblate}"
-DATA_DIR="${DATA_DIR:-/home/dsf2eqw1/boost-weblate/data}"  # Adjust to your server's DATA_DIR
+DATA_DIR="${DATA_DIR:-/home/dsf2eqw1/boost-weblate/data}" # Adjust to your server's DATA_DIR
 
 # Backup directory
 BACKUP_BASE_DIR="${BACKUP_BASE_DIR:-$HOME/weblate_backup}"
@@ -69,13 +69,13 @@ tar -czf "$FILES_BACKUP" \
     --exclude='cache/*' \
     --exclude='*.pyc' \
     --exclude='__pycache__' \
-    backups/ vcs/ ssh/ home/ media/ fonts/ secret/ 2>/dev/null || {
+    backups/ vcs/ ssh/ home/ media/ fonts/ secret/ 2> /dev/null || {
     # If some directories don't exist, try backing up what exists
     echo -e "${YELLOW}Some directories may not exist, backing up available ones...${NC}"
     tar -czf "$FILES_BACKUP" \
         -C "$DATA_DIR" \
         --exclude='cache/*' \
-        backups/ vcs/ ssh/ home/ media/ fonts/ secret/ 2>/dev/null || true
+        backups/ vcs/ ssh/ home/ media/ fonts/ secret/ 2> /dev/null || true
 }
 
 if [ -f "$FILES_BACKUP" ]; then
@@ -90,7 +90,7 @@ echo -e "${GREEN}[3/3] Creating backup info file...${NC}"
 
 # Create info file with backup metadata
 INFO_FILE="backup_info.txt"
-cat > "$INFO_FILE" <<EOF
+cat > "$INFO_FILE" << EOF
 Weblate Backup Information
 ==========================
 Backup Date: $(date)
@@ -132,4 +132,3 @@ echo ""
 echo -e "2. On local machine, run:"
 echo -e "   ${YELLOW}cd ~/boost-weblate${NC}"
 echo -e "   ${YELLOW}./scripts/restore_to_local.sh $BACKUP_DIR${NC}"
-

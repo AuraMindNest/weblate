@@ -110,7 +110,8 @@ class BoostComponentService:
         return self._ext_to_format
 
     def get_supported_extensions(self) -> set[str]:
-        """Set of supported file extensions (from Weblate formats).
+        """
+        Set of supported file extensions (from Weblate formats).
         If self.extensions is non-empty, restrict to those that are both
         Weblate-supported and in the list.
         """
@@ -152,7 +153,8 @@ class BoostComponentService:
             return False
 
     def scan_documentation_files(self, repo_dir: str) -> list[dict[str, Any]]:
-        """Scan repo for doc files; return list of in-memory component configs.
+        """
+        Scan repo for doc files; return list of in-memory component configs.
         Only files in subfolders are included; files in repo root are skipped.
         Uses get_supported_extensions() which respects self.extensions when set.
         """
@@ -189,7 +191,9 @@ class BoostComponentService:
 
         return configs
 
-    def generate_component_config(self, file_path: str, extension: str) -> dict[str, Any] | None:
+    def generate_component_config(
+        self, file_path: str, extension: str
+    ) -> dict[str, Any] | None:
         """Build in-memory component config for a doc file (no JSON file written)."""
         ext_to_fmt = self.get_extension_to_format()
         file_format = ext_to_fmt.get(extension)
@@ -239,7 +243,9 @@ class BoostComponentService:
         submodule_title = submodule.replace("_", " ").title()
         project_name = f"Boost {submodule_title} Translation ({self.lang_code})"
         project_slug = f"boost-{slug}-documentation-{self.lang_code}"
-        project_web = f"https://www.boost.org/doc/libs/master/libs/{submodule}/doc/html/"
+        project_web = (
+            f"https://www.boost.org/doc/libs/master/libs/{submodule}/doc/html/"
+        )
 
         with transaction.atomic():
             project, created = Project.objects.get_or_create(
@@ -254,7 +260,7 @@ class BoostComponentService:
                     ),
                     "access_control": Project.ACCESS_PUBLIC,
                     "commit_policy": 0,
-                }
+                },
             )
 
             if created:
@@ -278,7 +284,8 @@ class BoostComponentService:
         user=None,
         request=None,
     ) -> tuple[Component | None, bool]:
-        """Create or update a component. Returns (component, was_created).
+        """
+        Create or update a component. Returns (component, was_created).
 
         Settings and logic aligned with scripts/auto/create_component.py and
         scripts/auto/boost-submodule-component-configs/setup_boost-*-.json
@@ -377,7 +384,9 @@ class BoostComponentService:
                     if user:
                         component.post_create(user, origin="boost_endpoint")
                     # Synchronization: ensure repo/translations exist before add_language_to_component.
-                    self._sync_component_for_translation(component, request, created=True)
+                    self._sync_component_for_translation(
+                        component, request, created=True
+                    )
                 else:
                     LOGGER.info("Component exists: %s", component.name)
                     # Ensure branch is "local-{lang_code}" (avoid "fatal: no such branch: 'master'"
@@ -390,7 +399,9 @@ class BoostComponentService:
                         component.save(update_fields=update_fields)
 
                     # Trigger git pull only for repo owner; linked components share the same lock.
-                    self._sync_component_for_translation(component, request, created=False)
+                    self._sync_component_for_translation(
+                        component, request, created=False
+                    )
                 self.add_language_to_component(component, request)
 
             return component, created
@@ -405,7 +416,8 @@ class BoostComponentService:
             return None, False
 
     def _do_update_git_only(self, component: Component, request) -> bool:
-        """Perform only the git update (fetch, merge/rebase). Does not call create_translations.
+        """
+        Perform only the git update (fetch, merge/rebase). Does not call create_translations.
         Mirrors Component.do_update lock block + push_if_needed; caller must call
         create_translations_immediate after.
         """
@@ -473,13 +485,17 @@ class BoostComponentService:
                 # lighter _do_update_git_only (fetch + merge only).
                 if created and not component.repository.is_valid():
                     component.sync_git_repo(skip_push=True)
-                    LOGGER.info("Initial clone completed for new component: %s", component.name)
+                    LOGGER.info(
+                        "Initial clone completed for new component: %s", component.name
+                    )
                 else:
                     result = self._do_update_git_only(component, request)
                     if result:
                         LOGGER.info("Updated component repository: %s", component.name)
                     else:
-                        LOGGER.warning("Git update did not succeed for %s", component.name)
+                        LOGGER.warning(
+                            "Git update did not succeed for %s", component.name
+                        )
             except Exception as e:
                 LOGGER.warning(
                     "Failed to %s %s: %s",
@@ -487,7 +503,9 @@ class BoostComponentService:
                     component.name,
                     e,
                 )
-                report_error(cause="Component creation" if created else "Component update")
+                report_error(
+                    cause="Component creation" if created else "Component update"
+                )
         try:
             component.create_translations_immediate(request=request, force=True)
             LOGGER.info(
@@ -500,16 +518,16 @@ class BoostComponentService:
         except Exception as e:
             LOGGER.warning(
                 "Failed to %s %s: %s",
-                "load translations for new link" if created else "refresh translations for",
+                "load translations for new link"
+                if created
+                else "refresh translations for",
                 component.name,
                 e,
             )
 
-
-    def add_language_to_component(
-        self, component: Component, request=None
-    ) -> bool:
-        """Add language to component if not already added.
+    def add_language_to_component(self, component: Component, request=None) -> bool:
+        """
+        Add language to component if not already added.
 
         Logic matches API view ComponentViewSet.translations (POST).
         """
@@ -532,7 +550,9 @@ class BoostComponentService:
         # Check order: (1) permission, (2) language in allowed set, (3) sync, (4) policy/validity, (5) add.
         # (1) has_perm("translation.add"): permission only, no I/O; fail fast.
         if not request.user.has_perm("translation.add", component):
-            LOGGER.warning("Can not create translation: no translation.add on %s", component.name)
+            LOGGER.warning(
+                "Can not create translation: no translation.add on %s", component.name
+            )
             return False
 
         # (2) get_all_available_languages() + add_more filter: DB only. Ensure lang_code is in the
@@ -542,7 +562,11 @@ class BoostComponentService:
         if not request.user.has_perm("translation.add_more", component):
             base_languages = base_languages.filter_for_add(component.project)
         if not base_languages.filter(pk=language.pk).exists():
-            LOGGER.error("Could not add %r to %s (language not available)", self.lang_code, component.name)
+            LOGGER.error(
+                "Could not add %r to %s (language not available)",
+                self.lang_code,
+                component.name,
+            )
             return False
 
         # (3) create_translations_immediate: loads translations and ensures template/new_base
@@ -557,8 +581,16 @@ class BoostComponentService:
         # (4) can_add_new_language: checks new_lang config, template/new_base existence and
         # validity, is_valid_base_for_new. Depends on (3) so files exist.
         if not component.can_add_new_language(request.user):
-            reason = getattr(component, "new_lang_error_message", None) or "Can not add new language"
-            LOGGER.warning("Could not add language %s to %s: %s", self.lang_code, component.name, reason)
+            reason = (
+                getattr(component, "new_lang_error_message", None)
+                or "Can not add new language"
+            )
+            LOGGER.warning(
+                "Could not add language %s to %s: %s",
+                self.lang_code,
+                component.name,
+                reason,
+            )
             return False
 
         # (5) add_new_language: creates translation file and DB record. Depends on (3) and (4).
@@ -571,11 +603,20 @@ class BoostComponentService:
 
         if translation is None:
             storage = get_messages(request)
-            message = "\n".join(m.message for m in storage) if storage else (
-                getattr(component, "new_lang_error_message", None)
-                or f"Could not add {self.lang_code!r}!"
+            message = (
+                "\n".join(m.message for m in storage)
+                if storage
+                else (
+                    getattr(component, "new_lang_error_message", None)
+                    or f"Could not add {self.lang_code!r}!"
+                )
             )
-            LOGGER.warning("Could not add language %s to %s: %s", self.lang_code, component.name, message)
+            LOGGER.warning(
+                "Could not add language %s to %s: %s",
+                self.lang_code,
+                component.name,
+                message,
+            )
             return False
 
         time.sleep(settings.BOOST_ENDPOINT_ADD_TRANSLATION_SECONDS)
@@ -586,7 +627,8 @@ class BoostComponentService:
     def _delete_component_and_commit_removal(
         self, component: Component, result: dict[str, Any]
     ) -> None:
-        """Delete component, remove its translation files from disk, commit and push.
+        """
+        Delete component, remove its translation files from disk, commit and push.
 
         Updates result["components_deleted"] and result["errors"] as needed.
         """
@@ -621,9 +663,7 @@ class BoostComponentService:
         if actually_removed and os.path.isdir(os.path.join(base_path, ".git")):
             try:
                 # Stage only the removed files (not all tracked changes)
-                rel_paths = [
-                    os.path.relpath(p, base_path) for p in actually_removed
-                ]
+                rel_paths = [os.path.relpath(p, base_path) for p in actually_removed]
                 subprocess.run(
                     ["git", "-C", base_path, "add", "--"] + rel_paths,
                     check=True,
@@ -674,12 +714,8 @@ class BoostComponentService:
                         )
                         LOGGER.info("Pushed to origin %s", push_branch)
             except subprocess.CalledProcessError as e:
-                LOGGER.warning(
-                    "Git commit/push failed for %s: %s", name, e.stderr or e
-                )
-                result["errors"].append(
-                    f"Git commit/push failed: {e.stderr or e}"
-                )
+                LOGGER.warning("Git commit/push failed for %s: %s", name, e.stderr or e)
+                result["errors"].append(f"Git commit/push failed: {e.stderr or e}")
             except subprocess.TimeoutExpired:
                 LOGGER.warning("Git commit/push timeout for %s", name)
                 result["errors"].append("Git commit/push timeout")
@@ -692,9 +728,8 @@ class BoostComponentService:
     ) -> dict[str, Any]:
         """Process a single submodule: clone, scan, create/update components."""
         if self.temp_dir is None:
-            raise TypeError(
-                "process_submodule requires temp_dir; call process_all() instead"
-            )
+            msg = "process_submodule requires temp_dir; call process_all() instead"
+            raise TypeError(msg)
         result = {
             "submodule": submodule,
             "success": False,
@@ -716,14 +751,18 @@ class BoostComponentService:
         os.makedirs(temp_submodule_dir, exist_ok=True)
 
         # Clone repository
-        if not self.clone_repository(submodule, temp_submodule_dir, f"local-{self.lang_code}"):
+        if not self.clone_repository(
+            submodule, temp_submodule_dir, f"local-{self.lang_code}"
+        ):
             result["errors"].append(f"Failed to clone repository for {submodule}")
             return result
 
         # Scan for documentation files
         configs = self.scan_documentation_files(temp_submodule_dir)
         if not configs:
-            result["errors"].append(f"No supported documentation files found in {submodule}")
+            result["errors"].append(
+                f"No supported documentation files found in {submodule}"
+            )
             return result
 
         LOGGER.info("Found %s documentation files in %s", len(configs), submodule)
@@ -734,12 +773,13 @@ class BoostComponentService:
         if request is not None and user is not None:
             if existing_project is not None:
                 if not user.has_perm("project.edit", existing_project):
-                    result["errors"].append("Can not create components (missing project.edit)")
+                    result["errors"].append(
+                        "Can not create components (missing project.edit)"
+                    )
                     return result
-            else:
-                if not user.has_perm("project.add"):
-                    result["errors"].append("Can not create project (missing project.add)")
-                    return result
+            elif not user.has_perm("project.add"):
+                result["errors"].append("Can not create project (missing project.add)")
+                return result
 
         # Get or create project
         try:
@@ -797,9 +837,7 @@ class BoostComponentService:
         try:
             for submodule in submodules:
                 LOGGER.info("Processing submodule: %s", submodule)
-                result = self.process_submodule(
-                    submodule, user=user, request=request
-                )
+                result = self.process_submodule(submodule, user=user, request=request)
                 results["submodule_results"].append(result)
 
                 if result["success"]:

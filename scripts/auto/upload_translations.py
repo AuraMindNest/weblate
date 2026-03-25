@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+r"""
 List Weblate components and upload translation files via API.
 
 Usage:
@@ -26,13 +26,14 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import urljoin
 
 import requests
 
 try:
     from translate.storage.pypo import pofile
+
     HAS_POLIB = True
 except ImportError:
     HAS_POLIB = False
@@ -46,6 +47,7 @@ def extract_main_name(component_name: str) -> str:
         "Doc / Modules / Root / Pages / Reference / Unordered Node Map" -> "unordered_node_map"
         "Doc / Pages / Main" -> "main"
         "Doc / Pages / Io / Overview" -> "overview"
+
     """
     if not component_name:
         return ""
@@ -63,10 +65,10 @@ def extract_main_name(component_name: str) -> str:
     return main_name
 
 
-def load_web_config(config_path: str = "web.json") -> Dict[str, Any]:
+def load_web_config(config_path: str = "web.json") -> dict[str, Any]:
     """Load Weblate API configuration from JSON file."""
     try:
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
         print(f"[ERROR] Config file not found: {config_path}", flush=True)
@@ -129,6 +131,7 @@ class WeblateComponentLister:
                 - approve: Import as translated (remove fuzzy flag, accepts all units)
             author: Author name (requires admin permissions)
             email: Author e-mail (requires admin permissions)
+
         """
         endpoint = f"translations/{project_slug}/{component_slug}/{language_code}/file/"
         url = urljoin(self.api_url, endpoint)
@@ -157,11 +160,11 @@ class WeblateComponentLister:
                     # Parse response to show detailed results
                     try:
                         result = response.json()
-                        total = result.get('total', 0)
-                        accepted = result.get('accepted', 0)
-                        skipped = result.get('skipped', 0)
-                        not_found = result.get('not_found', 0)
-                        success = result.get('result', False)
+                        total = result.get("total", 0)
+                        accepted = result.get("accepted", 0)
+                        skipped = result.get("skipped", 0)
+                        not_found = result.get("not_found", 0)
+                        success = result.get("result", False)
 
                         if success and accepted > 0:
                             print(f"  ✓ Accepted: {accepted}/{total}", flush=True)
@@ -170,18 +173,17 @@ class WeblateComponentLister:
                             if not_found > 0:
                                 print(f"    Not found: {not_found}", flush=True)
                             return True
-                        elif skipped == total:
+                        if skipped == total:
                             print(f"  ⊘ All skipped ({total} units)", flush=True)
                             return True
-                        else:
-                            print(
-                    f"  ✗ Failed: Accepted={accepted}, Skipped={skipped}, "
-                    f"Not found={not_found}",
-                    flush=True,
-                )
-                            return False
+                        print(
+                            f"  ✗ Failed: Accepted={accepted}, Skipped={skipped}, "
+                            f"Not found={not_found}",
+                            flush=True,
+                        )
+                        return False
                     except (ValueError, KeyError):
-                        print(f"  ✓ Uploaded (response format unknown)", flush=True)
+                        print("  ✓ Uploaded (response format unknown)", flush=True)
                         return True
                 finally:
                     if original_content_type:
@@ -194,7 +196,7 @@ class WeblateComponentLister:
             print(f"  ✗ Error: {e}", flush=True)
             return False
 
-    def list_projects(self) -> List[Dict[str, Any]]:
+    def list_projects(self) -> list[dict[str, Any]]:
         """List all projects."""
         all_projects = []
         url = "projects/"
@@ -210,10 +212,7 @@ class WeblateComponentLister:
 
                 # Check for next page
                 url = data.get("next")
-                if url:
-                    url = url.replace(self.api_url, "")
-                else:
-                    url = None
+                url = url.replace(self.api_url, "") if url else None
 
             except requests.exceptions.RequestException:
                 break
@@ -231,9 +230,11 @@ class WeblateComponentLister:
 
     def get_translation_units(
         self, project_slug: str, component_slug: str, language_code: str
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get all units for a translation to check their state."""
-        endpoint = f"translations/{project_slug}/{component_slug}/{language_code}/units/"
+        endpoint = (
+            f"translations/{project_slug}/{component_slug}/{language_code}/units/"
+        )
         url = urljoin(self.api_url, endpoint)
 
         all_units = []
@@ -255,7 +256,7 @@ class WeblateComponentLister:
 
         return all_units
 
-    def list_all_components(self, project_slug: str = None) -> List[Dict[str, Any]]:
+    def list_all_components(self, project_slug: str = None) -> list[dict[str, Any]]:
         """List all components, optionally filtered by project."""
         all_components = []
 
@@ -281,10 +282,7 @@ class WeblateComponentLister:
 
                 # Check for next page
                 url = data.get("next")
-                if url:
-                    url = url.replace(self.api_url, "")
-                else:
-                    url = None
+                url = url.replace(self.api_url, "") if url else None
 
             except requests.exceptions.RequestException:
                 break
@@ -293,9 +291,8 @@ class WeblateComponentLister:
 
 
 def map_po_files_to_components(
-    pofiles_dir: str,
-    components: List[Dict[str, Any]]
-) -> Dict[str, Dict[str, Any]]:
+    pofiles_dir: str, components: list[dict[str, Any]]
+) -> dict[str, dict[str, Any]]:
     """
     Map PO files to components based on main name matching.
 
@@ -332,7 +329,9 @@ def map_po_files_to_components(
 
 def main() -> int:
     """Main entry point."""
-    parser = argparse.ArgumentParser(description="List Weblate components and upload translations")
+    parser = argparse.ArgumentParser(
+        description="List Weblate components and upload translations"
+    )
     parser.add_argument(
         "--web-config",
         default="web.json",
@@ -375,7 +374,15 @@ def main() -> int:
     parser.add_argument(
         "--method",
         default="translate",
-        choices=["translate", "approve", "suggest", "fuzzy", "replace", "source", "add"],
+        choices=[
+            "translate",
+            "approve",
+            "suggest",
+            "fuzzy",
+            "replace",
+            "source",
+            "add",
+        ],
         help="Upload method (default: translate)",
     )
     parser.add_argument(
@@ -425,7 +432,10 @@ def main() -> int:
             return 0
         print(f"Projects ({len(projects)}):", flush=True)
         for project in sorted(projects, key=lambda x: x.get("slug", "")):
-            print(f"  {project.get('slug', ''):<40} {project.get('name', 'Unknown')}", flush=True)
+            print(
+                f"  {project.get('slug', ''):<40} {project.get('name', 'Unknown')}",
+                flush=True,
+            )
         return 0
 
     # Fetch components
@@ -453,11 +463,13 @@ def main() -> int:
                 project_name = comp.get("project", {}).get("name", "Unknown")
                 if project_slug not in projects:
                     projects[project_slug] = {"name": project_name, "components": []}
-                projects[project_slug]["components"].append({
-                    "slug": comp.get("slug", ""),
-                    "name": comp.get("name", ""),
-                    "main_name": extract_main_name(comp.get("name", "")),
-                })
+                projects[project_slug]["components"].append(
+                    {
+                        "slug": comp.get("slug", ""),
+                        "name": comp.get("name", ""),
+                        "main_name": extract_main_name(comp.get("name", "")),
+                    }
+                )
 
             print(f"\nComponents ({len(components)}):", flush=True)
             for project_slug, project_data in sorted(projects.items()):
@@ -494,7 +506,10 @@ def main() -> int:
             if args.map_pofiles:
                 print(f"\nMatched {len(matches)} PO files:", flush=True)
                 for comp_slug, match_info in sorted(matches.items()):
-                    print(f"  {comp_slug} -> {os.path.basename(match_info['po_file'])}", flush=True)
+                    print(
+                        f"  {comp_slug} -> {os.path.basename(match_info['po_file'])}",
+                        flush=True,
+                    )
 
             # Upload if requested
             if args.upload:
@@ -507,9 +522,15 @@ def main() -> int:
                 matches_list = sorted(matches.items())
                 total_matches = len(matches_list)
 
-                print(f"\nUploading {total_matches} component(s) (language: {args.language})", flush=True)
+                print(
+                    f"\nUploading {total_matches} component(s) (language: {args.language})",
+                    flush=True,
+                )
                 if len(matches_list) > 1:
-                    print(f"Note: Translations may propagate between components", flush=True)
+                    print(
+                        "Note: Translations may propagate between components",
+                        flush=True,
+                    )
 
                 for idx, (comp_slug, match_info) in enumerate(matches_list, 1):
                     po_file = match_info["po_file"]
@@ -517,10 +538,15 @@ def main() -> int:
 
                     # Check translation state if verify-po is enabled
                     if args.verify_po:
-                        units = lister.get_translation_units(args.project, comp_slug, args.language)
+                        units = lister.get_translation_units(
+                            args.project, comp_slug, args.language
+                        )
                         approved_count = sum(1 for u in units if u.get("state") == 30)
                         translated_count = sum(1 for u in units if u.get("state") == 20)
-                        print(f"  State: {len(units)} total, {translated_count} translated, {approved_count} approved", flush=True)
+                        print(
+                            f"  State: {len(units)} total, {translated_count} translated, {approved_count} approved",
+                            flush=True,
+                        )
 
                         if HAS_POLIB and approved_count > 0:
                             try:
@@ -529,18 +555,28 @@ def main() -> int:
                                 for u in units:
                                     source = u.get("source", [])
                                     if source:
-                                        source_str = source[0] if isinstance(source, list) else str(source)
+                                        source_str = (
+                                            source[0]
+                                            if isinstance(source, list)
+                                            else str(source)
+                                        )
                                         weblate_units_by_source[source_str] = u
 
                                 approved_matches = []
                                 for unit in po_store.units:
-                                    if not unit.isheader() and unit.source in weblate_units_by_source:
+                                    if (
+                                        not unit.isheader()
+                                        and unit.source in weblate_units_by_source
+                                    ):
                                         wu = weblate_units_by_source[unit.source]
                                         if wu.get("state") == 30:
                                             approved_matches.append(unit.source[:50])
 
                                 if approved_matches:
-                                    print(f"  ⚠️  {len(approved_matches)} approved units will be skipped", flush=True)
+                                    print(
+                                        f"  ⚠️  {len(approved_matches)} approved units will be skipped",
+                                        flush=True,
+                                    )
                             except Exception:
                                 pass
 
