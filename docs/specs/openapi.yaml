@@ -67590,9 +67590,9 @@ components:
             * `gerrit` - Gerrit
             * `git` - Git
             * `git-force-push` - Git with force push
+            * `github` - GitHub pull request
             * `local` - No remote repository
             * `mercurial` - Mercurial
-            * `subversion` - Subversion
         repo:
           type: string
           maxLength: 300
@@ -68330,6 +68330,7 @@ components:
       - po-mono
       - poxliff
       - properties
+      - quickbook
       - rc
       - resjson
       - resourcedictionary
@@ -68399,6 +68400,7 @@ components:
         * `po-mono` - gettext PO file (monolingual)
         * `poxliff` - XLIFF 1.2 with gettext extensions
         * `properties` - Java Properties
+        * `quickbook` - QuickBook file
         * `rc` - RC file
         * `resjson` - RESJSON file
         * `resourcedictionary` - ResourceDictionary file
@@ -70826,9 +70828,9 @@ components:
             * `gerrit` - Gerrit
             * `git` - Git
             * `git-force-push` - Git with force push
+            * `github` - GitHub pull request
             * `local` - No remote repository
             * `mercurial` - Mercurial
-            * `subversion` - Subversion
         repo:
           type: string
           maxLength: 300
@@ -72319,17 +72321,17 @@ components:
       - gerrit
       - git
       - git-force-push
+      - github
       - local
       - mercurial
-      - subversion
       type: string
       description: |-
         * `gerrit` - Gerrit
         * `git` - Git
         * `git-force-push` - Git with force push
+        * `github` - GitHub pull request
         * `local` - No remote repository
         * `mercurial` - Mercurial
-        * `subversion` - Subversion
     patch_200_Message_response_serializer:
       type: object
       properties:
@@ -72397,7 +72399,7 @@ components:
         project tokens whose access to the API is limited to operations to their associated
         project. These tokens have the `wlp_` prefix.\n        "
 servers:
-- url: 'http:'
+- url: http://localhost:8000
   description: Weblate
 tags:
 - name: root
