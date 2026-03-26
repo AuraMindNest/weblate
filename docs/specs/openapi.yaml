@@ -67590,7 +67590,6 @@ components:
             * `gerrit` - Gerrit
             * `git` - Git
             * `git-force-push` - Git with force push
-            * `github` - GitHub pull request
             * `local` - No remote repository
             * `mercurial` - Mercurial
         repo:
@@ -70828,7 +70827,6 @@ components:
             * `gerrit` - Gerrit
             * `git` - Git
             * `git-force-push` - Git with force push
-            * `github` - GitHub pull request
             * `local` - No remote repository
             * `mercurial` - Mercurial
         repo:
@@ -72321,7 +72319,6 @@ components:
       - gerrit
       - git
       - git-force-push
-      - github
       - local
       - mercurial
       type: string
@@ -72329,7 +72326,6 @@ components:
         * `gerrit` - Gerrit
         * `git` - Git
         * `git-force-push` - Git with force push
-        * `github` - GitHub pull request
         * `local` - No remote repository
         * `mercurial` - Mercurial
     patch_200_Message_response_serializer:
@@ -72399,7 +72395,7 @@ components:
         project tokens whose access to the API is limited to operations to their associated
         project. These tokens have the `wlp_` prefix.\n        "
 servers:
-- url: http://localhost:8000
+- url: 'http:'
   description: Weblate
 tags:
 - name: root
