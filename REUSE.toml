@@ -149,7 +149,6 @@ SPDX-License-Identifier = "GPL-3.0-or-later"
 
 [[annotations]]
 path = [
-  ".dockerignore",
   ".github/workflows/cd.yml",
   "docker/**",
   "scripts/auto/**",

@@ -46,6 +46,8 @@ weblate-*.tar.*
 /test/
 
 # Local development
+/start-weblate.sh
+/stop-weblate.sh
 .cursorignore
 .cursor/
 /logs
