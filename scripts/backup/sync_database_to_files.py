@@ -25,9 +25,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "weblate.settings")
 django.setup()
 
-from django.db import transaction
+from django.db import transaction  # pylint: disable=wrong-import-position
 
-from weblate.trans.models import Component, Project
+from weblate.trans.models import (  # pylint: disable=wrong-import-position
+    Component,
+    Project,
+)
 
 
 def sync_component(component: Component) -> bool:
