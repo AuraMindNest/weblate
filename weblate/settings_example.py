@@ -18,8 +18,8 @@ from weblate.api.spectacular import (
 # Title of site to use
 SITE_TITLE = "Weblate"
 
-# Site domain
-SITE_DOMAIN = ""
+# Site domain (set DJANGO_SITE_DOMAIN for OpenAPI export; see docs/Makefile, api.yml)
+SITE_DOMAIN = os.environ.get("DJANGO_SITE_DOMAIN", "")
 
 # Whether site uses https
 ENABLE_HTTPS = False
@@ -39,23 +39,31 @@ ADMINS: tuple[tuple[str, str], ...] = (
 
 MANAGERS = ADMINS
 
+_CI_DATABASE = os.environ.get("CI_DATABASE", "")
+if _CI_DATABASE == "postgresql":
+    _CI_DEFAULT_DB_USER = "postgres"
+elif _CI_DATABASE in {"mysql", "mariadb"}:
+    _CI_DEFAULT_DB_USER = "root"
+else:
+    _CI_DEFAULT_DB_USER = "weblate"
+
 DATABASES = {
     "default": {
         # Use "postgresql" or "mysql".
         "ENGINE": "django.db.backends.postgresql",
         # Database name.
-        "NAME": "weblate",
-        # Database user.
-        "USER": "weblate",
+        "NAME": os.environ.get("CI_DB_NAME", "weblate"),
+        # Database user (CI uses postgres on GitHub Actions; local dev often weblate).
+        "USER": os.environ.get("CI_DB_USER", _CI_DEFAULT_DB_USER),
         # Name of role to alter to set parameters in PostgreSQL,
         # use in case role name is different than user used for authentication.
         # "ALTER_ROLE": "weblate",
         # Database password.
-        "PASSWORD": "",
-        # Set to empty string for localhost.
-        "HOST": "127.0.0.1",
-        # Set to empty string for default.
-        "PORT": "",
+        "PASSWORD": os.environ.get("CI_DB_PASSWORD", ""),
+        # Set to empty string for localhost. CI sets CI_DB_HOST / CI_DB_PORT for services.
+        "HOST": os.environ.get("CI_DB_HOST", "127.0.0.1"),
+        # Set to empty string for default PostgreSQL port.
+        "PORT": os.environ.get("CI_DB_PORT", ""),
         # Customizations for databases.
         "OPTIONS": {
             # In case of using an older MySQL server,
@@ -78,7 +86,7 @@ DATABASES = {
 
 # Data directory, you can use following for the development purposes:
 # os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
-DATA_DIR = "/home/weblate/data"
+DATA_DIR = os.environ.get("WEBLATE_DATA_DIR", "/home/weblate/data")
 CACHE_DIR = f"{DATA_DIR}/cache"
 
 # Local time zone for this installation. Choices can be found here:

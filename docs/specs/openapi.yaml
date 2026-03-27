@@ -67587,12 +67587,9 @@ components:
           description: |-
             Version control system to use to access your repository containing translations. You can also choose additional integration with third party providers to submit pull/merge requests.
 
-            * `gerrit` - Gerrit
             * `git` - Git
             * `git-force-push` - Git with force push
-            * `github` - GitHub pull request
             * `local` - No remote repository
-            * `mercurial` - Mercurial
         repo:
           type: string
           maxLength: 300
@@ -70825,12 +70822,9 @@ components:
           description: |-
             Version control system to use to access your repository containing translations. You can also choose additional integration with third party providers to submit pull/merge requests.
 
-            * `gerrit` - Gerrit
             * `git` - Git
             * `git-force-push` - Git with force push
-            * `github` - GitHub pull request
             * `local` - No remote repository
-            * `mercurial` - Mercurial
         repo:
           type: string
           maxLength: 300
@@ -72318,20 +72312,14 @@ components:
       description: '* `validation_error` - Validation Error'
     VcsEnum:
       enum:
-      - gerrit
       - git
       - git-force-push
-      - github
       - local
-      - mercurial
       type: string
       description: |-
-        * `gerrit` - Gerrit
         * `git` - Git
         * `git-force-push` - Git with force push
-        * `github` - GitHub pull request
         * `local` - No remote repository
-        * `mercurial` - Mercurial
     patch_200_Message_response_serializer:
       type: object
       properties:
