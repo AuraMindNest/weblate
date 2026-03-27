@@ -56,6 +56,11 @@ jobs:
     - name: Migrate database
       run: uv run --frozen ./manage.py migrate --noinput --traceback
     - name: Generate OpenAPI
+      # Use weblate.settings (same as default `manage.py` / `make update-openapi`), not
+      # settings_test: test settings leave SITE_URL out of sync with SITE_DOMAIN, so
+      # `servers.url` would not match the committed docs/specs/openapi.yaml.
+      env:
+        DJANGO_SETTINGS_MODULE: weblate.settings
       run: |
         echo "::add-matcher::.github/matchers/spectacular.json"
         make -C docs update-openapi
