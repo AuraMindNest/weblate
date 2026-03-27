@@ -18,7 +18,8 @@ from weblate.api.spectacular import (
 # Title of site to use
 SITE_TITLE = "Weblate"
 
-# Site domain (set DJANGO_SITE_DOMAIN for OpenAPI export; see docs/Makefile, api.yml)
+# Site domain (set DJANGO_SITE_DOMAIN for OpenAPI export; use a public host such as
+# hosted.weblate.org so Redocly accepts the generated servers URL; see docs/Makefile, api.yml)
 SITE_DOMAIN = os.environ.get("DJANGO_SITE_DOMAIN", "")
 
 # Whether site uses https

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright © Michal Čihař <michal@weblate.org>
+# Copyright © Boost Organization <boost@boost.org>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 

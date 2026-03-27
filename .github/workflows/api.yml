@@ -59,7 +59,7 @@ jobs:
       # Same env as `make -C docs update-openapi` (settings_example + CI DB + site URL).
       env:
         DJANGO_SETTINGS_MODULE: weblate.settings_example
-        DJANGO_SITE_DOMAIN: localhost:8000
+        DJANGO_SITE_DOMAIN: hosted.weblate.org
         WEBLATE_DATA_DIR: ${{ github.workspace }}/data-test
       run: |
         echo "::add-matcher::.github/matchers/spectacular.json"

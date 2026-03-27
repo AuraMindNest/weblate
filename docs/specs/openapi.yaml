@@ -72387,7 +72387,7 @@ components:
         project tokens whose access to the API is limited to operations to their associated
         project. These tokens have the `wlp_` prefix.\n        "
 servers:
-- url: http://localhost:8000
+- url: http://hosted.weblate.org
   description: Weblate
 tags:
 - name: root
@@ -72397,10 +72397,15 @@ tags:
 - name: groups
   description: Added in version 4.0.
 - name: roles
+  description: Access roles and permission assignments.
 - name: languages
+  description: Translation languages and locale definitions.
 - name: projects
+  description: Translation projects.
 - name: components
+  description: Project components and repositories.
 - name: translations
+  description: Translation objects and their content.
 - name: memory
   description: Added in version 4.14.
 - name: units
@@ -72408,7 +72413,9 @@ tags:
     with a corresponding translated string and also contains some related metadata.
     The term is derived from the Translate Toolkit and XLIFF.
 - name: changes
+  description: Change history and audit log.
 - name: screenshots
+  description: Context screenshots for source strings.
 - name: addons
   description: Added in version 4.4.1.
 - name: component-lists
@@ -72424,9 +72431,11 @@ tags:
 - name: statistics
   description: Many endpoints support displaying statistics for their objects.
 - name: metrics
+  description: Prometheus metrics and monitoring endpoints.
 - name: search
   description: Added in version 4.18.
 - name: categories
+  description: Component categories within a project.
 - name: hooks
   description: |-
     Notification hooks allow external applications to notify Weblate that the VCS repository has been updated.

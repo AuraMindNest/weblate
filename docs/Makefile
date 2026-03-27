@@ -41,7 +41,7 @@ update-schemas:
 
 update-openapi:
 	@WEBLATE_HIDE_VERSION=1 DJANGO_SETTINGS_MODULE=weblate.settings_example \
-		DJANGO_SITE_DOMAIN=localhost:8000 WEBLATE_DATA_DIR=$(shell cd .. && pwd)/data-test \
+		DJANGO_SITE_DOMAIN=hosted.weblate.org WEBLATE_DATA_DIR=$(shell cd .. && pwd)/data-test \
 		CI_DATABASE=postgresql CI_REDIS_HOST=127.0.0.1 CI_REDIS_PORT=60001 \
 		CI_DB_PASSWORD=weblate CI_DB_HOST=127.0.0.1 CI_DB_PORT=60000 CI_SELENIUM=1 \
 		uv run --frozen --extra postgres --no-sync ../manage.py spectacular --skip-checks --fail-on-warn --validate > specs/openapi.yaml
