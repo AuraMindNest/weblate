@@ -151,6 +151,9 @@ class BoostComponentService:
                 LOGGER.error("Failed to clone: %s", result.stderr)
                 return False
 
+            LOGGER.info("Cloned %s", submodule)
+            return True
+
         except subprocess.TimeoutExpired:
             LOGGER.error("Clone timeout for %s", submodule)
             return False
@@ -158,9 +161,6 @@ class BoostComponentService:
             LOGGER.error("Clone exception: %s", e)
             report_error(cause="Boost component clone")
             return False
-        else:
-            LOGGER.info("Cloned %s", submodule)
-            return True
 
     def scan_documentation_files(self, repo_dir: str) -> list[dict[str, Any]]:
         """
@@ -415,6 +415,8 @@ class BoostComponentService:
                     )
                 self.add_language_to_component(component, request)
 
+            return component, created
+
         except Exception as e:
             LOGGER.error(
                 "Failed to create/update component (%s): %s",
@@ -423,8 +425,6 @@ class BoostComponentService:
             )
             report_error(cause="Component creation/update")
             return None, False
-        else:
-            return component, created
 
     def _do_update_git_only(self, component: Component, request) -> bool:
         """

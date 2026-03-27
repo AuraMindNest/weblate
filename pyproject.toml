@@ -637,6 +637,7 @@ max-complexity = 16  # TODO: should be lower
 "weblate/*/migrations/*.py" = ["RUF012"]
 "weblate/*/tests**.py" = ["ANN001", "S105", "S106"]
 "weblate/auth/migrations/0003_fixup_teams.py" = ["T201"]
+"weblate/boost_endpoint/services.py" = ["TRY300"]
 "weblate/examples/*.py" = ["CPY001", "INP001"]
 "weblate/formats/asciidoc.py" = ["C901", "PLW1514", "S103"]
 "weblate/settings_*.py" = ["F405"]
