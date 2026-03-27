@@ -487,13 +487,6 @@ ignore = [
   "settings_test.py",
   "test-repos"
 ]
-# Fork/local automation (Django setup before imports; not core app lint surface)
-ignore-paths = [
-  "scripts/auto/",
-  "scripts/backup/"
-]
-
-[tool.pytest]
 
 [tool.pytest.ini_options]
 addopts = "--reuse-db --cov=weblate --cov-report= --durations=20 --durations-min=2 --ignore=data --ignore=data-test --ignore=dev-docker --ignore=scripts"
@@ -526,15 +519,6 @@ filterwarnings = [
   'default:unclosed:ResourceWarning'
 ]
 python_files = ["test_*.py", "tests.py"]
-
-# Boost fork: local automation and docker helpers are not linted like core weblate/.
-[tool.ruff]
-extend-exclude = [
-  "docker/etc/nginx",
-  "scripts/auto",
-  "scripts/backup",
-  "weblate/boost_endpoint"
-]
 
 [tool.ruff.format]
 docstring-code-format = true

@@ -159,5 +159,5 @@ path = [
   "scripts/README_create_project.md"
 ]
 precedence = "aggregate"
-SPDX-FileCopyrightText = "Michal Čihař <michal@weblate.org>"
+SPDX-FileCopyrightText = "Boost Organization <boost@boost.org>"
 SPDX-License-Identifier = "GPL-3.0-or-later"
