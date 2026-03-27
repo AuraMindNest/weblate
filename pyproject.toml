@@ -607,7 +607,33 @@ max-complexity = 16  # TODO: should be lower
 "ci/migrate-scripts/*.py" = ["INP001", "S101"]
 "docs/_ext/djangodocs.py" = ["INP001"]
 "docs/conf.py" = ["ERA001", "INP001"]
-"scripts/*" = ["T201", "T203"]
+# Standalone / Django-bootstrap scripts under scripts/auto and scripts/backup (not matched by scripts/*)
+"scripts/**/*.py" = [
+  "ANN401",
+  "C901",
+  "CPY001",
+  "D205",
+  "D401",
+  "E402",
+  "EXE001",
+  "FURB118",
+  "PLC1901",
+  "PLR0912",
+  "PLR0914",
+  "PLR0915",
+  "PLR0917",
+  "PLR1702",
+  "PLR6201",
+  "RET504",
+  "RUF005",
+  "RUF013",
+  "S110",
+  "S310",
+  "SIM102",
+  "T201",
+  "T203",
+  "TRY300"
+]
 "weblate/*/migrations/*.py" = ["RUF012"]
 "weblate/*/tests**.py" = ["ANN001", "S105", "S106"]
 "weblate/auth/migrations/0003_fixup_teams.py" = ["T201"]

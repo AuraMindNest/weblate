@@ -115,6 +115,7 @@ class BoostComponentService:
     def get_supported_extensions(self) -> set[str]:
         """
         Set of supported file extensions (from Weblate formats).
+
         If self.extensions is non-empty, restrict to those that are both
         Weblate-supported and in the list.
         """
@@ -150,9 +151,6 @@ class BoostComponentService:
                 LOGGER.error("Failed to clone: %s", result.stderr)
                 return False
 
-            LOGGER.info("Cloned %s", submodule)
-            return True
-
         except subprocess.TimeoutExpired:
             LOGGER.error("Clone timeout for %s", submodule)
             return False
@@ -160,10 +158,14 @@ class BoostComponentService:
             LOGGER.error("Clone exception: %s", e)
             report_error(cause="Boost component clone")
             return False
+        else:
+            LOGGER.info("Cloned %s", submodule)
+            return True
 
     def scan_documentation_files(self, repo_dir: str) -> list[dict[str, Any]]:
         """
         Scan repo for doc files; return list of in-memory component configs.
+
         Only files in subfolders are included; files in repo root are skipped.
         Uses get_supported_extensions() which respects self.extensions when set.
         """
@@ -413,8 +415,6 @@ class BoostComponentService:
                     )
                 self.add_language_to_component(component, request)
 
-            return component, created
-
         except Exception as e:
             LOGGER.error(
                 "Failed to create/update component (%s): %s",
@@ -423,10 +423,13 @@ class BoostComponentService:
             )
             report_error(cause="Component creation/update")
             return None, False
+        else:
+            return component, created
 
     def _do_update_git_only(self, component: Component, request) -> bool:
         """
         Perform only the git update (fetch, merge/rebase). Does not call create_translations.
+
         Mirrors Component.do_update lock block + push_if_needed; caller must call
         create_translations_immediate after.
         """
