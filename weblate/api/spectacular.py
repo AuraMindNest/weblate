@@ -99,6 +99,7 @@ The OpenAPI specification is available as feature preview, feedback welcome!
         "POSTPROCESSING_HOOKS": [
             "drf_standardized_errors.openapi_hooks.postprocess_schema_enums",
             "weblate.api.docs.add_middleware_headers",
+            "weblate.api.docs.ensure_operation_summaries",
         ],
         "EXTERNAL_DOCS": {
             "url": lazy(get_doc_url_wrapper, str)("index"),

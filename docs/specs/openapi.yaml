@@ -292,6 +292,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return a list of add-ons.
   /api/addons/{id}/:
     get:
       operationId: api_addons_retrieve
@@ -566,6 +567,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Returns information about add-on information.
     put:
       operationId: api_addons_update
       description: Edit full information about add-on.
@@ -850,6 +852,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Edit full information about add-on.
     patch:
       operationId: api_addons_partial_update
       description: Edit partial information about add-on.
@@ -1133,6 +1136,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Edit partial information about add-on.
     delete:
       operationId: api_addons_destroy
       description: Delete add-on.
@@ -1391,6 +1395,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete add-on.
   /api/categories/:
     get:
       operationId: api_categories_list
@@ -1671,6 +1676,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: List available categories.
     post:
       operationId: api_categories_create
       description: Category API.
@@ -1942,6 +1948,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Category'
           description: ''
+      summary: Category API.
   /api/categories/{id}/:
     get:
       operationId: api_categories_retrieve
@@ -2216,6 +2223,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Category API.
     put:
       operationId: api_categories_update
       description: Edit full information about category.
@@ -2500,6 +2508,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Edit full information about category.
     patch:
       operationId: api_categories_partial_update
       description: Category API.
@@ -2783,6 +2792,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Category API.
     delete:
       operationId: api_categories_destroy
       description: Delete category.
@@ -3041,6 +3051,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete category.
   /api/categories/{id}/statistics/:
     get:
       operationId: api_categories_statistics_retrieve
@@ -3317,6 +3328,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return statistics for a category.
   /api/changes/:
     get:
       operationId: api_changes_list
@@ -3787,6 +3799,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return a list of translation changes.
   /api/changes/{id}/:
     get:
       operationId: api_changes_retrieve
@@ -4061,6 +4074,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return information about a translation change.
   /api/component-lists/:
     get:
       operationId: api_component_lists_list
@@ -4341,6 +4355,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return a list of component lists.
     post:
       operationId: api_component_lists_create
       description: Create a new component list.
@@ -4612,6 +4627,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ComponentList'
           description: ''
+      summary: Create a new component list.
   /api/component-lists/{slug}/:
     get:
       operationId: api_component_lists_retrieve
@@ -4886,6 +4902,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return information about component list.
     put:
       operationId: api_component_lists_update
       description: Change the component list parameters.
@@ -5170,6 +5187,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Change the component list parameters.
     patch:
       operationId: api_component_lists_partial_update
       description: Change the component list parameters.
@@ -5453,6 +5471,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Change the component list parameters.
     delete:
       operationId: api_component_lists_destroy
       description: Delete the component list.
@@ -5711,6 +5730,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete the component list.
   /api/component-lists/{slug}/components/:
     get:
       operationId: api_component_lists_components_retrieve
@@ -5985,6 +6005,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Component lists API.
     post:
       operationId: api_component_lists_components_create
       description: Associate component with a component list.
@@ -6269,6 +6290,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Associate component with a component list.
   /api/component-lists/{slug}/components/{component_slug}/:
     delete:
       operationId: api_component_lists_components_destroy
@@ -6533,6 +6555,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Disassociate a component from the component list.
   /api/components/:
     get:
       operationId: api_components_list
@@ -6813,6 +6836,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return a list of translation components.
   /api/components/{project__slug}/{slug}/:
     get:
       operationId: api_components_retrieve
@@ -7093,6 +7117,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return information about translation component.
     put:
       operationId: api_components_update
       description: Edit a component by a PUT request.
@@ -7383,6 +7408,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Edit a component by a PUT request.
     patch:
       operationId: api_components_partial_update
       description: Edit a component by a PATCH request.
@@ -7672,6 +7698,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Edit a component by a PATCH request.
     delete:
       operationId: api_components_destroy
       description: Delete a component.
@@ -7936,6 +7963,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete a component.
   /api/components/{project__slug}/{slug}/addons/:
     post:
       operationId: api_components_addons_create
@@ -8227,6 +8255,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Translation components API.
   /api/components/{project__slug}/{slug}/changes/:
     get:
       operationId: api_components_changes_retrieve
@@ -8507,6 +8536,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return a list of component changes.
   /api/components/{project__slug}/{slug}/credits/:
     get:
       operationId: api_components_credits_retrieve
@@ -8787,6 +8817,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Translation components API.
   /api/components/{project__slug}/{slug}/file/:
     get:
       operationId: api_components_file_retrieve
@@ -9067,6 +9098,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Translation components API.
   /api/components/{project__slug}/{slug}/links/:
     get:
       operationId: api_components_links_retrieve
@@ -9347,6 +9379,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return projects linked with a component.
     post:
       operationId: api_components_links_create
       description: Associate project with a component.
@@ -9637,6 +9670,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Associate project with a component.
   /api/components/{project__slug}/{slug}/links/{project_slug}/:
     delete:
       operationId: api_components_links_destroy
@@ -9907,6 +9941,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Remove association of a project with a component.
   /api/components/{project__slug}/{slug}/lock/:
     get:
       operationId: api_components_lock_retrieve
@@ -10187,6 +10222,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return component lock status.
     post:
       operationId: api_components_lock_create
       description: Sets component lock status.
@@ -10477,6 +10513,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Sets component lock status.
   /api/components/{project__slug}/{slug}/monolingual_base/:
     get:
       operationId: api_components_monolingual_base_retrieve
@@ -10757,6 +10794,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Download base file for monolingual translations.
   /api/components/{project__slug}/{slug}/new_template/:
     get:
       operationId: api_components_new_template_retrieve
@@ -11037,6 +11075,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Download template file for new translations.
   /api/components/{project__slug}/{slug}/repository/:
     get:
       operationId: api_components_repository_retrieve
@@ -11317,6 +11356,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return information about VCS repository status.
     post:
       operationId: api_components_repository_create
       description: Perform given operation on the VCS repository.
@@ -11607,6 +11647,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Perform given operation on the VCS repository.
   /api/components/{project__slug}/{slug}/screenshots/:
     get:
       operationId: api_components_screenshots_retrieve
@@ -11887,6 +11928,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return a list of component screenshots.
   /api/components/{project__slug}/{slug}/statistics/:
     get:
       operationId: api_components_statistics_retrieve
@@ -12169,6 +12211,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return paginated statistics for all translations within component.
   /api/components/{project__slug}/{slug}/translations/:
     get:
       operationId: api_components_translations_retrieve
@@ -12449,6 +12492,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return a list of translation objects in the given component.
     post:
       operationId: api_components_translations_create
       description: Create a new translation in the given component.
@@ -12739,6 +12783,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Create a new translation in the given component.
   /api/groups/:
     get:
       operationId: api_groups_list
@@ -13019,6 +13064,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Groups API.
     post:
       operationId: api_groups_create
       description: Create a new group.
@@ -13290,6 +13336,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Group'
           description: ''
+      summary: Create a new group.
   /api/groups/{id}/:
     get:
       operationId: api_groups_retrieve
@@ -13564,6 +13611,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return information about a group.
     put:
       operationId: api_groups_update
       description: Change the group parameters.
@@ -13848,6 +13896,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Change the group parameters.
     patch:
       operationId: api_groups_partial_update
       description: Change the group parameters.
@@ -14131,6 +14180,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Change the group parameters.
     delete:
       operationId: api_groups_destroy
       description: Delete the group.
@@ -14389,6 +14439,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete the group.
   /api/groups/{id}/admins/:
     post:
       operationId: api_groups_admins_create
@@ -14674,6 +14725,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Make user a group admin.
   /api/groups/{id}/admins/{user_pk}/:
     delete:
       operationId: api_groups_admins_destroy
@@ -14939,6 +14991,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete a user from group admins.
   /api/groups/{id}/componentlists/:
     post:
       operationId: api_groups_componentlists_create
@@ -15224,6 +15277,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Associate componentlists with a group.
   /api/groups/{id}/componentlists/{component_list_id}/:
     delete:
       operationId: api_groups_componentlists_destroy
@@ -15489,6 +15543,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete a componentlist from a group.
   /api/groups/{id}/components/:
     post:
       operationId: api_groups_components_create
@@ -15774,6 +15829,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Associate components with a group.
   /api/groups/{id}/components/{component_id}/:
     delete:
       operationId: api_groups_components_destroy
@@ -16039,6 +16095,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete a component from a group.
   /api/groups/{id}/languages/:
     post:
       operationId: api_groups_languages_create
@@ -16324,6 +16381,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Associate languages with a group.
   /api/groups/{id}/languages/{language_code}/:
     delete:
       operationId: api_groups_languages_destroy
@@ -16588,6 +16646,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete a language from a group.
   /api/groups/{id}/projects/:
     post:
       operationId: api_groups_projects_create
@@ -16873,6 +16932,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Associate projects with a group.
   /api/groups/{id}/projects/{project_id}/:
     delete:
       operationId: api_groups_projects_destroy
@@ -17138,6 +17198,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete a project from a group.
   /api/groups/{id}/roles/:
     post:
       operationId: api_groups_roles_create
@@ -17423,6 +17484,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Associate roles with a group.
   /api/groups/{id}/roles/{role_id}/:
     delete:
       operationId: api_groups_roles_destroy
@@ -17687,6 +17749,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete a role from a group.
   /api/languages/:
     get:
       operationId: api_languages_list
@@ -17967,6 +18030,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return a list of all languages the user has access to.
     post:
       operationId: api_languages_create
       description: Create a new language.
@@ -18238,6 +18302,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Language'
           description: ''
+      summary: Create a new language.
   /api/languages/{code}/:
     get:
       operationId: api_languages_retrieve
@@ -18512,6 +18577,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return information about a language.
     put:
       operationId: api_languages_update
       description: Change the language parameters.
@@ -18796,6 +18862,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Change the language parameters.
     patch:
       operationId: api_languages_partial_update
       description: Change the language parameters.
@@ -19079,6 +19146,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Change the language parameters.
     delete:
       operationId: api_languages_destroy
       description: Delete the language.
@@ -19337,6 +19405,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete the language.
   /api/languages/{code}/statistics/:
     get:
       operationId: api_languages_statistics_retrieve
@@ -19613,6 +19682,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return statistics for a language.
   /api/memory/:
     get:
       operationId: api_memory_list
@@ -19893,6 +19963,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return a list of memory results.
     post:
       operationId: api_memory_create
       description: Memory API.
@@ -20164,6 +20235,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Memory'
           description: ''
+      summary: Memory API.
   /api/memory/{id}/:
     get:
       operationId: api_memory_retrieve
@@ -20438,6 +20510,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Memory API.
     put:
       operationId: api_memory_update
       description: Memory API.
@@ -20722,6 +20795,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Memory API.
     patch:
       operationId: api_memory_partial_update
       description: Memory API.
@@ -21005,6 +21079,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Memory API.
     delete:
       operationId: api_memory_destroy
       description: Delete a memory object.
@@ -21263,6 +21338,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete a memory object.
   /api/metrics/:
     get:
       operationId: api_metrics_retrieve
@@ -21563,6 +21639,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return server metrics.
   /api/projects/:
     get:
       operationId: api_projects_list
@@ -21843,6 +21920,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return a list of all projects.
     post:
       operationId: api_projects_create
       description: Create a new project.
@@ -22114,6 +22192,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Project'
           description: ''
+      summary: Create a new project.
   /api/projects/{slug}/:
     get:
       operationId: api_projects_retrieve
@@ -22388,6 +22467,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return information about a project.
     put:
       operationId: api_projects_update
       description: Edit a project by a PUT request.
@@ -22672,6 +22752,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Edit a project by a PUT request.
     patch:
       operationId: api_projects_partial_update
       description: Edit a project by a PATCH request.
@@ -22955,6 +23036,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Edit a project by a PATCH request.
     delete:
       operationId: api_projects_destroy
       description: Delete a project.
@@ -23213,6 +23295,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete a project.
   /api/projects/{slug}/addons/:
     post:
       operationId: api_projects_addons_create
@@ -23498,6 +23581,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Translation projects API.
   /api/projects/{slug}/categories/:
     get:
       operationId: api_projects_categories_retrieve
@@ -23772,6 +23856,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return categories for a project.
   /api/projects/{slug}/changes/:
     get:
       operationId: api_projects_changes_retrieve
@@ -24046,6 +24131,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return a list of project changes.
   /api/projects/{slug}/components/:
     get:
       operationId: api_projects_components_retrieve
@@ -24295,6 +24381,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return a list of translation components in the given project.
     post:
       operationId: api_projects_components_create
       description: Create translation components in the given project.
@@ -24557,6 +24644,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Create translation components in the given project.
   /api/projects/{slug}/credits/:
     get:
       operationId: api_projects_credits_retrieve
@@ -24831,6 +24919,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return contributor credits for a project.
   /api/projects/{slug}/file/:
     get:
       operationId: api_projects_file_retrieve
@@ -25105,6 +25194,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Translation projects API.
   /api/projects/{slug}/labels/:
     get:
       operationId: api_projects_labels_retrieve
@@ -25379,6 +25469,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return labels for a project.
     post:
       operationId: api_projects_labels_create
       description: Create a label for a project.
@@ -25663,6 +25754,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Create a label for a project.
   /api/projects/{slug}/labels/{label_id}/:
     delete:
       operationId: api_projects_labels_destroy
@@ -25927,6 +26019,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete a label from a project.
   /api/projects/{slug}/languages/:
     get:
       operationId: api_projects_languages_retrieve
@@ -26203,6 +26296,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return paginated statistics for all languages within a project.
   /api/projects/{slug}/languages/{language_code}/file/:
     get:
       operationId: api_projects_languages_file_retrieve
@@ -26484,6 +26578,8 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Download all component translation files in the project for a specific
+        language.
   /api/projects/{slug}/lock/:
     get:
       operationId: api_projects_lock_retrieve
@@ -26758,6 +26854,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return project lock status.
     post:
       operationId: api_projects_lock_create
       description: Sets project lock status.
@@ -27042,6 +27139,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Sets project lock status.
   /api/projects/{slug}/machinery_settings/:
     get:
       operationId: api_projects_machinery_settings_retrieve
@@ -27326,6 +27424,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: List machinery settings for a project.
     post:
       operationId: api_projects_machinery_settings_create
       description: Install a new machinery service.
@@ -27611,6 +27710,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/post_400_Error_message_serializer'
           description: ''
+      summary: Install a new machinery service.
     put:
       operationId: api_projects_machinery_settings_update
       description: Replace configuration for all services.
@@ -27894,6 +27994,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/put_400_Error_message_serializer'
           description: ''
+      summary: Replace configuration for all services.
     patch:
       operationId: api_projects_machinery_settings_partial_update
       description: Partially update a single service. Leave configuration blank to
@@ -28186,6 +28287,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/patch_400_Error_message_serializer'
           description: ''
+      summary: Partially update a single service. Leave configuration blank to remove
+        the service.
   /api/projects/{slug}/repository/:
     get:
       operationId: api_projects_repository_retrieve
@@ -28460,6 +28563,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return information about VCS repository status.
     post:
       operationId: api_projects_repository_create
       description: Perform given operation on the VCS repository.
@@ -28744,6 +28848,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Perform given operation on the VCS repository.
   /api/projects/{slug}/statistics/:
     get:
       operationId: api_projects_statistics_retrieve
@@ -29020,6 +29125,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return statistics for a project.
   /api/roles/:
     get:
       operationId: api_roles_list
@@ -29300,6 +29406,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return a list of all roles associated with the user.
     post:
       operationId: api_roles_create
       description: Create a new role.
@@ -29571,6 +29678,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Role'
           description: ''
+      summary: Create a new role.
   /api/roles/{id}/:
     get:
       operationId: api_roles_retrieve
@@ -29845,6 +29953,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return information about a role.
     put:
       operationId: api_roles_update
       description: Change the role parameters.
@@ -30129,6 +30238,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Change the role parameters.
     patch:
       operationId: api_roles_partial_update
       description: Change the role parameters.
@@ -30412,6 +30522,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Change the role parameters.
     delete:
       operationId: api_roles_destroy
       description: Delete a role.
@@ -30670,6 +30781,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete a role.
   /api/schema/:
     get:
       operationId: api_schema_retrieve
@@ -31114,6 +31226,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: OpenApi3 schema for this API. Format can be selected via content negotiation.
   /api/screenshots/:
     get:
       operationId: api_screenshots_list
@@ -31394,6 +31507,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return a list of screenshot string information.
     post:
       operationId: api_screenshots_create
       description: Create a new screenshot.
@@ -31665,6 +31779,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Screenshot'
           description: ''
+      summary: Create a new screenshot.
   /api/screenshots/{id}/:
     get:
       operationId: api_screenshots_retrieve
@@ -31939,6 +32054,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return information about screenshot information.
     put:
       operationId: api_screenshots_update
       description: Edit full information about screenshot.
@@ -32223,6 +32339,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Edit full information about screenshot.
     patch:
       operationId: api_screenshots_partial_update
       description: Edit partial information about screenshot.
@@ -32506,6 +32623,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Edit partial information about screenshot.
     delete:
       operationId: api_screenshots_destroy
       description: Delete screenshot.
@@ -32764,6 +32882,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete screenshot.
   /api/screenshots/{id}/file/:
     get:
       operationId: api_screenshots_file_retrieve
@@ -33013,6 +33132,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Download the screenshot image.
     post:
       operationId: api_screenshots_file_create
       description: Replace screenshot image.
@@ -33272,6 +33392,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Replace screenshot image.
     put:
       operationId: api_screenshots_file_update
       description: Screenshots API.
@@ -33531,6 +33652,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Screenshots API.
   /api/screenshots/{id}/units/:
     post:
       operationId: api_screenshots_units_create
@@ -33816,6 +33938,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Associate source string with screenshot.
   /api/screenshots/{id}/units/{unit_id}/:
     delete:
       operationId: api_screenshots_units_destroy
@@ -34081,6 +34204,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Remove source string association with screenshot.
   /api/search/:
     get:
       operationId: api_search_retrieve
@@ -34317,6 +34441,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return site-wide search results as a list.
   /api/tasks/{id}/:
     get:
       operationId: api_tasks_retrieve
@@ -34584,6 +34709,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return information about a task
     delete:
       operationId: api_tasks_destroy
       parameters:
@@ -34841,6 +34967,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Api Tasks Destroy
   /api/translations/:
     get:
       operationId: api_translations_list
@@ -35121,6 +35248,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return a list of translations.
   /api/translations/{component__project__slug}/{component__slug}/{language__code}/:
     get:
       operationId: api_translations_retrieve
@@ -35407,6 +35535,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return information about a translation.
     delete:
       operationId: api_translations_destroy
       description: Delete a translation.
@@ -35677,6 +35806,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete a translation.
   /api/translations/{component__project__slug}/{component__slug}/{language__code}/autotranslate/:
     post:
       operationId: api_translations_autotranslate_create
@@ -35974,6 +36104,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Trigger automatic translation.
   /api/translations/{component__project__slug}/{component__slug}/{language__code}/changes/:
     get:
       operationId: api_translations_changes_retrieve
@@ -36260,6 +36391,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return a list of translation changes.
   /api/translations/{component__project__slug}/{component__slug}/{language__code}/file/:
     get:
       operationId: api_translations_file_retrieve
@@ -36521,6 +36653,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Translation components API.
     post:
       operationId: api_translations_file_create
       description: Upload new file with translations.
@@ -36792,6 +36925,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Upload new file with translations.
     put:
       operationId: api_translations_file_update
       description: Translation components API.
@@ -37063,6 +37197,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Translation components API.
   /api/translations/{component__project__slug}/{component__slug}/{language__code}/repository/:
     get:
       operationId: api_translations_repository_retrieve
@@ -37349,6 +37484,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return information about VCS repository status.
     post:
       operationId: api_translations_repository_create
       description: Perform given operation on the VCS repository.
@@ -37645,6 +37781,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Perform given operation on the VCS repository.
   /api/translations/{component__project__slug}/{component__slug}/{language__code}/statistics/:
     get:
       operationId: api_translations_statistics_retrieve
@@ -37933,6 +38070,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return detailed translation statistics.
   /api/translations/{component__project__slug}/{component__slug}/{language__code}/units/:
     get:
       operationId: api_translations_units_retrieve
@@ -38219,6 +38357,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return a list of translation units.
     post:
       operationId: api_translations_units_create
       description: Add a new unit.
@@ -38515,6 +38654,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Add a new unit.
   /api/units/:
     get:
       operationId: api_units_list
@@ -38795,6 +38935,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return a list of translation units.
   /api/units/{id}/:
     get:
       operationId: api_units_retrieve
@@ -39069,6 +39210,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return information about translation unit.
     put:
       operationId: api_units_update
       description: Perform full update on translation unit.
@@ -39353,6 +39495,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Perform full update on translation unit.
     patch:
       operationId: api_units_partial_update
       description: Perform partial update on translation unit.
@@ -39636,6 +39779,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Perform partial update on translation unit.
     delete:
       operationId: api_units_destroy
       description: Delete a translation unit.
@@ -39894,6 +40038,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete a translation unit.
   /api/units/{id}/comments/:
     get:
       operationId: api_units_comments_list
@@ -40180,6 +40325,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return a list of comments on the unit.
     post:
       operationId: api_units_comments_create
       description: Add a comment to the unit.
@@ -40464,6 +40610,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Add a comment to the unit.
   /api/units/{id}/translations/:
     get:
       operationId: api_units_translations_retrieve
@@ -40738,6 +40885,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Units API.
   /api/users/:
     get:
       operationId: api_users_list
@@ -41033,6 +41181,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: List of users if you have permissions to see manage users.
     post:
       operationId: api_users_create
       description: Create a new user.
@@ -41304,6 +41453,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/BasicUser'
           description: ''
+      summary: Create a new user.
   /api/users/{username}/:
     get:
       operationId: api_users_retrieve
@@ -41578,6 +41728,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Return information about users.
     put:
       operationId: api_users_update
       description: Change the user parameters.
@@ -41862,6 +42013,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Change the user parameters.
     patch:
       operationId: api_users_partial_update
       description: Change the user parameters.
@@ -42145,6 +42297,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Change the user parameters.
     delete:
       operationId: api_users_destroy
       description: Delete all user information and mark the user inactive.
@@ -42403,6 +42556,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete all user information and mark the user inactive.
   /api/users/{username}/contributions/:
     get:
       operationId: api_users_contributions_retrieve
@@ -42679,6 +42833,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: List translation contributions of a user.
   /api/users/{username}/groups/:
     post:
       operationId: api_users_groups_create
@@ -42964,6 +43119,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Associate groups with a user.
     delete:
       operationId: api_users_groups_destroy
       description: Remove a user from a group.
@@ -43222,6 +43378,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Remove a user from a group.
   /api/users/{username}/notifications/:
     get:
       operationId: api_users_notifications_list
@@ -43520,6 +43677,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: List subscriptions of a user.
     post:
       operationId: api_users_notifications_create
       description: Associate subscriptions with a user.
@@ -43828,6 +43986,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Associate subscriptions with a user.
   /api/users/{username}/notifications/{subscription_id}/:
     get:
       operationId: api_users_notifications_retrieve
@@ -44107,6 +44266,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Get a subscription associated with a user.
     put:
       operationId: api_users_notifications_update
       description: Edit a subscription associated with a user.
@@ -44396,6 +44556,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Edit a subscription associated with a user.
     patch:
       operationId: api_users_notifications_partial_update
       description: Edit a subscription associated with a user.
@@ -44684,6 +44845,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Edit a subscription associated with a user.
     delete:
       operationId: api_users_notifications_destroy
       description: Delete a subscription associated with a user.
@@ -44947,6 +45109,7 @@ paths:
           description: ''
         '204':
           description: No response body
+      summary: Delete a subscription associated with a user.
   /api/users/{username}/statistics/:
     get:
       operationId: api_users_statistics_retrieve
@@ -45223,6 +45386,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: List statistics of a user.
   /hooks/{service}/:
     post:
       operationId: hooks_incoming
@@ -45437,6 +45601,7 @@ paths:
               $ref: '#/components/headers/X-RateLimit-Remaining'
             X-RateLimit-Reset:
               $ref: '#/components/headers/X-RateLimit-Reset'
+      summary: Process incoming webhook from a code hosting site.
 components:
   headers:
     X-RateLimit-Limit:
