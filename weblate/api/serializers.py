@@ -1852,7 +1852,8 @@ class SingleServiceConfigSerializer(serializers.Serializer):
         OpenApiExample(
             "Service settings example",
             value={
-                "service_name": {"key": "XXXXXXX", "url": "https://api.service.com/"},
+                "service1": {"key": "XXXXXXX", "url": "https://api.service.com/"},
+                "service2": {"secret": "SECRET_KEY", "credentials": "XXXXXXX"},
             },
             request_only=False,
             response_only=True,

@@ -99,8 +99,6 @@ The OpenAPI specification is available as feature preview, feedback welcome!
         "POSTPROCESSING_HOOKS": [
             "drf_standardized_errors.openapi_hooks.postprocess_schema_enums",
             "weblate.api.docs.add_middleware_headers",
-            "weblate.api.docs.ensure_operation_summaries",
-            "weblate.api.docs.fix_webhook_operations_for_redocly",
         ],
         "EXTERNAL_DOCS": {
             "url": lazy(get_doc_url_wrapper, str)("index"),
@@ -121,23 +119,18 @@ The OpenAPI specification is available as feature preview, feedback welcome!
             },
             {
                 "name": "roles",
-                "description": "Access roles and permission assignments.",
             },
             {
                 "name": "languages",
-                "description": "Translation languages and locale definitions.",
             },
             {
                 "name": "projects",
-                "description": "Translation projects.",
             },
             {
                 "name": "components",
-                "description": "Project components and repositories.",
             },
             {
                 "name": "translations",
-                "description": "Translation objects and their content.",
             },
             {
                 "name": "memory",
@@ -149,11 +142,9 @@ The OpenAPI specification is available as feature preview, feedback welcome!
             },
             {
                 "name": "changes",
-                "description": "Change history and audit log.",
             },
             {
                 "name": "screenshots",
-                "description": "Context screenshots for source strings.",
             },
             {
                 "name": "addons",
@@ -177,7 +168,6 @@ The OpenAPI specification is available as feature preview, feedback welcome!
             },
             {
                 "name": "metrics",
-                "description": "Prometheus metrics and monitoring endpoints.",
             },
             {
                 "name": "search",
@@ -185,7 +175,6 @@ The OpenAPI specification is available as feature preview, feedback welcome!
             },
             {
                 "name": "categories",
-                "description": "Component categories within a project.",
             },
             {
                 "name": "hooks",

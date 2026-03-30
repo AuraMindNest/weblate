@@ -19,10 +19,6 @@ from .middleware import (
     RATELIMIT_RESET_HEADER,
 )
 
-OPENAPI_HTTP_METHODS = frozenset(
-    ("get", "put", "post", "delete", "options", "head", "patch", "trace")
-)
-
 
 def build_response_header_parameter(
     name: str,
@@ -115,46 +111,5 @@ def add_middleware_headers(result, generator, request, public):
         result["components"] = generator.registry.build(
             spectacular_settings.APPEND_COMPONENTS
         )
-
-    return result
-
-
-def fix_webhook_operations_for_redocly(result, generator, request, public):
-    """Satisfy Redocly on webhooks: operationId required; strip stray error examples."""
-    webhooks = result.get("webhooks")
-    if not webhooks:
-        return result
-    for wh_name, path_item in webhooks.items():
-        for method, operation in path_item.items():
-            if method not in OPENAPI_HTTP_METHODS or not isinstance(operation, dict):
-                continue
-            safe = "".join(ch if ch.isalnum() else "_" for ch in wh_name)
-            operation.setdefault("operationId", f"webhook_{safe}_{method}")
-            body = operation.get("requestBody")
-            if not body:
-                continue
-            for media in body.get("content", {}).values():
-                if isinstance(media, dict) and "examples" in media:
-                    del media["examples"]
-    return result
-
-
-def ensure_operation_summaries(result, generator, request, public):
-    """Add operation summaries for Redocly (operation-summary-defined)."""
-    for path_item in result.get("paths", {}).values():
-        for method, operation in path_item.items():
-            if method not in OPENAPI_HTTP_METHODS or not isinstance(operation, dict):
-                continue
-            if operation.get("summary"):
-                continue
-            desc = operation.get("description")
-            if desc:
-                first_line = desc.strip().split("\n", 1)[0].strip()
-                operation["summary"] = (
-                    f"{first_line[:117]}..." if len(first_line) > 120 else first_line
-                )
-            else:
-                op_id = operation.get("operationId", "operation")
-                operation["summary"] = op_id.replace("_", " ").title()
 
     return result
