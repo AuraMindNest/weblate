@@ -67590,7 +67590,6 @@ components:
             * `gerrit` - Gerrit
             * `git` - Git
             * `git-force-push` - Git with force push
-            * `github` - GitHub pull request
             * `local` - No remote repository
             * `mercurial` - Mercurial
             * `subversion` - Subversion
@@ -70829,7 +70828,6 @@ components:
             * `gerrit` - Gerrit
             * `git` - Git
             * `git-force-push` - Git with force push
-            * `github` - GitHub pull request
             * `local` - No remote repository
             * `mercurial` - Mercurial
             * `subversion` - Subversion
@@ -72323,7 +72321,6 @@ components:
       - gerrit
       - git
       - git-force-push
-      - github
       - local
       - mercurial
       - subversion
@@ -72332,7 +72329,6 @@ components:
         * `gerrit` - Gerrit
         * `git` - Git
         * `git-force-push` - Git with force push
-        * `github` - GitHub pull request
         * `local` - No remote repository
         * `mercurial` - Mercurial
         * `subversion` - Subversion
