@@ -119,6 +119,26 @@ def add_middleware_headers(result, generator, request, public):
     return result
 
 
+def fix_webhook_operations_for_redocly(result, generator, request, public):
+    """Satisfy Redocly on webhooks: operationId required; strip stray error examples."""
+    webhooks = result.get("webhooks")
+    if not webhooks:
+        return result
+    for wh_name, path_item in webhooks.items():
+        for method, operation in path_item.items():
+            if method not in OPENAPI_HTTP_METHODS or not isinstance(operation, dict):
+                continue
+            safe = "".join(ch if ch.isalnum() else "_" for ch in wh_name)
+            operation.setdefault("operationId", f"webhook_{safe}_{method}")
+            body = operation.get("requestBody")
+            if not body:
+                continue
+            for media in body.get("content", {}).values():
+                if isinstance(media, dict) and "examples" in media:
+                    del media["examples"]
+    return result
+
+
 def ensure_operation_summaries(result, generator, request, public):
     """Add operation summaries for Redocly (operation-summary-defined)."""
     for path_item in result.get("paths", {}).values():
