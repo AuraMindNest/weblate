@@ -286,11 +286,6 @@ ignore = [
   "client/*/*",
   "dev-docker/*",
   "dev-docker/*/*",
-  "weblate-docker",
-  "weblate-docker/*",
-  "weblate-docker/*/*",
-  "weblate-docker/*/*/*",
-  "weblate-docker/*/*/*/*",
   "docs/*",
   "docs/*/*",
   "docs/*/*/*",
@@ -300,7 +295,12 @@ ignore = [
   "scripts/*",
   "scripts/*/*",
   "scripts/*/*/*",
-  "scripts/*/*/*/*"
+  "scripts/*/*/*/*",
+  "weblate-docker",
+  "weblate-docker/*",
+  "weblate-docker/*/*",
+  "weblate-docker/*/*/*",
+  "weblate-docker/*/*/*/*"
 ]
 ignore-bad-ideas = [
   "weblate/trans/tests/data/cs.mo"  # Test data
