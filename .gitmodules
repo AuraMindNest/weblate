@@ -3,5 +3,5 @@
 	url = https://github.com/spdx/license-list-data.git
 [submodule "weblate-docker"]
 	path = weblate-docker
-	url = https://github.com/AuraMindNest/weblate-docker.git
-	branch = feature/boost-docker
+	url = https://github.com/CppDigest/weblate-docker.git
+	branch = main
