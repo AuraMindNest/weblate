@@ -23,6 +23,8 @@ jobs:
           cd /opt/boost-weblate
           git pull --depth=1 origin main
           git submodule update --init --depth=1 weblate-docker
+          # Docker build context is .. (repo root); copy submodule ignore to context root
+          cp weblate-docker/.dockerignore .dockerignore
           cd weblate-docker
           docker compose down
           docker compose up -d --build
