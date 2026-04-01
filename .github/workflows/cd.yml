@@ -21,7 +21,7 @@ jobs:
         port: ${{ secrets.SERVER_PORT || 22 }}
         script: |
           cd /opt/boost-weblate
-          git pull --depth=1 origin feature/boost-docker
+          git pull --depth=1 origin feature/docker-deploy
           git submodule update --init --depth=1 weblate-docker
           cd weblate-docker
           docker compose up -d --build
