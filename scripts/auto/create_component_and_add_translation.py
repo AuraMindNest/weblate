@@ -232,9 +232,9 @@ def create_component_wrapper(config: dict[str, Any]) -> tuple[str, str]:
 
     if not creator.check_connection():
         msg = "Failed to connect to Weblate API"
-        raise Exception(msg)
+        raise RuntimeError(msg)
 
-    project, component, project_slug, component_slug = setup_project_and_component(
+    _project, component, project_slug, component_slug = setup_project_and_component(
         creator, config
     )
 
@@ -249,7 +249,7 @@ def create_component_wrapper(config: dict[str, Any]) -> tuple[str, str]:
     # Verify component is accessible
     if not _verify_component_accessible(creator, project_slug, component_slug):
         msg = "Component not accessible after creation"
-        raise Exception(msg)
+        raise RuntimeError(msg)
 
     print("\n[SUCCESS] Component created and ready!", flush=True)
     print(f"[INFO] URL: {component['web_url']}", flush=True)

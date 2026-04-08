@@ -68330,6 +68330,7 @@ components:
       - po-mono
       - poxliff
       - properties
+      - quickbook
       - rc
       - resjson
       - resourcedictionary
@@ -68399,6 +68400,7 @@ components:
         * `po-mono` - gettext PO file (monolingual)
         * `poxliff` - XLIFF 1.2 with gettext extensions
         * `properties` - Java Properties
+        * `quickbook` - QuickBook file
         * `rc` - RC file
         * `resjson` - RESJSON file
         * `resourcedictionary` - ResourceDictionary file

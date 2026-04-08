@@ -36,7 +36,7 @@ jobs:
       with:
         persist-credentials: false
     - run: brew update
-    - run: brew upgrade
+    # Skip `brew upgrade`: full image upgrades often fail on brew link on GHA macOS; explicit installs below suffice.
     - run: brew list --versions
     - run: brew deps --tree --installed
     - run: brew config
