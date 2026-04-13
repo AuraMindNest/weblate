@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Copyright © Boost Organization <boost@boost.org>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Recalculate statistics for all components in a project."""
 
 import os
@@ -11,7 +15,7 @@ sys.path.insert(0, "/home/boost-weblate")
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "weblate.settings")
 django.setup()
 
-from weblate.trans.models import Project
+from weblate.trans.models import Project  # pylint: disable=wrong-import-position
 
 
 def recalculate_stats(project_slug):

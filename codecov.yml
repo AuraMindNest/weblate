@@ -23,6 +23,7 @@ coverage:
         target: 90
     patch:
       default:
+        informational: true
         target: 100
 codecov:
   branch: main

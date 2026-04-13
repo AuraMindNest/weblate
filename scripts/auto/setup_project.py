@@ -48,7 +48,9 @@ def clone_repository(repo_url: str, branch: str, target_dir: str) -> bool:
         # Use repo URL as-is so SSH keys work when repo_url is git@github.com:...
         clone_url = repo_url
         cmd = ["git", "clone", "-b", branch, "--depth", "1", clone_url, target_dir]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=300, check=False
+        )
 
         if result.returncode != 0:
             print(f"[ERROR] Failed to clone repository: {result.stderr}")
@@ -389,6 +391,7 @@ def create_components_from_setup_files(
                 capture_output=True,
                 text=True,
                 timeout=300,  # 5 minute timeout per component
+                check=False,
             )
 
             elapsed = time.time() - start_time
@@ -423,6 +426,7 @@ def create_components_from_setup_files(
                     capture_output=True,
                     text=True,
                     timeout=300,
+                    check=False,
                 )
                 if retry.returncode == 0:
                     elapsed2 = time.time() - start_time

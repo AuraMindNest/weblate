@@ -42,9 +42,9 @@ fi
 
 cd "$BACKUP_DIR"
 
-# Find backup files
-DB_SQL=$(ls -1 weblate_database_*.sql 2> /dev/null | head -1)
-FILES_ARCHIVE=$(ls -1 weblate_files_*.tar.gz 2> /dev/null | head -1)
+# Find backup files (find avoids SC2012 issues with ls + globs)
+DB_SQL=$(find . -maxdepth 1 -name 'weblate_database_*.sql' 2> /dev/null | head -n1 | sed 's|^\./||')
+FILES_ARCHIVE=$(find . -maxdepth 1 -name 'weblate_files_*.tar.gz' 2> /dev/null | head -n1 | sed 's|^\./||')
 
 if [ -z "$DB_SQL" ] && [ -z "$FILES_ARCHIVE" ]; then
     echo -e "${RED}Error: No backup files found in '$BACKUP_DIR'${NC}"
@@ -64,7 +64,7 @@ echo -e "DATA_DIR: ${YELLOW}$DATA_DIR${NC}"
 echo ""
 
 # Confirm before proceeding
-read -p "This will OVERWRITE your local Weblate database and files. Continue? (yes/no): " confirm
+read -r -p "This will OVERWRITE your local Weblate database and files. Continue? (yes/no): " confirm
 if [ "$confirm" != "yes" ]; then
     echo -e "${YELLOW}Restore cancelled${NC}"
     exit 0
@@ -84,11 +84,9 @@ if [ -n "$DB_SQL" ]; then
     createdb -h "$DB_HOST" -U "$DB_USER" "$DB_NAME"
 
     echo -e "${YELLOW}Restoring database from $DB_SQL...${NC}"
-    psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" \
+    if psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" \
         -v ON_ERROR_STOP=1 \
-        -f "$DB_SQL"
-
-    if [ $? -eq 0 ]; then
+        -f "$DB_SQL"; then
         echo -e "${GREEN}✓ Database restored successfully${NC}"
     else
         echo -e "${RED}✗ Database restore failed!${NC}"
@@ -112,6 +110,7 @@ fi
 
 if [ -n "$WEBLATE_DIR" ] && [ -f "$WEBLATE_DIR/manage.py" ]; then
     cd "$WEBLATE_DIR"
+    # shellcheck disable=SC1091
     source weblate-env/bin/activate 2> /dev/null || true
 
     python manage.py shell << 'PYTHON_EOF'
@@ -166,9 +165,7 @@ if [ -n "$FILES_ARCHIVE" ]; then
     mkdir -p "$DATA_DIR"
 
     echo -e "${YELLOW}Extracting files to $DATA_DIR...${NC}"
-    tar -xzf "$FILES_ARCHIVE" -C "$DATA_DIR"
-
-    if [ $? -eq 0 ]; then
+    if tar -xzf "$FILES_ARCHIVE" -C "$DATA_DIR"; then
         echo -e "${GREEN}✓ Files restored successfully${NC}"
 
         # Set proper permissions (adjust user/group as needed)
@@ -188,6 +185,7 @@ if [ -n "$WEBLATE_DIR" ] && [ -f "$WEBLATE_DIR/manage.py" ]; then
     echo -e "${GREEN}[4/4] Running post-restore steps...${NC}"
 
     cd "$WEBLATE_DIR"
+    # shellcheck disable=SC1091
     source weblate-env/bin/activate 2> /dev/null || true
 
     echo -e "${YELLOW}Updating Git repositories...${NC}"

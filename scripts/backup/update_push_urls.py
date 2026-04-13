@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Copyright © Boost Organization <boost@boost.org>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """
 Script to update repository URLs (both repo and push) and push branch for all Weblate components.
 
@@ -45,7 +49,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "weblate.settings")
 django.setup()
 
-from weblate.trans.models import Component
+from weblate.trans.models import Component  # pylint: disable=wrong-import-position
 
 
 def update_push_urls(
