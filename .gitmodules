@@ -4,4 +4,4 @@
 [submodule "weblate-docker"]
 	path = weblate-docker
 	url = https://github.com/CppDigest/weblate-docker.git
-	branch = main
+	branch = develop
