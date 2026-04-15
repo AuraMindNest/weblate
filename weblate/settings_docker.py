@@ -999,6 +999,9 @@ CSRF_COOKIE_SECURE = ENABLE_HTTPS
 CSRF_USE_SESSIONS = True
 # Customize CSRF failure view
 CSRF_FAILURE_VIEW = "weblate.trans.views.error.csrf_failure"
+# Django 4+ checks the Origin header; must include scheme (see WEBLATE_CSRF_TRUSTED_ORIGINS)
+_csrf_trusted = get_env_list("WEBLATE_CSRF_TRUSTED_ORIGINS", [SITE_URL])
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_trusted if o.strip()]
 SESSION_COOKIE_SECURE = ENABLE_HTTPS
 SESSION_COOKIE_HTTPONLY = True
 # SSL redirect
