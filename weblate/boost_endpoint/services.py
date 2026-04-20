@@ -20,6 +20,7 @@ Alignment with REST API (POST /api/projects/, POST .../components/, POST .../tra
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import subprocess
@@ -35,6 +36,7 @@ from django.db import transaction
 from weblate.formats.models import FILE_FORMATS
 from weblate.lang.models import Language
 from weblate.logger import LOGGER
+from weblate.trans.defines import COMPONENT_NAME_LENGTH
 from weblate.trans.models import Component, Project
 from weblate.utils.errors import report_error
 from weblate.vcs.base import RepositoryError
@@ -42,17 +44,16 @@ from weblate.vcs.base import RepositoryError
 if TYPE_CHECKING:
     from weblate.lang.models import LanguageQuerySet
 
-# Weblate API limit for component name and slug (Component.name / Component.slug max_length)
-MAX_COMPONENT_NAME_LENGTH = 100
-MAX_COMPONENT_SLUG_LENGTH = 100
-# When over limit: first 64 + " ... " + last 25 (94 chars) to keep names unique
-TRUNCATE_NAME_HEAD = 64
-TRUNCATE_NAME_TAIL = 25
-TRUNCATE_NAME_SEP = " ... "
-# Slug truncation: head + "-" + tail (100 chars max) to reduce collision risk for long paths
-TRUNCATE_SLUG_HEAD = 64
-TRUNCATE_SLUG_TAIL = 35
-TRUNCATE_SLUG_SEP = "-"
+# Component.name / Component.slug max_length — imported from weblate.trans.defines so this
+# always matches the actual database column constraint (100 as of this writing).
+MAX_COMPONENT_NAME_LENGTH = COMPONENT_NAME_LENGTH
+MAX_COMPONENT_SLUG_LENGTH = COMPONENT_NAME_LENGTH
+# When over limit: keep first (max_len - 10) chars and append "[<8-hex-hash>]" (10 chars) so the
+# result is always <= max_len and is unique for any two distinct full names.
+TRUNCATE_NAME_HASH_LEN = 8  # 1 "[" + 8 hex + 1 "]" = 10 chars suffix
+# Slug truncation: keep first (max_len - 9) chars and append "-<8-hex>" (9 chars).
+# Uses URL-safe hex only (no brackets) and guarantees uniqueness the same way as name truncation.
+TRUNCATE_SLUG_HASH_LEN = 8  # 1 "-" + 8 hex = 9 chars suffix
 
 
 def _submodule_slug(name: str) -> str:
@@ -61,17 +62,31 @@ def _submodule_slug(name: str) -> str:
 
 
 def truncate_component_name(name: str, max_len: int = MAX_COMPONENT_NAME_LENGTH) -> str:
-    """Truncate component name to max_len. If over limit: first 64 + ' ... ' + last 25."""
+    """Truncate component name to max_len.
+
+    If over limit: keep first (max_len - 10) chars and append "[<8-hex>]" (10 chars) derived
+    from the full name's SHA-256.  This guarantees uniqueness: two distinct full names always
+    produce distinct truncated names (collision probability ≈ 1/16^8, negligible).
+    """
     if len(name) <= max_len:
         return name
-    return name[:TRUNCATE_NAME_HEAD] + TRUNCATE_NAME_SEP + name[-TRUNCATE_NAME_TAIL:]
+    hash_suffix = "[" + hashlib.sha256(name.encode()).hexdigest()[:TRUNCATE_NAME_HASH_LEN] + "]"
+    head_len = max_len - len(hash_suffix)
+    return name[:head_len] + hash_suffix
 
 
 def truncate_component_slug(slug: str, max_len: int = MAX_COMPONENT_SLUG_LENGTH) -> str:
-    """Truncate component slug to max_len. If over limit: first 64 + '-' + last 35."""
+    """Truncate component slug to max_len.
+
+    If over limit: keep first (max_len - 9) chars and append "-<8-hex>" derived from the
+    slug's SHA-256.  Uses only URL-safe characters (lowercase hex + hyphen) and guarantees
+    uniqueness for any two distinct full slugs.
+    """
     if len(slug) <= max_len:
         return slug
-    return slug[:TRUNCATE_SLUG_HEAD] + TRUNCATE_SLUG_SEP + slug[-TRUNCATE_SLUG_TAIL:]
+    hash_suffix = "-" + hashlib.sha256(slug.encode()).hexdigest()[:TRUNCATE_SLUG_HASH_LEN]
+    head_len = max_len - len(hash_suffix)
+    return slug[:head_len] + hash_suffix
 
 
 def _build_extension_to_format() -> dict[str, str]:
@@ -315,18 +330,12 @@ class BoostComponentService:
             LOGGER.error("Invalid component config: missing keys %s", missing)
             return None, False
 
-        slug = _submodule_slug(submodule)
-        component_slug = truncate_component_slug(
-            f"boost-{slug}-documentation-{config['component_slug']}"
-        )
+        component_slug = truncate_component_slug(config["component_slug"])
         # Push branch name: translation-{self.lang_code}-{self.version}
         push_branch = f"translation-{self.lang_code}-{self.version}"
 
-        # Component name: "Boost {Submodule} Documentation / Doc / Library Detail"
-        submodule_title = submodule.replace("_", " ").title()
-        component_name = truncate_component_name(
-            f"Boost {submodule_title} Documentation / {config['component_name']}"
-        )
+        # Component name: path-based, e.g. "Doc / Modules / Root / Pages / Intro (adoc)"
+        component_name = truncate_component_name(config["component_name"])
 
         # Source language: "en" (hardcoded)
         try:
@@ -824,9 +833,8 @@ class BoostComponentService:
 
         # Delete components that are not in configs (no longer in repo scan).
         # Never delete glossary components (is_glossary); they are managed by Weblate.
-        prefix = f"boost-{_submodule_slug(submodule)}-documentation-"
         wanted_slugs = {
-            truncate_component_slug(f"{prefix}{c['component_slug']}") for c in configs
+            truncate_component_slug(c["component_slug"]) for c in configs
         }
         for component in project.component_set.all():
             if component.slug not in wanted_slugs and not component.is_glossary:
