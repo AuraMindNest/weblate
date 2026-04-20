@@ -62,7 +62,8 @@ def _submodule_slug(name: str) -> str:
 
 
 def truncate_component_name(name: str, max_len: int = MAX_COMPONENT_NAME_LENGTH) -> str:
-    """Truncate component name to max_len.
+    """
+    Truncate component name to max_len.
 
     If over limit: keep first (max_len - 10) chars and append "[<8-hex>]" (10 chars) derived
     from the full name's SHA-256.  This guarantees uniqueness: two distinct full names always
@@ -70,13 +71,16 @@ def truncate_component_name(name: str, max_len: int = MAX_COMPONENT_NAME_LENGTH)
     """
     if len(name) <= max_len:
         return name
-    hash_suffix = "[" + hashlib.sha256(name.encode()).hexdigest()[:TRUNCATE_NAME_HASH_LEN] + "]"
+    hash_suffix = (
+        "[" + hashlib.sha256(name.encode()).hexdigest()[:TRUNCATE_NAME_HASH_LEN] + "]"
+    )
     head_len = max_len - len(hash_suffix)
     return name[:head_len] + hash_suffix
 
 
 def truncate_component_slug(slug: str, max_len: int = MAX_COMPONENT_SLUG_LENGTH) -> str:
-    """Truncate component slug to max_len.
+    """
+    Truncate component slug to max_len.
 
     If over limit: keep first (max_len - 9) chars and append "-<8-hex>" derived from the
     slug's SHA-256.  Uses only URL-safe characters (lowercase hex + hyphen) and guarantees
@@ -84,7 +88,9 @@ def truncate_component_slug(slug: str, max_len: int = MAX_COMPONENT_SLUG_LENGTH)
     """
     if len(slug) <= max_len:
         return slug
-    hash_suffix = "-" + hashlib.sha256(slug.encode()).hexdigest()[:TRUNCATE_SLUG_HASH_LEN]
+    hash_suffix = (
+        "-" + hashlib.sha256(slug.encode()).hexdigest()[:TRUNCATE_SLUG_HASH_LEN]
+    )
     head_len = max_len - len(hash_suffix)
     return slug[:head_len] + hash_suffix
 
@@ -833,9 +839,7 @@ class BoostComponentService:
 
         # Delete components that are not in configs (no longer in repo scan).
         # Never delete glossary components (is_glossary); they are managed by Weblate.
-        wanted_slugs = {
-            truncate_component_slug(c["component_slug"]) for c in configs
-        }
+        wanted_slugs = {truncate_component_slug(c["component_slug"]) for c in configs}
         for component in project.component_set.all():
             if component.slug not in wanted_slugs and not component.is_glossary:
                 try:
