@@ -154,12 +154,13 @@ class AsciiDocFormat(ConvertFormat):
                 capture_output=True,
                 text=True,
                 check=False,
+                cwd="/tmp",
             )
 
-            # Clean up temporary files created by po4a-gettextize in current directory
+            # Clean up temporary files created by po4a-gettextize in its working directory
             po4a_temp_files = [
-                "po4atemp.master.po",
-                "po4atemp.localized.po",
+                "/tmp/po4atemp.master.po",
+                "/tmp/po4atemp.localized.po",
             ]
             for temp_file in po4a_temp_files:
                 if os.path.exists(temp_file):
