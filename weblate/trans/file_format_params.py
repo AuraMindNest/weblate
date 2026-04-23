@@ -298,7 +298,9 @@ class GettextPoLineWrap(BaseFileFormatParam):
     def setup_store(
         self, store: TranslationStore, **file_format_params: Unpack[FileFormatParams]
     ) -> None:
-        cast("pofile", store).wrapper.width = int(self.get_value(file_format_params))
+        po_store = cast("pofile", store)
+        if po_store.wrapper is not None:
+            po_store.wrapper.width = int(self.get_value(file_format_params))
 
 
 class BaseGettextFormatParam(BaseFileFormatParam):
