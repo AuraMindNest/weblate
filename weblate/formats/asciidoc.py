@@ -110,6 +110,7 @@ class AsciiDocFormat(ConvertFormat):
         ) as tmp_po:
             tmp_po_path = tmp_po.name
 
+        work_dir: str | None = None
         try:
             # Validate paths before calling po4a-gettextize
             if template_path is None:
@@ -124,6 +125,9 @@ class AsciiDocFormat(ConvertFormat):
             if not os.path.exists(storefile_path):
                 msg = f"storefile_path does not exist: {storefile_path}"
                 raise ValueError(msg)
+
+            # Writable cwd for po4a scratch files (Docker may use a read-only PWD; avoid shared /tmp)
+            work_dir = tempfile.mkdtemp(prefix="weblate-po4a-")
 
             # Use po4a-gettextize to extract translatable strings
             # -m: template file (master)
@@ -154,15 +158,12 @@ class AsciiDocFormat(ConvertFormat):
                 capture_output=True,
                 text=True,
                 check=False,
-                cwd="/tmp",
+                cwd=work_dir,
             )
 
             # Clean up temporary files created by po4a-gettextize in its working directory
-            po4a_temp_files = [
-                "/tmp/po4atemp.master.po",
-                "/tmp/po4atemp.localized.po",
-            ]
-            for temp_file in po4a_temp_files:
+            for name in ("po4atemp.master.po", "po4atemp.localized.po"):
+                temp_file = os.path.join(work_dir, name)
                 if os.path.exists(temp_file):
                     os.unlink(temp_file)
 
@@ -204,6 +205,8 @@ class AsciiDocFormat(ConvertFormat):
                 add=True, x_accelerator_marker=None, x_previous_msgid=None
             )
         finally:
+            if work_dir:
+                shutil.rmtree(work_dir, ignore_errors=True)
             # Clean up temporary files
             if os.path.exists(tmp_po_path):
                 os.unlink(tmp_po_path)
