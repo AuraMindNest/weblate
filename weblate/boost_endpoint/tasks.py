@@ -39,5 +39,7 @@ def boost_add_or_update_task(
             version=version,
             extensions=extensions,
         )
-        results[lang_code] = service.process_all(submodules, user=user, request=request)
+        results[lang_code] = service.process_all(
+            submodules, user=user, request=request
+        )
     return results
