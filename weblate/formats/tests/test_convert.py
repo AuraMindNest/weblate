@@ -20,8 +20,8 @@ from weblate.formats.convert import (
     WindowsRCFormat,
     WXLFormat,
 )
-from weblate.formats.quickbook import QuickBookFormat
 from weblate.formats.helpers import NamedBytesIO
+from weblate.formats.quickbook import QuickBookFormat
 from weblate.formats.tests.test_formats import BaseFormatTest
 from weblate.trans.tests.utils import get_test_file
 from weblate.utils.state import STATE_TRANSLATED
