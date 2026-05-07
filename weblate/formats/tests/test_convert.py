@@ -10,8 +10,8 @@ from tempfile import NamedTemporaryFile
 from typing import ClassVar
 
 from weblate.checks.tests.test_checks import MockUnit
-from weblate.formats.asciidoc import AsciiDocFormat
 from weblate.formats.convert import (
+    AsciiDocFormat,
     HTMLFormat,
     IDMLFormat,
     MarkdownFormat,
@@ -20,8 +20,8 @@ from weblate.formats.convert import (
     WindowsRCFormat,
     WXLFormat,
 )
-from weblate.formats.helpers import NamedBytesIO
 from weblate.formats.quickbook import QuickBookFormat
+from weblate.formats.helpers import NamedBytesIO
 from weblate.formats.tests.test_formats import BaseFormatTest
 from weblate.trans.tests.utils import get_test_file
 from weblate.utils.state import STATE_TRANSLATED
@@ -325,7 +325,7 @@ class PlainTextFormatTest(ConvertFormatTest):
 class AsciiDocFormatTest(ConvertFormatTest):
     format_class = AsciiDocFormat
     FILE = ASCIIDOC_FILE
-    MIME = "text/asciidoc"
+    MIME = "text/x-asciidoc"
     EXT = "adoc"
     COUNT = 5
     MASK = "*/translations.adoc"
