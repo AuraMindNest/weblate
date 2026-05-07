@@ -12,7 +12,7 @@ QuickBook (``.qbk``) is a markup language used in Boost documentation. This
 Weblate build registers :guilabel:`QuickBook file` as a monolingual
 :ref:`ConvertFormat <bimono>` handler: translatable strings are extracted into
 gettext PO stores and merged back into QuickBook sources using a built-in parser
-(:mod:`weblate.utils.quickbook`).
+(``weblate.utils.quickbook``).
 
 There is **no** external converter binary (such as ``po4a``) required for
 QuickBook in this fork—only Python dependencies from the main ``weblate``

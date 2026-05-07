@@ -53,10 +53,10 @@ class OpenRouterTranslator:
             msg = "Model name is required."
             raise ValueError(msg)
 
-        OpenAIClient = _openai_client_factory()
+        client_cls = _openai_client_factory()
 
         # Initialize OpenAI client with OpenRouter endpoint
-        self.client = OpenAIClient(
+        self.client = client_cls(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key,
             timeout=60 * 20,  # 20 minutes

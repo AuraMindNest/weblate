@@ -30,7 +30,7 @@ core Weblate dependencies; install it explicitly:
    pip install 'openai>=2.0,<3.0'
 
 If the SDK is missing when OpenRouter translation runs, Weblate raises
-:class:`django.core.exceptions.ImproperlyConfigured` with an installation hint.
+``django.core.exceptions.ImproperlyConfigured`` with an installation hint.
 
 Docker images built from :file:`weblate-docker/Dockerfile` use
 ``WEBLATE_EXTRAS=all`` so the ``openai`` extra is included in the container.
@@ -41,17 +41,20 @@ System commands and packages
 The following executables must be available on the server **PATH** where the
 relevant code paths execute (web workers, Celery workers):
 
-================ ================================================================
-Executable       Used by
-================ ================================================================
-``git``          Boost endpoint service: clone repositories, commit and push
-                 translation changes (:mod:`weblate.boost_endpoint.services`).
-``po4a-gettextize``, ``po4a-translate``
-                 AsciiDoc format pipeline (:mod:`weblate.formats.asciidoc`).
-``msgattrib``, ``msgfmt``
-                 gettext toolchain for AsciiDoc save path;
-                 ``msgattrib`` is optional (the code falls back if absent).
-================ ================================================================
+.. list-table::
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Executable
+     - Used by
+   * - ``git``
+     - Boost endpoint service: clone repositories, commit and push translation
+       changes (see ``weblate.boost_endpoint.services``).
+   * - ``po4a-gettextize``, ``po4a-translate``
+     - AsciiDoc format pipeline (``weblate.formats.asciidoc``).
+   * - ``msgattrib``, ``msgfmt``
+     - gettext toolchain for AsciiDoc save path; ``msgattrib`` is optional (the
+       code falls back if absent).
 
 The official Docker image for this fork installs **po4a** from source during the
 image build (see comments in :file:`weblate-docker/Dockerfile`). Custom or
@@ -69,7 +72,7 @@ These variables apply to **Boost fork** behaviour. They do **not** use the
 
    API key used when OpenRouter batch translation cannot read credentials from
    Weblate’s machinery configuration (see :ref:`boost-weblate-openrouter-config`).
-   Read by :mod:`weblate.trans.autobatchtranslate`.
+   Read by ``weblate.trans.autobatchtranslate``.
 
 .. envvar:: OPENROUTER_MODEL
 
@@ -89,7 +92,7 @@ These variables apply to **Boost fork** behaviour. They do **not** use the
 
    Integer seconds to wait when the Boost endpoint waits for a component or
    translation to become ready before adding a language (polling interval is
-   derived from this setting in :mod:`weblate.boost_endpoint.services`).
+   derived from this setting in ``weblate.boost_endpoint.services``).
    Default in Docker: ``300``. Override per deployment if repositories are slow
    or fast to sync.
 
