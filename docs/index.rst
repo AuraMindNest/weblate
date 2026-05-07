@@ -96,6 +96,7 @@ Learn more about :ref:`contributing`.
     :hidden:
 
     admin/install
+    admin/boost-weblate
     admin/deployments
     admin/upgrade
     admin/backup

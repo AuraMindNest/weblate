@@ -20,6 +20,11 @@ can browse at ``/api/docs/``.
    incomplete at this point and subject to change. Please consult the
    documentation below for more detailed information on the API.
 
+.. note::
+
+   **Boost Weblate fork:** authenticated endpoints under ``/boost-endpoint/``
+   (outside ``/api/``) are documented in :doc:`admin/boost-weblate`.
+
 .. _api-generic:
 
 Authentication and generic parameters

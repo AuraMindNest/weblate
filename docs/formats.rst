@@ -346,6 +346,22 @@ Translation types capabilities
      - no
      - no
      -
+   * - :ref:`asciidoc`
+     - mono
+     - no
+     - no
+     - no
+     - no
+     - no
+     -
+   * - :ref:`quickbook`
+     - mono
+     - no
+     - no
+     - no
+     - no
+     - no
+     -
 
 .. [#m] See :ref:`bimono`
 .. [#p] See :ref:`format-plurals`

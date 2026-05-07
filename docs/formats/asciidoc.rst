@@ -11,6 +11,17 @@ The translatable content is extracted from the AsciiDoc files and offered for th
 
 .. include:: /snippets/format-database-backed.rst
 
+System dependencies (Boost Weblate)
++++++++++++++++++++++++++++++++++++
+
+This implementation extracts and merges translations using **po4a**
+(``po4a-gettextize``, ``po4a-translate``) and the gettext utilities ``msgattrib``
+and ``msgfmt``. Install the corresponding system packages on application and
+Celery hosts, or use the Docker image built from this repository (po4a is
+installed during the image build—see :file:`weblate-docker/Dockerfile`).
+
+Full operational notes: :doc:`../admin/boost-weblate`.
+
 .. seealso::
 
    :doc:`tt:formats/asciidoc`
