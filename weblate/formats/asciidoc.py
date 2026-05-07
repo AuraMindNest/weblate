@@ -326,33 +326,23 @@ class AsciiDocFormat(ConvertFormat):
 
         # Create a wrapper directory for msgfmt that bypasses validation
         tmp_bin_dir = None
-        original_path = None
         try:
-            # Create temporary directory for msgfmt wrapper
+            # Create temporary directory for msgfmt wrapper (mode=0o700: owner-only)
             tmp_bin_dir = tempfile.mkdtemp()
             msgfmt_wrapper_path = os.path.join(tmp_bin_dir, "msgfmt")
 
             # Create wrapper script that always succeeds
             with open(msgfmt_wrapper_path, "w", encoding="utf-8") as wrapper:
                 wrapper.write("#!/bin/bash\n")
-                wrapper.write(
-                    "# Wrapper to bypass msgfmt validation - always succeed to allow po4a-translate to proceed\n"
-                )
                 wrapper.write("exit 0\n")
 
-            # Make wrapper executable
-            os.chmod(
-                msgfmt_wrapper_path,
-                stat.S_IRWXU
-                | stat.S_IRGRP
-                | stat.S_IXGRP
-                | stat.S_IROTH
-                | stat.S_IXOTH,
-            )
+            # Make wrapper executable by owner only
+            os.chmod(msgfmt_wrapper_path, stat.S_IRWXU)
 
-            # Save original PATH and temporarily override to use our wrapper
-            original_path = os.environ.get("PATH", "")
-            os.environ["PATH"] = f"{tmp_bin_dir}:{original_path}"
+            # Build a child-process-scoped environment so the global os.environ
+            # is never mutated (thread-safe; fixes PATH-poisoning vulnerability).
+            child_env = os.environ.copy()
+            child_env["PATH"] = f"{tmp_bin_dir}:{child_env.get('PATH', '')}"
 
             # Use po4a-translate to generate translated AsciiDoc file
             # -m: template file (master)
@@ -385,6 +375,7 @@ class AsciiDocFormat(ConvertFormat):
                 capture_output=True,
                 text=True,
                 check=False,
+                env=child_env,
             )
 
             # Read the generated AsciiDoc file, postprocess, and write to handle
@@ -424,9 +415,6 @@ class AsciiDocFormat(ConvertFormat):
             # Re-raise to prevent empty file from being written
             raise RuntimeError(error_msg) from None
         finally:
-            # Restore original PATH and cleanup
-            if original_path is not None:
-                os.environ["PATH"] = original_path
             if tmp_bin_dir and os.path.exists(tmp_bin_dir):
                 shutil.rmtree(tmp_bin_dir)
             if os.path.exists(tmp_po_path_02) and tmp_po_path_02 != tmp_po_path_01:
