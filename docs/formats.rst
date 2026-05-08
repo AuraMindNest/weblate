@@ -346,6 +346,22 @@ Translation types capabilities
      - no
      - no
      -
+   * - :ref:`asciidoc`
+     - mono
+     - no
+     - no
+     - no
+     - no
+     - no
+     -
+   * - :ref:`quickbook`
+     - mono
+     - no
+     - no
+     - no
+     - no
+     - no
+     -
 
 .. [#m] See :ref:`bimono`
 .. [#p] See :ref:`format-plurals`
@@ -359,7 +375,7 @@ Translation types capabilities
 .. [#lp] The plurals are supported only for Laravel which uses in string syntax to define them, see `Localization in Laravel`_.
 .. [#fp] Plurals are handled in the syntax of the strings and not exposed as plurals in Weblate.
 
-.. _Localization in Laravel: https://laravel.com/docs/localization
+.. _Localization in Laravel: https://laravel.com/docs/13.x/localization
 
 .. _bimono:
 

@@ -9,10 +9,23 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Any, cast
 
-from openai import OpenAI
+from django.core.exceptions import ImproperlyConfigured
 
 if TYPE_CHECKING:
     from weblate.trans.models.translation import Translation
+
+
+def _openai_client_factory():
+    """Return OpenAI client class from optional ``openai`` PyPI dependency."""
+    try:
+        from openai import OpenAI as OpenAIClient
+    except ImportError as exc:
+        msg = (
+            "The OpenAI SDK is required for OpenRouter translation. "
+            "Install it with: pip install 'weblate[openai]' or pip install 'openai'"
+        )
+        raise ImproperlyConfigured(msg) from exc
+    return OpenAIClient
 
 
 class OpenRouterTranslator:
@@ -40,8 +53,10 @@ class OpenRouterTranslator:
             msg = "Model name is required."
             raise ValueError(msg)
 
+        client_cls = _openai_client_factory()
+
         # Initialize OpenAI client with OpenRouter endpoint
-        self.client = OpenAI(
+        self.client = client_cls(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key,
             timeout=60 * 20,  # 20 minutes

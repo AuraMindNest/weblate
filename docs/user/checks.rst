@@ -742,7 +742,7 @@ Laravel format
 .. seealso::
 
    * :ref:`check-formats`
-   * `Laravel translation formatting <https://laravel.com/docs/localization#replacing-parameters-in-translation-strings>`_
+   * `Laravel translation formatting <https://laravel.com/docs/13.x/localization#replacing-parameters-in-translation-strings>`_
 
 .. _check-lua-format:
 

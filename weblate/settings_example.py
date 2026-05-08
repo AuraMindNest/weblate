@@ -956,6 +956,12 @@ GOOGLE_ANALYTICS_ID = None
 SENTRY_DSN = None
 SENTRY_ENVIRONMENT = SITE_DOMAIN
 
+# Boost fork (see docs/admin/boost-weblate.rst): Docker maps the following to
+# environment variables AUTO_BATCH_TRANSLATE_VIA_OPENROUTER (default true),
+# BOOST_ENDPOINT_ADD_TRANSLATION_SECONDS (default 300). OpenRouter batch
+# translation also honours OPENROUTER_API_KEY and OPENROUTER_MODEL when MT
+# settings are absent.
+
 # Auto batch-translate via openrouter
 AUTO_BATCH_TRANSLATE_VIA_OPENROUTER = False
 

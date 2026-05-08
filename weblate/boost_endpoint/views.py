@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from weblate.boost_endpoint.serializers import AddOrUpdateRequestSerializer
-from weblate.boost_endpoint.services import BoostComponentService
+from weblate.boost_endpoint.tasks import boost_add_or_update_task
 
 
 class BoostEndpointInfo(APIView):
@@ -40,6 +40,9 @@ class AddOrUpdateView(APIView):
         add_or_update is a map: lang_code -> [submodule names]. For each lang_code
         the service runs with that language and its submodule list (clone, scan,
         create/update project and components, add language).
+
+        Heavy work runs in a Celery worker and returns immediately with HTTP 202 and
+        task_id so clients can validate the request without waiting for completion.
         """
         serializer = AddOrUpdateRequestSerializer(data=request.data)
         if not serializer.is_valid():
@@ -49,27 +52,22 @@ class AddOrUpdateView(APIView):
             )
 
         data = serializer.validated_data
-        organization = data["organization"]
-        add_or_update = data["add_or_update"]
-        version = data["version"]
-        extensions = data.get("extensions")
+        async_result = boost_add_or_update_task.delay(
+            organization=data["organization"],
+            add_or_update=data["add_or_update"],
+            version=data["version"],
+            extensions=data.get("extensions"),
+            user_id=request.user.pk,
+        )
 
-        try:
-            results = {}
-            for lang_code, submodules in add_or_update.items():
-                service = BoostComponentService(
-                    organization=organization,
-                    lang_code=lang_code,
-                    version=version,
-                    extensions=extensions,
-                )
-                results[lang_code] = service.process_all(
-                    submodules, user=request.user, request=request
-                )
-        except Exception as exc:
-            return Response(
-                {"error": str(exc)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-
-        return Response(results, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "status": "accepted",
+                "task_id": str(async_result.id),
+                "detail": (
+                    "Boost add-or-update is running in the background; "
+                    "check Celery logs or task result for completion."
+                ),
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
