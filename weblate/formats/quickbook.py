@@ -73,9 +73,7 @@ def _merge_positional_translated_qbk(
     """Pair translated .qbk segments positionally with template segments."""
     try:
         translated_content = Path(storefile_path).read_text(encoding="utf-8")
-        translated_store = qbk_to_po(
-            translated_content, Path(storefile_path).name
-        )
+        translated_store = qbk_to_po(translated_content, Path(storefile_path).name)
         trans_units = [u for u in translated_store.units if not u.isheader()]
         tmpl_units = [u for u in store.units if not u.isheader()]
         if len(tmpl_units) != len(trans_units):
@@ -89,9 +87,7 @@ def _merge_positional_translated_qbk(
             if trans_unit.source:
                 tmpl_unit.target = trans_unit.source
     except Exception as exc:
-        report_error(
-            f"QuickBook: cannot read translated file {storefile_path}: {exc}"
-        )
+        report_error(f"QuickBook: cannot read translated file {storefile_path}: {exc}")
 
 
 class QuickBookFormat(ConvertFormat):
