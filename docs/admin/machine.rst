@@ -369,15 +369,15 @@ Weblate supports DeepL formality, it will choose matching one based on the
 language (for example, there is ``de@formal`` and ``de@informal``).
 
 The translation context can optionally be specified to improve translations quality. Read more on that in
-`DeepL translation context documentation <https://developers.deepl.com/docs/best-practices/working-with-context>`_.
+`DeepL translation context documentation <https://developers.deepl.com/docs/learning-how-tos/examples-and-guides/how-to-use-context-parameter>`_.
 
 The service automatically uses :ref:`glossary`, see :ref:`glossary-mt`.
 
 .. seealso::
 
-   * `DeepL translator <https://www.deepl.com/translator>`_
-   * `DeepL pricing <https://www.deepl.com/pro>`_
-   * `DeepL API documentation <https://developers.deepl.com/docs/getting-started/intro>`_
+   * `DeepL translator <https://www.deepl.com/en/translator>`_
+   * `DeepL pricing <https://www.deepl.com/en/pro>`_
+   * `DeepL API documentation <https://developers.deepl.com/docs/getting-started/quickstart>`_
 
 .. _mt-glosbe:
 
@@ -1076,7 +1076,7 @@ This service uses an API, and you need to obtain an ID and an API key from Youda
 
 .. seealso::
 
-    `Youdao Zhiyun Natural Language Translation Service <https://ai.youdao.com/product-fanyi-text.s>`_
+    `Youdao Zhiyun Natural Language Translation Service <https://ai.youdao.com/new/product-fanyi-text.s>`_
 
 .. _custom-machinery:
 

@@ -362,6 +362,18 @@ nitpick_ignore = [
 # Number of retries and timeout for linkcheck
 linkcheck_retries = 10
 linkcheck_timeout = 10
+
+# Treat these redirects as working (sites change paths; --fail-on-warning otherwise).
+linkcheck_allowed_redirects = {
+    (
+        r"https://support\.okta\.com/help/s/article/"
+        r"How-to-send-a-custom-relaystate-to-application-through-idp-initiated-authentication-urls"
+    ): (
+        r"https://support\.okta\.com/help/s/article/"
+        r"How-to-send-a-custom-relaystate-to-application-through-idp-initiated-authentication-urls(\?.*)?"
+    ),
+}
+
 linkcheck_ignore = [
     # Local URL to Weblate
     "http://127.0.0.1:8080/",
@@ -402,6 +414,9 @@ linkcheck_ignore = [
     "https://dev.mysql.com/",
     # Responds with HTTP 418 I'm a teapot
     "https://www.freedesktop.org/",
+    # 403 to automated clients (URLs remain valid in browsers)
+    "https://mymemory\\.translated\\.net/.*",
+    "https://docs\\.oasis-open\\.org/.*",
 ]
 
 # HTTP docs
