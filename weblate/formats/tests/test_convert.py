@@ -16,6 +16,8 @@ from weblate.checks.tests.test_checks import MockUnit
 from weblate.formats.asciidoc import AsciiDocFormat as AsciiDocPo4aFormat
 from weblate.formats.convert import (
     AsciiDocFormat as AsciiDocToolkitFormat,
+)
+from weblate.formats.convert import (
     HTMLFormat,
     IDMLFormat,
     MarkdownFormat,
@@ -265,7 +267,7 @@ class IDMLFormatTest(ConvertFormatTest):
         )
         self.assertIsInstance(po_store, pofile)
         # Avoid (changing) timestamp in the PO header
-        po_parsed = cast(pofile, po_store)
+        po_parsed = cast("pofile", po_store)
         po_parsed.updateheader(pot_creation_date="")
         return bytes(po_parsed).decode()
 
@@ -431,9 +433,7 @@ _Díky za používání Weblate._
         finally:
             os.unlink(translated_path)
         thank_units = [
-            u
-            for u in storage.all_units
-            if "Thank you for using Weblate" in u.source
+            u for u in storage.all_units if "Thank you for using Weblate" in u.source
         ]
         self.assertEqual(len(thank_units), 1)
         self.assertEqual(
@@ -452,15 +452,17 @@ class AsciiDocPo4aFormatTest(AsciiDocToolkitFormatTest):
 
     def setUp(self) -> None:
         super().setUp()
-        if shutil.which("po4a-gettextize") is None or shutil.which(
-            "po4a-translate"
-        ) is None:
+        if (
+            shutil.which("po4a-gettextize") is None
+            or shutil.which("po4a-translate") is None
+        ):
             self.skipTest(
                 "po4a-gettextize / po4a-translate not found; install the po4a package"
             )
 
     def test_convert(self) -> None:
-        """Round-trip like :meth:`ConvertFormatTest.test_convert`.
+        """
+        Round-trip like :meth:`ConvertFormatTest.test_convert`.
 
         ``po4a-gettextize`` requires the localized file to expose the same segments as
         the template (see po4a ``Original has more strings than the translation``).
