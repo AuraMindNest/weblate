@@ -397,7 +397,8 @@ class QuickBookFormatTest(ConvertFormatTest):
     FILE = QUICKBOOK_FILE
     MIME = "text/x-quickbook"
     EXT = "qbk"
-    COUNT = 4
+    # PO header unit plus four translatable strings (see ``template_units``).
+    COUNT = 5
     MASK = "*/translations.qbk"
     EXPECTED_PATH = "cs_CZ/translations.qbk"
     FIND = "Orangutan has five bananas."
@@ -498,7 +499,7 @@ Thank you for using Weblate.
             QUICKBOOK_FILE_TRANSLATED,
             QUICKBOOK_FILE,
         )
-        self.assertEqual(storage.all_units[3].target, "Díky za používání Weblate.")
+        self.assertEqual(storage.all_units[4].target, "Díky za používání Weblate.")
 
 
 class WXLFormatTest(ConvertFormatTest):

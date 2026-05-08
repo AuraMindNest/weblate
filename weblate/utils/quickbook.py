@@ -851,7 +851,7 @@ def qbk_to_po(content: str, filename: str, existing_units: Any = None) -> pofile
     # units that match (source, context), and add units the extractor missed.
     if existing_units:
         store_index: dict[tuple[str, str], Any] = {
-            (u.source, u.getcontext()): u for u in store.units if not u.isheader()
+            (u.source, u.getcontext() or ""): u for u in store.units if not u.isheader()
         }
         for ex_unit in existing_units:
             sources = ex_unit.get_source_plurals()

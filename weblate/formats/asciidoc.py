@@ -16,6 +16,7 @@ from translate.storage.pypo import pofile
 
 from weblate.formats.convert import ConvertFormat
 from weblate.utils.errors import report_error
+from weblate.utils.state import STATE_FUZZY
 
 
 class AsciiDocFormat(ConvertFormat):
@@ -27,13 +28,15 @@ class AsciiDocFormat(ConvertFormat):
     format_id = "asciidoc"
     monolingual = True
 
-    def _merge_translations(self, store, template_store):
+    def _merge_translations(self, store, _template_store):
         """
-        Add missing translation units from database to the store.
+        Merge Weblate database translations into the PO store from po4a-gettextize.
 
-        Only adds units that don't exist in the store. Does not merge/overwrite
-        existing units in the store. This ensures all database translations are
-        preserved even if po4a-gettextize didn't extract them.
+        For each ``existing_units`` entry, match on ``(source, context)``. If a unit
+        with that key is already in the store (typical after gettextize), overwrite
+        ``target`` so database edits win—gettextize often sets ``msgstr`` from the
+        on-disk file only, which is wrong when the template and translation paths are
+        the same file. If no unit matches, add one so nothing from the DB is lost.
         """
         # Create index of units already in store (by source + context) for quick lookup
         store_units_index = {}
@@ -41,10 +44,9 @@ class AsciiDocFormat(ConvertFormat):
             if unit.isheader():
                 continue
             # Use source + context as key for matching
-            key = (unit.source, unit.getcontext())
+            key = (unit.source, unit.getcontext() or "")
             store_units_index[key] = unit
 
-        # Add missing units from database that are not in the store
         for existing_unit in self.existing_units:
             sources = existing_unit.get_source_plurals()
             if not sources:
@@ -52,21 +54,19 @@ class AsciiDocFormat(ConvertFormat):
             source = sources[0]  # Use first source for matching
             context = existing_unit.context or ""
 
-            # Check if this unit exists in store
             key = (source, context)
-            if key not in store_units_index:
-                # Unit is missing from store, add it with its translation from database
+            if key in store_units_index:
+                thepo = store_units_index[key]
+                thepo.target = existing_unit.target
+                if existing_unit.state == STATE_FUZZY:
+                    thepo.markfuzzy(True)
+            else:
                 thepo = store.addsourceunit(source)
                 if context:
                     thepo.setcontext(context)
-                # Set the translation from database
                 thepo.target = existing_unit.target
-                # Set fuzzy flag if unit is STATE_FUZZY
-                from weblate.utils.state import STATE_FUZZY
-
                 if existing_unit.state == STATE_FUZZY:
                     thepo.markfuzzy(True)
-                # Update index
                 store_units_index[key] = thepo
 
         return store
