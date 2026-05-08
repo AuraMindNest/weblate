@@ -89,8 +89,16 @@ class QuickBookFormat(ConvertFormat):
         if storefile_path == template_path:
             # Loading the source-language file: set target = source on every unit
             # so Weblate stores a non-empty translation for the source language.
+            # When ``existing_units`` merged DB strings (same template + translation
+            # path, gettextize-style), do not overwrite those targets—only fill empty
+            # targets so unmatched segments still show the source text.
             for unit in store.units:
-                if not unit.isheader():
+                if unit.isheader():
+                    continue
+                if self.existing_units:
+                    if not unit.target:
+                        unit.target = unit.source
+                else:
                     unit.target = unit.source
         # Loading a translated .qbk file: parse it and pair its segments
         # positionally with the template segments to populate msgstr values.
