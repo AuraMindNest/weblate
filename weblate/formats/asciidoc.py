@@ -16,7 +16,7 @@ from translate.storage.pypo import pofile
 
 from weblate.formats.convert import ConvertFormat
 from weblate.utils.errors import report_error
-from weblate.utils.state import STATE_FUZZY
+from weblate.utils.state import FUZZY_STATES
 
 
 class AsciiDocFormat(ConvertFormat):
@@ -58,15 +58,13 @@ class AsciiDocFormat(ConvertFormat):
             if key in store_units_index:
                 thepo = store_units_index[key]
                 thepo.target = existing_unit.target
-                if existing_unit.state == STATE_FUZZY:
-                    thepo.markfuzzy(True)
+                thepo.markfuzzy(existing_unit.state in FUZZY_STATES)
             else:
                 thepo = store.addsourceunit(source)
                 if context:
                     thepo.setcontext(context)
                 thepo.target = existing_unit.target
-                if existing_unit.state == STATE_FUZZY:
-                    thepo.markfuzzy(True)
+                thepo.markfuzzy(existing_unit.state in FUZZY_STATES)
                 store_units_index[key] = thepo
 
         return store

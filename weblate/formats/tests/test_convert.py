@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import ClassVar, cast
 
-from translate.storage.pypo import pofile as POStore
+from translate.storage.pypo import pofile
 
 from weblate.checks.tests.test_checks import MockUnit
 from weblate.formats.convert import (
@@ -259,7 +259,7 @@ class IDMLFormatTest(ConvertFormatTest):
         po_store = self.format_class(NamedBytesIO("test.idml", content)).convertfile(
             NamedBytesIO("test.idml", content), None
         )
-        assert isinstance(po_store, POStore)
+        self.assertIsInstance(po_store, pofile)
         # Avoid (changing) timestamp in the PO header
         po_store.updateheader(pot_creation_date="")
         return bytes(po_store).decode()
