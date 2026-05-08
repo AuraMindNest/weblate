@@ -7,7 +7,9 @@
 import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import ClassVar
+from typing import ClassVar, cast
+
+from translate.storage.pypo import pofile as POStore
 
 from weblate.checks.tests.test_checks import MockUnit
 from weblate.formats.convert import (
@@ -23,6 +25,7 @@ from weblate.formats.convert import (
 from weblate.formats.helpers import NamedBytesIO
 from weblate.formats.quickbook import QuickBookFormat
 from weblate.formats.tests.test_formats import BaseFormatTest
+from weblate.trans.models import Unit
 from weblate.trans.tests.utils import get_test_file
 from weblate.utils.state import STATE_TRANSLATED
 
@@ -72,7 +75,7 @@ class ConvertFormatTest(BaseFormatTest):
             storage = self.format_class(
                 translation.name,
                 template_store=self.format_class(template.name, is_template=True),
-                existing_units=self.CONVERT_EXISTING,
+                existing_units=cast(list[Unit], self.CONVERT_EXISTING),
             )
 
             # Ensure it is parsed correctly
@@ -170,12 +173,15 @@ Nazdar
         storage = self.format_class(
             testfile,
             template_store=self.format_class(testfile, is_template=True),
-            existing_units=[
-                MockUnit(
-                    source="Orangutan has five bananas.",
-                    target="Orangutan má pět banánů.",
-                )
-            ],
+            existing_units=cast(
+                list[Unit],
+                [
+                    MockUnit(
+                        source="Orangutan has five bananas.",
+                        target="Orangutan má pět banánů.",
+                    )
+                ],
+            ),
         )
 
         # Save test file
@@ -250,12 +256,13 @@ class IDMLFormatTest(ConvertFormatTest):
     EDIT_OFFSET = 1
 
     def extract_document(self, content: bytes):
-        pofile = self.format_class(NamedBytesIO("test.idml", content)).convertfile(
+        po_store = self.format_class(NamedBytesIO("test.idml", content)).convertfile(
             NamedBytesIO("test.idml", content), None
         )
+        assert isinstance(po_store, POStore)
         # Avoid (changing) timestamp in the PO header
-        pofile.updateheader(pot_creation_date="")
-        return bytes(pofile).decode()
+        po_store.updateheader(pot_creation_date="")
+        return bytes(po_store).decode()
 
     def assert_same(self, newdata, testdata) -> None:
         self.assertEqual(
@@ -365,12 +372,15 @@ Nazdar
         storage = self.format_class(
             testfile,
             template_store=self.format_class(testfile, is_template=True),
-            existing_units=[
-                MockUnit(
-                    source="Orangutan has five bananas.",
-                    target="Orangutan má pět banánů.",
-                )
-            ],
+            existing_units=cast(
+                list[Unit],
+                [
+                    MockUnit(
+                        source="Orangutan has five bananas.",
+                        target="Orangutan má pět banánů.",
+                    )
+                ],
+            ),
         )
 
         # Save test file
@@ -407,7 +417,7 @@ class QuickBookFormatTest(ConvertFormatTest):
     NEW_UNIT_MATCH = None
     BASE = QUICKBOOK_FILE
     # Heading segments use PO ``no-wrap`` (single-line titles); prose units have no flags.
-    EXPECTED_FLAGS: ClassVar[list[str]] = ["no-wrap", "", "", ""]
+    EXPECTED_FLAGS: ClassVar[str | list[str]] = ["no-wrap", "", "", ""]
     EDIT_OFFSET = 1
 
     def test_convert(self) -> None:
@@ -438,7 +448,7 @@ class QuickBookFormatTest(ConvertFormatTest):
                     template.name,
                     is_template=True,
                 ),
-                existing_units=self.CONVERT_EXISTING,
+                existing_units=cast(list[Unit], self.CONVERT_EXISTING),
             )
 
             self.assertEqual(len(storage.content_units), 2)
@@ -470,12 +480,15 @@ class QuickBookFormatTest(ConvertFormatTest):
         storage = self.format_class(
             testfile,
             template_store=self.format_class(testfile, is_template=True),
-            existing_units=[
-                MockUnit(
-                    source="Orangutan has five bananas.",
-                    target="Orangutan má pět banánů.",
-                )
-            ],
+            existing_units=cast(
+                list[Unit],
+                [
+                    MockUnit(
+                        source="Orangutan has five bananas.",
+                        target="Orangutan má pět banánů.",
+                    )
+                ],
+            ),
         )
         storage.save()
 
