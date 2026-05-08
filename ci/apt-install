@@ -24,6 +24,7 @@ apt-get update
 # Install dependencies
 apt-get install -y \
     gettext \
+    po4a \
     git \
     git-svn \
     gnupg \
