@@ -5,13 +5,19 @@
 """File format specific behavior."""
 
 import os
+import shutil
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast
+
+from translate.storage.pypo import pofile
 
 from weblate.checks.tests.test_checks import MockUnit
+from weblate.formats.asciidoc import AsciiDocFormat as AsciiDocPo4aFormat
 from weblate.formats.convert import (
-    AsciiDocFormat,
+    AsciiDocFormat as AsciiDocToolkitFormat,
+)
+from weblate.formats.convert import (
     HTMLFormat,
     IDMLFormat,
     MarkdownFormat,
@@ -21,9 +27,13 @@ from weblate.formats.convert import (
     WXLFormat,
 )
 from weblate.formats.helpers import NamedBytesIO
+from weblate.formats.quickbook import QuickBookFormat
 from weblate.formats.tests.test_formats import BaseFormatTest
 from weblate.trans.tests.utils import get_test_file
 from weblate.utils.state import STATE_TRANSLATED
+
+if TYPE_CHECKING:
+    from weblate.trans.models import Unit
 
 IDML_FILE = get_test_file("en.idml")
 HTML_FILE = get_test_file("cs.html")
@@ -31,6 +41,8 @@ HTML_FILE_TRANSLATED = get_test_file("cs2.html")
 MARKDOWN_FILE = get_test_file("cs.md")
 MARKDOWN_FILE_TRANSLATED = get_test_file("cs2.md")
 ASCIIDOC_FILE = get_test_file("cs.adoc")
+QUICKBOOK_FILE = get_test_file("cs.qbk")
+QUICKBOOK_FILE_TRANSLATED = get_test_file("cs2.qbk")
 OPENDOCUMENT_FILE = get_test_file("cs.odt")
 TEST_RC = get_test_file("cs-CZ.rc")
 TEST_TXT = get_test_file("cs.txt")
@@ -39,7 +51,7 @@ TEST_WXL = get_test_file("cs-cz.wxl")
 
 class ConvertFormatTest(BaseFormatTest):
     NEW_UNIT_MATCH = None
-    EXPECTED_FLAGS = ""
+    EXPECTED_FLAGS: ClassVar[str | list[str]] = ""
     MONOLINGUAL = True
 
     CONVERT_TEMPLATE = ""
@@ -69,7 +81,7 @@ class ConvertFormatTest(BaseFormatTest):
             storage = self.format_class(
                 translation.name,
                 template_store=self.format_class(template.name, is_template=True),
-                existing_units=self.CONVERT_EXISTING,
+                existing_units=cast("list[Unit]", self.CONVERT_EXISTING),
             )
 
             # Ensure it is parsed correctly
@@ -167,12 +179,15 @@ Nazdar
         storage = self.format_class(
             testfile,
             template_store=self.format_class(testfile, is_template=True),
-            existing_units=[
-                MockUnit(
-                    source="Orangutan has five bananas.",
-                    target="Orangutan má pět banánů.",
-                )
-            ],
+            existing_units=cast(
+                "list[Unit]",
+                [
+                    MockUnit(
+                        source="Orangutan has five bananas.",
+                        target="Orangutan má pět banánů.",
+                    )
+                ],
+            ),
         )
 
         # Save test file
@@ -247,12 +262,14 @@ class IDMLFormatTest(ConvertFormatTest):
     EDIT_OFFSET = 1
 
     def extract_document(self, content: bytes):
-        pofile = self.format_class(NamedBytesIO("test.idml", content)).convertfile(
+        po_store = self.format_class(NamedBytesIO("test.idml", content)).convertfile(
             NamedBytesIO("test.idml", content), None
         )
+        self.assertIsInstance(po_store, pofile)
         # Avoid (changing) timestamp in the PO header
-        pofile.updateheader(pot_creation_date="")
-        return bytes(pofile).decode()
+        po_parsed = cast("pofile", po_store)
+        po_parsed.updateheader(pot_creation_date="")
+        return bytes(po_parsed).decode()
 
     def assert_same(self, newdata, testdata) -> None:
         self.assertEqual(
@@ -319,8 +336,10 @@ class PlainTextFormatTest(ConvertFormatTest):
     CONVERT_EXPECTED = "Ahoj\n\nNazdar"
 
 
-class AsciiDocFormatTest(ConvertFormatTest):
-    format_class = AsciiDocFormat
+class AsciiDocToolkitFormatTest(ConvertFormatTest):
+    """AsciiDoc via translate-toolkit (``AsciiDocFile`` / ``AsciiDocTranslator``)."""
+
+    format_class = AsciiDocToolkitFormat
     FILE = ASCIIDOC_FILE
     MIME = "text/x-asciidoc"
     EXT = "adoc"
@@ -362,12 +381,15 @@ Nazdar
         storage = self.format_class(
             testfile,
             template_store=self.format_class(testfile, is_template=True),
-            existing_units=[
-                MockUnit(
-                    source="Orangutan has five bananas.",
-                    target="Orangutan má pět banánů.",
-                )
-            ],
+            existing_units=cast(
+                "list[Unit]",
+                [
+                    MockUnit(
+                        source="Orangutan has five bananas.",
+                        target="Orangutan má pět banánů.",
+                    )
+                ],
+            ),
         )
 
         # Save test file
@@ -387,6 +409,225 @@ Try Weblate at https://demo.weblate.org/[weblate.org]!
 _Thank you for using Weblate._
 """,
         )
+
+    def test_import_existing(self) -> None:
+        """Localized AsciiDoc aligned with the English template imports Czech targets."""
+        translated = """== Ahoj světe!
+
+Orangutan má pět banánů.
+
+Zkus Weblate na https://demo.weblate.org/[weblate.org]!
+
+_Díky za používání Weblate._
+"""
+        with NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            delete=False,
+            suffix=".adoc",
+        ) as translated_file:
+            translated_file.write(translated)
+            translated_path = translated_file.name
+        try:
+            storage = self.parse_file(translated_path, ASCIIDOC_FILE)
+        finally:
+            os.unlink(translated_path)
+        thank_units = [
+            u for u in storage.all_units if "Thank you for using Weblate" in u.source
+        ]
+        self.assertEqual(len(thank_units), 1)
+        self.assertEqual(
+            thank_units[0].target,
+            "_Díky za používání Weblate._",
+        )
+
+
+class AsciiDocPo4aFormatTest(AsciiDocToolkitFormatTest):
+    """AsciiDoc via po4a (handler registered in ``WEBLATE_FORMATS``)."""
+
+    format_class = AsciiDocPo4aFormat
+    MIME = "text/asciidoc"
+    # po4a-gettextize marks title segments like translate-toolkit QuickBook headings.
+    EXPECTED_FLAGS = "no-wrap"
+
+    def setUp(self) -> None:
+        super().setUp()
+        if (
+            shutil.which("po4a-gettextize") is None
+            or shutil.which("po4a-translate") is None
+        ):
+            self.skipTest(
+                "po4a-gettextize / po4a-translate not found; install the po4a package"
+            )
+
+    def test_convert(self) -> None:
+        """
+        Round-trip like :meth:`ConvertFormatTest.test_convert`.
+
+        ``po4a-gettextize`` requires the localized file to expose the same segments as
+        the template (see po4a ``Original has more strings than the translation``).
+        The translate-toolkit test uses a stub translation missing the second segment;
+        here both segments are present so gettextize can align them.
+        """
+        self.maxDiff = None
+        if not self.CONVERT_TEMPLATE:
+            self.skipTest(
+                f"Test template not provided for {self.format_class.format_id}"
+            )
+        translation = template = None
+        try:
+            with NamedTemporaryFile(
+                encoding="utf-8", delete=False, mode="w+", suffix=".adoc"
+            ) as template_f:
+                template_f.write(self.CONVERT_TEMPLATE)
+            with NamedTemporaryFile(
+                encoding="utf-8", delete=False, mode="w+", suffix=".adoc"
+            ) as translation_f:
+                translation_f.write("== Ahoj\n\nBye\n")
+
+            template = template_f
+            translation = translation_f
+
+            storage = self.format_class(
+                translation.name,
+                template_store=self.format_class(template.name, is_template=True),
+                existing_units=cast("list[Unit]", self.CONVERT_EXISTING),
+            )
+
+            self.assertEqual(len(storage.content_units), 2)
+            unit1, unit2 = storage.content_units
+            self.assertEqual(unit1.source, "Hello")
+            self.assertEqual(unit1.target, "Ahoj")
+            self.assertEqual(unit2.source, "Bye")
+            self.assertEqual(unit2.target, "Bye")
+
+            unit2.set_target("Nazdar")
+            unit2.set_state(STATE_TRANSLATED)
+
+            storage.save()
+
+            self.assertEqual(
+                Path(translation.name).read_text(encoding="utf-8"),
+                self.CONVERT_EXPECTED,
+            )
+        finally:
+            if template:
+                os.unlink(template.name)
+            if translation:
+                os.unlink(translation.name)
+
+
+class QuickBookFormatTest(ConvertFormatTest):
+    format_class = QuickBookFormat
+    FILE = QUICKBOOK_FILE
+    MIME = "text/x-quickbook"
+    EXT = "qbk"
+    # PO header unit plus four translatable strings (see ``template_units``).
+    COUNT = 5
+    MASK = "*/translations.qbk"
+    EXPECTED_PATH = "cs_CZ/translations.qbk"
+    FIND = "Orangutan has five bananas."
+    FIND_MATCH = "Orangutan has five bananas."
+    MATCH = b"[h1"
+    NEW_UNIT_MATCH = None
+    BASE = QUICKBOOK_FILE
+    # Heading segments use PO ``no-wrap`` (single-line titles); prose units have no flags.
+    EXPECTED_FLAGS: ClassVar[str | list[str]] = ["no-wrap", "", "", ""]
+    EDIT_OFFSET = 1
+
+    def test_convert(self) -> None:
+        """Round-trip two [heading …] blocks (QuickBook pairs translations by segment count)."""
+        self.maxDiff = None
+        template = None
+        translation = None
+        try:
+            with NamedTemporaryFile(
+                encoding="utf-8", delete=False, mode="w+", suffix=".qbk"
+            ) as template_f:
+                template_f.write(
+                    "[heading Hello]\n\n[heading Bye]\n",
+                )
+            with NamedTemporaryFile(
+                encoding="utf-8", delete=False, mode="w+", suffix=".qbk"
+            ) as translation_f:
+                translation_f.write(
+                    "[heading Ahoj]\n\n[heading Bye]\n",
+                )
+
+            template = template_f
+            translation = translation_f
+
+            storage = self.format_class(
+                translation.name,
+                template_store=self.format_class(
+                    template.name,
+                    is_template=True,
+                ),
+                existing_units=cast("list[Unit]", self.CONVERT_EXISTING),
+            )
+
+            self.assertEqual(len(storage.content_units), 2)
+            unit1, unit2 = storage.content_units
+            self.assertEqual(unit1.source, "Hello")
+            self.assertEqual(unit1.target, "Ahoj")
+            self.assertEqual(unit2.source, "Bye")
+            self.assertEqual(unit2.target, "Bye")
+
+            unit2.set_target("Nazdar")
+            unit2.set_state(STATE_TRANSLATED)
+            storage.save()
+
+            self.assertEqual(
+                Path(translation.name).read_text(encoding="utf-8"),
+                "[heading Ahoj]\n\n[heading Nazdar]\n",
+            )
+        finally:
+            if template:
+                os.unlink(template.name)
+            if translation:
+                os.unlink(translation.name)
+
+    def test_existing_units(self) -> None:
+        testdata = Path(self.FILE).read_bytes()
+        testfile = os.path.join(self.tempdir, os.path.basename(self.FILE))
+        Path(testfile).write_bytes(testdata)
+
+        storage = self.format_class(
+            testfile,
+            template_store=self.format_class(testfile, is_template=True),
+            existing_units=cast(
+                "list[Unit]",
+                [
+                    MockUnit(
+                        source="Orangutan has five bananas.",
+                        target="Orangutan má pět banánů.",
+                    )
+                ],
+            ),
+        )
+        storage.save()
+
+        newdata = Path(testfile).read_text(encoding="utf-8")
+        self.assertEqual(
+            newdata,
+            """[article QuickBook]
+
+[h1 Ahoj světe!]
+
+Orangutan má pět banánů.
+
+Try Weblate at [@https://demo.weblate.org/ weblate.org]!
+
+Thank you for using Weblate.
+""",
+        )
+
+    def test_import_existing(self) -> None:
+        storage = self.parse_file(
+            QUICKBOOK_FILE_TRANSLATED,
+            QUICKBOOK_FILE,
+        )
+        self.assertEqual(storage.all_units[4].target, "Díky za používání Weblate.")
 
 
 class WXLFormatTest(ConvertFormatTest):

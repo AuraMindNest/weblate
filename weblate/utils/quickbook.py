@@ -49,6 +49,25 @@ from typing import Any
 
 from translate.storage.pypo import pofile
 
+from weblate.utils.state import FUZZY_STATES
+
+# Developer note written by :func:`qbk_to_po` for segment context (not msgctxt).
+_QBK_TYPE_NOTE_PREFIX = "type: "
+
+
+def _qbk_po_unit_merge_context(unit: Any) -> str:
+    """Context for merging ``existing_units``: msgctxt, else ``type:`` developer note."""
+    ctx = unit.getcontext() or ""
+    if ctx:
+        return ctx
+    raw = unit.getnotes("developer") or ""
+    for line in str(raw).split("\n"):
+        line = line.strip()
+        if line.startswith(_QBK_TYPE_NOTE_PREFIX):
+            return line[len(_QBK_TYPE_NOTE_PREFIX) :].strip()
+    return ""
+
+
 # Text that consists only of QuickBook macro references and punctuation is not
 # translatable prose; it is a rendered identifier placeholder.
 _QBK_MACRO_ONLY_RE = re.compile(r"^(?:__\w+__[\s,;.]*)+$")
@@ -814,9 +833,13 @@ def qbk_to_po(content: str, filename: str, existing_units: Any = None) -> pofile
     *filename* is used in PO location comments (``#: filename:lineno``).
 
     *existing_units* is an optional iterable of Weblate ``Unit`` objects whose
-    existing translations are merged into the result (same pattern as
-    ``AsciiDocFormat._merge_translations``).  Units not found via file
-    extraction but present in the database are added so no translation is lost.
+    translations are merged into the result (same pattern as
+    ``AsciiDocFormat._merge_translations`` plus applying targets to extracted
+    strings that match).  Matching uses ``(source, context)``; for units produced
+    by extraction, *context* is taken from msgctxt or, if empty, from the
+    developer note ``type: …`` (see segment ``context`` in :func:`_parse_qbk`).
+    Units present in the database but missing from extraction are added so no
+    translation is lost.
     """
     store = pofile()
     store.updateheader(add=True, x_accelerator_marker=None, x_previous_msgid=None)
@@ -844,11 +867,13 @@ def qbk_to_po(content: str, filename: str, existing_units: Any = None) -> pofile
             unit.settypecomment("no-wrap", True)
         unit_by_msgid[seg.msgid] = unit
 
-    # Merge translations that exist in the Weblate database but may have been
-    # missed by the file extractor (e.g. removed blocks, formatting changes).
+    # Merge translations from the Weblate database: apply targets to extracted
+    # units that match (source, context), and add units the extractor missed.
     if existing_units:
         store_index: dict[tuple[str, str], Any] = {
-            (u.source, u.getcontext()): u for u in store.units if not u.isheader()
+            (u.source, _qbk_po_unit_merge_context(u)): u
+            for u in store.units
+            if not u.isheader()
         }
         for ex_unit in existing_units:
             sources = ex_unit.get_source_plurals()
@@ -856,16 +881,18 @@ def qbk_to_po(content: str, filename: str, existing_units: Any = None) -> pofile
                 continue
             src = sources[0]
             ctx = ex_unit.context or ""
-            if (src, ctx) not in store_index:
+            key = (src, ctx)
+            if key in store_index:
+                po_unit = store_index[key]
+                po_unit.target = ex_unit.target
+                po_unit.markfuzzy(ex_unit.state in FUZZY_STATES)
+            else:
                 new_unit = store.addsourceunit(src)
                 if ctx:
                     new_unit.setcontext(ctx)
                 new_unit.target = ex_unit.target
-                from weblate.utils.state import STATE_FUZZY
-
-                if ex_unit.state == STATE_FUZZY:
-                    new_unit.markfuzzy(True)
-                store_index[src, ctx] = new_unit
+                new_unit.markfuzzy(ex_unit.state in FUZZY_STATES)
+                store_index[key] = new_unit
 
     return store
 

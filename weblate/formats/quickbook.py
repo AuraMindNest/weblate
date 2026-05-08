@@ -28,6 +28,68 @@ if TYPE_CHECKING:
     from weblate.formats.base import TranslationFormat
 
 
+def _empty_quickbook_po() -> pofile:
+    empty = pofile()
+    empty.updateheader(add=True, x_accelerator_marker=None, x_previous_msgid=None)
+    return empty
+
+
+def _resolve_template_path(
+    storefile: IO[bytes],
+    template_store: TranslationFormat | None,
+) -> str | None:
+    template_path: str | None = None
+    if template_store is not None and hasattr(template_store, "storefile"):
+        tf = template_store.storefile
+        if hasattr(tf, "name"):
+            template_path = tf.name
+        elif isinstance(tf, str):
+            template_path = tf
+    if template_path is None:
+        template_path = getattr(storefile, "name", None)
+    return template_path
+
+
+def _fill_targets_same_template_file(
+    store: TranslationStore,
+    existing_units: object | None,
+) -> None:
+    # Same template + translation path (gettextize-style): source-language fill,
+    # but preserve targets merged from ``existing_units`` where present.
+    for unit in store.units:
+        if unit.isheader():
+            continue
+        if existing_units:
+            if not unit.target:
+                unit.target = unit.source
+        else:
+            unit.target = unit.source
+
+
+def _merge_positional_translated_qbk(
+    store: TranslationStore,
+    storefile_path: str,
+) -> None:
+    """Pair translated .qbk segments positionally with template segments."""
+    try:
+        translated_content = Path(storefile_path).read_text(encoding="utf-8")
+        translated_store = qbk_to_po(translated_content, Path(storefile_path).name)
+        trans_units = [u for u in translated_store.units if not u.isheader()]
+        tmpl_units = [u for u in store.units if not u.isheader()]
+        if len(tmpl_units) != len(trans_units):
+            report_error(
+                "QuickBook: refusing positional import: segment count mismatch "
+                f"(file={storefile_path!s}, name={Path(storefile_path).name!s}, "
+                f"template_units={len(tmpl_units)}, translated_units={len(trans_units)})"
+            )
+            return
+        for tmpl_unit, trans_unit in zip(tmpl_units, trans_units, strict=True):
+            if trans_unit.source:
+                tmpl_unit.target = trans_unit.source
+    except Exception as exc:
+        report_error(f"QuickBook: cannot read translated file {storefile_path}: {exc}")
+
+
 class QuickBookFormat(ConvertFormat):
     """
     QuickBook (.qbk) documentation file format with built-in PO converter.
@@ -51,78 +113,29 @@ class QuickBookFormat(ConvertFormat):
         template_store: TranslationFormat | None,
     ) -> TranslationStore:
         """Extract translatable strings from a .qbk file, returning a ``pofile``."""
-        # Resolve the template (source-language) .qbk file path.
-        template_path: str | None = None
-        if template_store is not None and hasattr(template_store, "storefile"):
-            tf = template_store.storefile
-            if hasattr(tf, "name"):
-                template_path = tf.name
-            elif isinstance(tf, str):
-                template_path = tf
-
-        if template_path is None:
-            # Fall back: use storefile path as the template.
-            template_path = getattr(storefile, "name", None)
-
+        template_path = _resolve_template_path(storefile, template_store)
         if template_path is None:
             report_error("QuickBook: cannot determine template file path")
-            empty = pofile()
-            empty.updateheader(
-                add=True, x_accelerator_marker=None, x_previous_msgid=None
-            )
-            return empty
+            return _empty_quickbook_po()
 
         try:
             content = Path(template_path).read_text(encoding="utf-8")
         except Exception as exc:
             report_error(f"QuickBook: cannot read template {template_path}: {exc}")
-            empty = pofile()
-            empty.updateheader(
-                add=True, x_accelerator_marker=None, x_previous_msgid=None
-            )
-            return empty
+            return _empty_quickbook_po()
 
         filename = Path(template_path).name
         store = qbk_to_po(content, filename, self.existing_units)
 
         storefile_path: str | None = getattr(storefile, "name", None)
         if storefile_path == template_path:
-            # Loading the source-language file: set target = source on every unit
-            # so Weblate stores a non-empty translation for the source language.
-            for unit in store.units:
-                if not unit.isheader():
-                    unit.target = unit.source
-        # Loading a translated .qbk file: parse it and pair its segments
-        # positionally with the template segments to populate msgstr values.
-        # This mirrors what po4a-gettextize does when given both -m and -l.
+            _fill_targets_same_template_file(store, self.existing_units)
         elif storefile_path is None:
             report_error(
                 "QuickBook: cannot load translated .qbk without a filesystem path"
             )
         else:
-            try:
-                translated_content = Path(storefile_path).read_text(encoding="utf-8")
-                translated_store = qbk_to_po(
-                    translated_content, Path(storefile_path).name
-                )
-                trans_units = [u for u in translated_store.units if not u.isheader()]
-                tmpl_units = [u for u in store.units if not u.isheader()]
-                if len(tmpl_units) != len(trans_units):
-                    report_error(
-                        "QuickBook: refusing positional import: segment count mismatch "
-                        f"(file={storefile_path!s}, name={Path(storefile_path).name!s}, "
-                        f"template_units={len(tmpl_units)}, translated_units={len(trans_units)})"
-                    )
-                else:
-                    for tmpl_unit, trans_unit in zip(
-                        tmpl_units, trans_units, strict=True
-                    ):
-                        if trans_unit.source:
-                            tmpl_unit.target = trans_unit.source
-            except Exception as exc:
-                report_error(
-                    f"QuickBook: cannot read translated file {storefile_path}: {exc}"
-                )
+            _merge_positional_translated_qbk(store, storefile_path)
 
         return store
 
