@@ -361,7 +361,8 @@ nitpick_ignore = [
 
 # Number of retries and timeout for linkcheck
 linkcheck_retries = 10
-linkcheck_timeout = 10
+# Default 10s is tight for some CDNs from GitHub Actions (e.g. contributor-covenant.org).
+linkcheck_timeout = 45
 
 # Treat these redirects as working. Linkcheck emits redirects as warnings; CI runs
 # sphinx with --fail-on-warning, so expected HTTP redirects must be allowed here
@@ -379,7 +380,7 @@ linkcheck_allowed_redirects = {
     ),
     r"https://weblate\.org/?.*": r"https://weblate\.org/.*",
     r"https://docs\.weblate\.org/?.*": r"https://docs\.weblate\.org/.*",
-    r"https://hosted\.weblate\.org/.*": r"https://hosted\.weblate\.org/.*",
+    r"https://hosted\.weblate\.org.*": r"https://hosted\.weblate\.org.*",
     r"https://www\.sphinx-doc\.org/?$": r"https://www\.sphinx-doc\.org/en/master/?",
     r"https://angular\.io/.*": r"https://.*\.angular\.io/.*",
     r"https://babel\.pocoo\.org/?$": r"https://babel\.pocoo\.org/en/latest/.*",
