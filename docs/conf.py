@@ -363,7 +363,9 @@ nitpick_ignore = [
 linkcheck_retries = 10
 linkcheck_timeout = 10
 
-# Treat these redirects as working (sites change paths; --fail-on-warning otherwise).
+# Treat these redirects as working. Linkcheck emits redirects as warnings; CI runs
+# sphinx with --fail-on-warning, so expected HTTP redirects must be allowed here
+# (or links updated in RST). Patterns use re.match() from the URL start.
 linkcheck_allowed_redirects = {
     (
         r"https://support\.okta\.com/help/s/article/"
@@ -371,6 +373,37 @@ linkcheck_allowed_redirects = {
     ): (
         r"https://support\.okta\.com/help/s/article/"
         r"How-to-send-a-custom-relaystate-to-application-through-idp-initiated-authentication-urls(\?.*)?"
+    ),
+    r"https://docs\.djangoproject\.com/en/stable/.*": (
+        r"https://docs\.djangoproject\.com/en/[0-9]+\.[0-9]+/.*"
+    ),
+    r"https://weblate\.org/?.*": r"https://weblate\.org/.*",
+    r"https://docs\.weblate\.org/?.*": r"https://docs\.weblate\.org/.*",
+    r"https://hosted\.weblate\.org/.*": r"https://hosted\.weblate\.org/.*",
+    r"https://www\.sphinx-doc\.org/?$": r"https://www\.sphinx-doc\.org/en/master/?",
+    r"https://angular\.io/.*": r"https://.*\.angular\.io/.*",
+    r"https://babel\.pocoo\.org/?$": r"https://babel\.pocoo\.org/en/latest/.*",
+    r"https://cryptography\.io/?$": r"https://cryptography\.io/en/latest/.*",
+    r"https://docs\.celeryq\.dev/?$": r"https://docs\.celeryq\.dev/en/stable/.*",
+    r"https://docs\.phpmyadmin\.net/?$": r"https://docs\.phpmyadmin\.net/en/latest/.*",
+    r"https://doc\.galette\.eu/?$": r"https://doc\.galette\.eu/en/master/.*",
+    r"https://pytest\.org/?$": r"https://docs\.pytest\.org/.*",
+    r"https://python-social-auth\.readthedocs\.io/?$": (
+        r"https://python-social-auth\.readthedocs\.io/en/latest/.*"
+    ),
+    r"https://sentry\.io/?$": r"https://sentry\.io/.*",
+    r"https://ruby-doc\.org/current/.*": r"https://ruby-doc\.org/[0-9.]+/.*",
+    r"https://docs\.anthropic\.com/.*": r"https://.*\.claude\.com/.*",
+    r"https://console\.anthropic\.com/.*": r"https://.*\.claude\.com/.*",
+    r"https://console\.cloud\.google\.com/.*": r"https://accounts\.google\.com/.*",
+    r"https://console\.developers\.google\.com/.*": r"https://accounts\.google\.com/.*",
+    r"https://gitee\.com/help/.*": r"https://help\.gitee\.com.*",
+    r"https://git\.cloudron\.io/.*": r"https://git\.cloudron\.io/.*",
+    r"https://github\.com/[^/]+/[^/]+/security/advisories/new(\?.*)?$": (
+        r"https://github\.com/login.*"
+    ),
+    r"https://www\.bestpractices\.dev/en/projects/[0-9]+/?$": (
+        r"https://www\.bestpractices\.dev/en/projects/[0-9]+/passing"
     ),
 }
 
@@ -417,6 +450,8 @@ linkcheck_ignore = [
     # 403 to automated clients (URLs remain valid in browsers)
     "https://mymemory\\.translated\\.net/.*",
     "https://docs\\.oasis-open\\.org/.*",
+    # Captcha / bot wall in CI; human documentation links remain valid
+    "https://cloud\\.yandex\\.com/.*",
 ]
 
 # HTTP docs
