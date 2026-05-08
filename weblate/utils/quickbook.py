@@ -67,6 +67,7 @@ def _qbk_po_unit_merge_context(unit: Any) -> str:
             return line[len(_QBK_TYPE_NOTE_PREFIX) :].strip()
     return ""
 
+
 # Text that consists only of QuickBook macro references and punctuation is not
 # translatable prose; it is a rendered identifier placeholder.
 _QBK_MACRO_ONLY_RE = re.compile(r"^(?:__\w+__[\s,;.]*)+$")

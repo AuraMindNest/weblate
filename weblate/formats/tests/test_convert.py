@@ -7,7 +7,7 @@
 import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import ClassVar, cast
+from typing import TYPE_CHECKING, ClassVar, cast
 
 from translate.storage.pypo import pofile
 
@@ -25,9 +25,11 @@ from weblate.formats.convert import (
 from weblate.formats.helpers import NamedBytesIO
 from weblate.formats.quickbook import QuickBookFormat
 from weblate.formats.tests.test_formats import BaseFormatTest
-from weblate.trans.models import Unit
 from weblate.trans.tests.utils import get_test_file
 from weblate.utils.state import STATE_TRANSLATED
+
+if TYPE_CHECKING:
+    from weblate.trans.models import Unit
 
 IDML_FILE = get_test_file("en.idml")
 HTML_FILE = get_test_file("cs.html")
@@ -75,7 +77,7 @@ class ConvertFormatTest(BaseFormatTest):
             storage = self.format_class(
                 translation.name,
                 template_store=self.format_class(template.name, is_template=True),
-                existing_units=cast(list[Unit], self.CONVERT_EXISTING),
+                existing_units=cast("list[Unit]", self.CONVERT_EXISTING),
             )
 
             # Ensure it is parsed correctly
@@ -174,7 +176,7 @@ Nazdar
             testfile,
             template_store=self.format_class(testfile, is_template=True),
             existing_units=cast(
-                list[Unit],
+                "list[Unit]",
                 [
                     MockUnit(
                         source="Orangutan has five bananas.",
@@ -373,7 +375,7 @@ Nazdar
             testfile,
             template_store=self.format_class(testfile, is_template=True),
             existing_units=cast(
-                list[Unit],
+                "list[Unit]",
                 [
                     MockUnit(
                         source="Orangutan has five bananas.",
@@ -448,7 +450,7 @@ class QuickBookFormatTest(ConvertFormatTest):
                     template.name,
                     is_template=True,
                 ),
-                existing_units=cast(list[Unit], self.CONVERT_EXISTING),
+                existing_units=cast("list[Unit]", self.CONVERT_EXISTING),
             )
 
             self.assertEqual(len(storage.content_units), 2)
@@ -481,7 +483,7 @@ class QuickBookFormatTest(ConvertFormatTest):
             testfile,
             template_store=self.format_class(testfile, is_template=True),
             existing_units=cast(
-                list[Unit],
+                "list[Unit]",
                 [
                     MockUnit(
                         source="Orangutan has five bananas.",
