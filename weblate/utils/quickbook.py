@@ -49,6 +49,8 @@ from typing import Any
 
 from translate.storage.pypo import pofile
 
+from weblate.utils.state import STATE_FUZZY
+
 # Text that consists only of QuickBook macro references and punctuation is not
 # translatable prose; it is a rendered identifier placeholder.
 _QBK_MACRO_ONLY_RE = re.compile(r"^(?:__\w+__[\s,;.]*)+$")
@@ -814,9 +816,10 @@ def qbk_to_po(content: str, filename: str, existing_units: Any = None) -> pofile
     *filename* is used in PO location comments (``#: filename:lineno``).
 
     *existing_units* is an optional iterable of Weblate ``Unit`` objects whose
-    existing translations are merged into the result (same pattern as
-    ``AsciiDocFormat._merge_translations``).  Units not found via file
-    extraction but present in the database are added so no translation is lost.
+    translations are merged into the result (same pattern as
+    ``AsciiDocFormat._merge_translations`` plus applying targets to extracted
+    strings that match).  Matching uses ``(source, context)``.  Units present in
+    the database but missing from extraction are added so no translation is lost.
     """
     store = pofile()
     store.updateheader(add=True, x_accelerator_marker=None, x_previous_msgid=None)
@@ -844,8 +847,8 @@ def qbk_to_po(content: str, filename: str, existing_units: Any = None) -> pofile
             unit.settypecomment("no-wrap", True)
         unit_by_msgid[seg.msgid] = unit
 
-    # Merge translations that exist in the Weblate database but may have been
-    # missed by the file extractor (e.g. removed blocks, formatting changes).
+    # Merge translations from the Weblate database: apply targets to extracted
+    # units that match (source, context), and add units the extractor missed.
     if existing_units:
         store_index: dict[tuple[str, str], Any] = {
             (u.source, u.getcontext()): u for u in store.units if not u.isheader()
@@ -856,16 +859,20 @@ def qbk_to_po(content: str, filename: str, existing_units: Any = None) -> pofile
                 continue
             src = sources[0]
             ctx = ex_unit.context or ""
-            if (src, ctx) not in store_index:
+            key = (src, ctx)
+            if key in store_index:
+                po_unit = store_index[key]
+                po_unit.target = ex_unit.target
+                if ex_unit.state == STATE_FUZZY:
+                    po_unit.markfuzzy(True)
+            else:
                 new_unit = store.addsourceunit(src)
                 if ctx:
                     new_unit.setcontext(ctx)
                 new_unit.target = ex_unit.target
-                from weblate.utils.state import STATE_FUZZY
-
                 if ex_unit.state == STATE_FUZZY:
                     new_unit.markfuzzy(True)
-                store_index[src, ctx] = new_unit
+                store_index[key] = new_unit
 
     return store
 

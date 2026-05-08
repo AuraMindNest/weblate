@@ -397,7 +397,7 @@ class QuickBookFormatTest(ConvertFormatTest):
     FILE = QUICKBOOK_FILE
     MIME = "text/x-quickbook"
     EXT = "qbk"
-    COUNT = 5
+    COUNT = 4
     MASK = "*/translations.qbk"
     EXPECTED_PATH = "cs_CZ/translations.qbk"
     FIND = "Orangutan has five bananas."
@@ -405,7 +405,8 @@ class QuickBookFormatTest(ConvertFormatTest):
     MATCH = b"[h1"
     NEW_UNIT_MATCH = None
     BASE = QUICKBOOK_FILE
-    EXPECTED_FLAGS = ""
+    # Heading segments use PO ``no-wrap`` (single-line titles); prose units have no flags.
+    EXPECTED_FLAGS: ClassVar[list[str]] = ["no-wrap", "", "", ""]
     EDIT_OFFSET = 1
 
     def test_convert(self) -> None:
@@ -497,7 +498,7 @@ Thank you for using Weblate.
             QUICKBOOK_FILE_TRANSLATED,
             QUICKBOOK_FILE,
         )
-        self.assertEqual(storage.all_units[4].target, "Díky za používání Weblate.")
+        self.assertEqual(storage.all_units[3].target, "Díky za používání Weblate.")
 
 
 class WXLFormatTest(ConvertFormatTest):
